@@ -44,7 +44,7 @@ def fetch_with_retry(session, url, retries=3):
     return None
 
 def run_daily_scraper():
-    print("🚀 STARTING: Cloud-Native Deep Screener (Smart Cache & SME Filter Edition)")
+    print("🚀 STARTING: Cloud-Native Deep Screener (Name-Match Edition)")
     
     session = requests.Session()
     session.headers.update(REQUEST_HEADERS)
@@ -56,22 +56,23 @@ def run_daily_scraper():
     try:
         static_df = pd.read_sql("SELECT * FROM sector_master", engine)
         
-        # Clean column names dynamically
-        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'ticker')
-        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'sector')
-        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'broad_industry')
-        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'exchange')
+        # Dynamically map columns exactly as they appear from Google Sheets
+        col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
+        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
+        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
+        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
         
-        static_df[col_t] = static_df[col_t].astype(str).str.strip().str.upper()
-        known_tickers = set(static_df[col_t].tolist())
-        print(f"✅ Loaded {len(known_tickers)} existing stocks into memory.")
+        # Clean names for perfect matching
+        static_df[col_n] = static_df[col_n].astype(str).str.strip()
+        known_names = set(static_df[col_n].tolist())
+        print(f"✅ Loaded {len(known_names)} existing companies into memory.")
     except Exception as e:
         print(f"⚠️ Could not load cache: {e}")
-        known_tickers = set()
-        static_df = pd.DataFrame(columns=['ticker', 'sector', 'broad_industry', 'exchange'])
-        col_t, col_s, col_i, col_e = 'ticker', 'sector', 'broad_industry', 'exchange'
+        known_names = set()
+        static_df = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange'])
+        col_n, col_t, col_s, col_i, col_e = 'Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange'
 
-    # Ensure exchange column exists in our cache frame
     if col_e not in static_df.columns:
         static_df[col_e] = "NSE"
 
@@ -96,6 +97,7 @@ def run_daily_scraper():
             if tables:
                 df = tables[0]
                 df = df[df['Name'] != 'Name'].copy()
+                df['Name'] = df['Name'].astype(str).str.strip()
                 
                 soup = BeautifulSoup(html_content, 'html.parser')
                 table = soup.find('table')
@@ -108,7 +110,7 @@ def run_daily_scraper():
                             code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
                             codes.append(code.upper())
                 
-                df['live_ticker'] = codes 
+                df['live_ticker_slug'] = codes 
                 all_dataframes.append(df)
         except Exception:
             pass
@@ -118,31 +120,33 @@ def run_daily_scraper():
     live_df = pd.concat(all_dataframes, ignore_index=True)
     
     # ==========================================
-    # STEP 3: DEEP SCRAPE MISSING TICKERS
+    # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
     # ==========================================
-    live_tickers = set(live_df['live_ticker'].tolist())
-    missing_tickers = [t for t in live_tickers if t not in known_tickers]
+    # Compare by NAME, exactly like the Google Sheets script
+    live_names = set(live_df['Name'].tolist())
+    missing_names = [n for n in live_names if n not in known_names]
     
-    if missing_tickers:
-        print(f"\n🔍 Found {len(missing_tickers)} NEW unknown tickers. Deep scraping sectors and exchanges...")
+    if missing_names:
+        missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
+        print(f"\n🔍 Found {len(missing_df)} NEW companies. Deep scraping sectors and exchanges...")
         new_records = []
         
-        for idx, code in enumerate(missing_tickers):
-            print(f"[{idx + 1}/{len(missing_tickers)}] Scraping NEW: {code}")
+        for idx, row in missing_df.iterrows():
+            stock_name = row['Name']
+            code = row['live_ticker_slug']
+            
+            print(f"[{len(new_records) + 1}/{len(missing_df)}] Scraping NEW: {stock_name} ({code})")
             url = f"https://www.screener.in/company/{code}/"
             page_html = fetch_with_retry(session, url)
             
             sector, industry, exchange_class = "Unknown", "Unknown", ""
             if page_html:
                 soup = BeautifulSoup(page_html, 'html.parser')
-                
-                # Extract Sector/Industry
                 sec_tag = soup.find('a', title='Sector')
                 ind_tag = soup.find('a', title='Broad Industry')
                 if sec_tag: sector = sec_tag.text.strip()
                 if ind_tag: industry = ind_tag.text.strip()
 
-                # Extract Exchange & SME Status
                 nse_link = soup.find('a', href=re.compile(r'nseindia\.com/get-quotes/equity\?symbol='))
                 bse_link = soup.find('a', href=re.compile(r'bseindia\.com/stock-share-price/'))
 
@@ -158,6 +162,7 @@ def run_daily_scraper():
                 exchange_class = "BSE" if code.isdigit() else "NSE"
                 
             new_records.append({
+                col_n: stock_name,
                 col_t: code, 
                 col_s: sector, 
                 col_i: industry, 
@@ -165,17 +170,16 @@ def run_daily_scraper():
             })
             random_sleep(800, 1500)
             
-        # Append strictly the new records to the database so we never scrape them again
         new_static_df = pd.DataFrame(new_records)
-        print("☁️ Appending new tickers permanently to 'sector_master'...")
+        print("☁️ Appending new companies permanently to 'sector_master'...")
         try:
             new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
-            print("✅ 'sector_master' updated with new tickers.")
+            print("✅ 'sector_master' updated with new companies.")
             static_df = pd.concat([static_df, new_static_df], ignore_index=True)
         except Exception as e:
             print(f"❌ Failed to append to sector_master: {e}")
     else:
-        print("\n✅ No new tickers found. Database is perfectly synced.")
+        print("\n✅ No new companies found. Database is perfectly synced.")
 
     # ==========================================
     # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
@@ -201,12 +205,14 @@ def run_daily_scraper():
     else:
         live_df['relative_score'] = np.nan
 
-    # Map cached data to live data
-    live_df = live_df.rename(columns={'live_ticker': 'ticker'})
-    static_subset = static_df[[col_t, col_s, col_i, col_e]].copy()
-    static_subset.columns = ['ticker', 'sector', 'broad_industry', 'exchange']
+    # Throw away the raw URL slug and map the data cleanly by Name
+    live_df = live_df.drop(columns=['live_ticker_slug'])
+    live_df = live_df.rename(columns={'Name': 'name'})
     
-    merged_df = pd.merge(live_df, static_subset, on='ticker', how='left')
+    static_subset = static_df[[col_n, col_t, col_s, col_i, col_e]].copy()
+    static_subset.columns = ['name', 'ticker', 'sector', 'broad_industry', 'exchange']
+    
+    merged_df = pd.merge(live_df, static_subset, on='name', how='left')
     merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
 
     # Aggressively clean column names for PostgreSQL
@@ -229,14 +235,11 @@ def run_daily_scraper():
     industry_summary_df = pd.DataFrame()
     
     if col_cmp and col_ath:
-        # Map the exact ATH values from static memory
-        merged_df['temp_ath'] = pd.to_numeric(merged_df['ticker'].map(static_df.set_index(col_t)[col_ath]), errors='coerce')
+        # Pull static ATH by Name
+        merged_df['temp_ath'] = pd.to_numeric(merged_df['name'].map(static_df.set_index(col_n)[col_ath]), errors='coerce')
         merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
         
-        # 1. Calculate ATH Condition
         merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df['temp_ath'])
-
-        # 2. Filter out SME stocks before building the table!
         analysis_df = merged_df[~merged_df['exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
 
         def build_summary_table(df, group_col):
@@ -250,11 +253,9 @@ def run_daily_scraper():
             summary['rank'] = summary.index + 1
             return summary
 
-        # 3. Build tables using the SME-filtered dataframe
         sector_summary_df = build_summary_table(analysis_df, 'sector')
         industry_summary_df = build_summary_table(analysis_df, 'broad_industry')
         
-        # Clean up temporary columns before pushing
         merged_df = merged_df.drop(columns=['temp_ath', 'is_ath'])
 
     # ==========================================
