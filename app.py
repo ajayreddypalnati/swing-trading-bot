@@ -59,15 +59,36 @@ def fetch_database_reference():
         engine = create_engine(db_url)
         
         try:
-            # Try Case-Sensitive Original Headers Match
-            main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
-            sec_rank_df = pd.read_sql('SELECT sector, rank as sec_rank FROM sector_analysis', engine)
-            ind_rank_df = pd.read_sql('SELECT broad_industry, rank as ind_rank FROM industry_analysis', engine)
-        except Exception:
-            # Fallback to lowercase system defaults if primary match fails
-            main_df = pd.read_sql('SELECT ticker, sector, broad_industry, relative_score FROM stock_master', engine)
-            sec_rank_df = pd.read_sql('SELECT sector, rank as sec_rank FROM sector_analysis', engine)
-            ind_rank_df = pd.read_sql('SELECT broad_industry, rank as ind_rank FROM industry_analysis', engine)
+    main_df = pd.read_sql("""
+        SELECT
+            "Ticker" AS ticker,
+            "Sector" AS sector,
+            "Broad Industry" AS broad_industry,
+            "Relative score" AS relative_score
+        FROM stock_master
+    """, engine)
+
+    sec_rank_df = pd.read_sql("""
+        SELECT
+            "Sector" AS sector,
+            "Rank" AS sec_rank
+        FROM sector_analysis
+    """, engine)
+
+    ind_rank_df = pd.read_sql("""
+        SELECT
+            "Broad Industry" AS broad_industry,
+            "Rank" AS ind_rank
+        FROM industry_analysis
+    """, engine)
+
+    st.success(f"Loaded {len(main_df)} stocks")
+    st.success(f"Loaded {len(sec_rank_df)} sectors")
+    st.success(f"Loaded {len(ind_rank_df)} industries")
+
+except Exception as e:
+    st.error(f"DATABASE QUERY ERROR: {e}")
+    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
             
         return main_df, sec_rank_df, ind_rank_df
 
