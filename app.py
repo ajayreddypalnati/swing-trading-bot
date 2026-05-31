@@ -3,19 +3,21 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import streamlit as st
 import re
 import warnings
+from sqlalchemy import create_engine
 
+# Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS INJECTION ---
+# --- CSS INJECTION (Dark-Themed Sleek UI) ---
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
@@ -30,7 +32,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- APIs ---
+# --- APIs & ENDPOINTS ---
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
 CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  5 and  daily volume * daily close >=  10000000 ) )"
@@ -44,27 +46,33 @@ TV_PAYLOAD = {
 }
 
 # ==========================================
-# 2. DATA FETCHING (Cloud Only)
+# 2. DATA FETCHING (Cloud Native Database)
 # ==========================================
 @st.cache_data(ttl=600) 
 def fetch_database_reference():
-    """Pulls the 3 Master Tables from Supabase safely"""
+    """Pulls the 3 Master Tables from Supabase using SQLAlchemy to preserve headers"""
     try:
-        conn = st.connection("postgresql", type="sql")
+        db_url = st.secrets["DATABASE_URL"]
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         
-        # Pull main stock data (Relative Score & Mapping)
-        main_df = conn.query("SELECT ticker, sector, broad_industry, relative_score FROM stock_master")
+        engine = create_engine(db_url)
         
-        # Pull Sector ATH Rankings
-        sec_rank_df = conn.query("SELECT sector, rank as sec_rank, ath_pct as sec_ath_pct FROM sector_analysis")
-        
-        # Pull Industry ATH Rankings
-        ind_rank_df = conn.query("SELECT broad_industry, rank as ind_rank, ath_pct as ind_ath_pct FROM industry_analysis")
-        
+        try:
+            # Try Case-Sensitive Original Headers Match
+            main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
+            sec_rank_df = pd.read_sql('SELECT sector, rank as sec_rank FROM sector_analysis', engine)
+            ind_rank_df = pd.read_sql('SELECT broad_industry, rank as ind_rank FROM industry_analysis', engine)
+        except Exception:
+            # Fallback to lowercase system defaults if primary match fails
+            main_df = pd.read_sql('SELECT ticker, sector, broad_industry, relative_score FROM stock_master', engine)
+            sec_rank_df = pd.read_sql('SELECT sector, rank as sec_rank FROM sector_analysis', engine)
+            ind_rank_df = pd.read_sql('SELECT broad_industry, rank as ind_rank FROM industry_analysis', engine)
+            
         return main_df, sec_rank_df, ind_rank_df
 
     except Exception as e:
-        st.sidebar.error(f"DB Error: {e}")
+        st.sidebar.error(f"⚠️ Database Sync Bypassed: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def fetch_chartink_data():
@@ -117,7 +125,7 @@ def get_combined_data():
     return combined_data
 
 # ==========================================
-# 3. DASHBOARD UI
+# 3. DASHBOARD UI LAYOUT
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
@@ -125,8 +133,11 @@ with header_col1:
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
-    current_time = datetime.now().strftime('%I:%M:%S %p')
-    current_date = datetime.now().strftime('%d %b %Y')
+    # Force Indian Standard Time (IST) timezone
+    ist = timezone(timedelta(hours=5, minutes=30))
+    current_time = datetime.now(ist).strftime('%I:%M:%S %p')
+    current_date = datetime.now(ist).strftime('%d %b %Y')
+    
     auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
     dot_color = "green" if auto_refresh else "red"
     status_text = "LIVE DATA" if auto_refresh else "PAUSED"
@@ -150,7 +161,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
-        # Merge Live Data with ALL 3 Database Tables
+        # Merge Live Scraped Data with Master Tables
         if not main_df.empty:
             df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
             df = df.merge(sec_rank_df, on="sector", how="left")
@@ -158,11 +169,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
 
-        # Clean numeric columns
+        # Clean numeric parameters safely
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Filter Top Tier based on Official Database Ranks (Sector Top 5, Industry Top 15)
+        # Calculate Internal Screen Rank if ranks are available
         if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
             valid_mask = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15)
             valid_df = df[valid_mask].copy().sort_values(by=['sec_rank', 'ind_rank'], ascending=[True, True])
@@ -172,14 +183,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else:
             df['Screen Rank'] = np.nan
 
-        # Clean display format
+        # Clean visual hierarchy layout
         display_cols = ["Screen Rank", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort so Top Tier setups are at the top, followed by highest relative momentum
+        # Sort values putting premium setups first, then highest relative momentum scores
         display_df = display_df.sort_values(by=["Screen Rank", "relative_score"], ascending=[True, False], na_position="last").fillna("")
 
-        # Rename columns to look pretty for the frontend table
+        # User-friendly Display Renaming
         display_df = display_df.rename(columns={
             "sector": "Sector", 
             "sec_rank": "Sector Rank", 
@@ -188,24 +199,35 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Score"
         })
 
+        # Calculate high-level metrics safely
+        total_matches = len(display_df)
+        top_tier_count = len(display_df[display_df['Screen Rank'] != ""]) if 'Screen Rank' in display_df.columns else 0
+        db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
+
         metric_col1, metric_col2, metric_col3 = st.columns(3)
-        metric_col1.metric("🔥 Total Matches", len(display_df))
-        metric_col2.metric("⭐ Top Tier Setups", len(display_df[display_df['Screen Rank'] != ""])) 
-        metric_col3.metric("📈 Database Syncs", len(display_df[display_df['Sector'] != ""]))
+        metric_col1.metric("🔥 Total Matches", total_matches)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
+        metric_col3.metric("📈 Database Syncs", db_sync_count)
         st.markdown("<br>", unsafe_allow_html=True)
         
         def highlight_change(val):
             try: return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else 'background-color: rgba(231, 76, 60, 0.15)'
             except: return ''
-                
+        
+        # Safe integer parsing to completely safeguard rendering engine from crashing
+        def safe_int(val, prefix=""):
+            if val == "" or pd.isna(val): return ""
+            try: return f"{prefix}{int(float(val))}"
+            except: return ""
+
         styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
             "Volume": "{:,.0f}",
-            "Momentum Score": lambda x: f"{int(x)}" if x != "" else "",
-            "Screen Rank": lambda x: f"👑 {int(x)}" if x != "" else "",
-            "Sector Rank": lambda x: f"#{int(x)}" if x != "" else "",
-            "Ind. Rank": lambda x: f"#{int(x)}" if x != "" else "",
+            "Momentum Score": lambda x: safe_int(x),
+            "Screen Rank": lambda x: safe_int(x, "👑 "),
+            "Sector Rank": lambda x: safe_int(x, "#"),
+            "Ind. Rank": lambda x: safe_int(x, "#"),
         })
         st.table(styled_df)
     else:
