@@ -1,8 +1,8 @@
 streamlit
 pandas
+numpy
 requests
 beautifulsoup4
 sqlalchemy
 psycopg2-binary
-gspread
-google-auth
+lxml
