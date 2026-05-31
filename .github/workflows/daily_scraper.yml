@@ -2,12 +2,14 @@ name: Daily Stock Scraper
 
 on:
   schedule:
-    - cron: '0 18 * * *' # Runs every day at 18:00 UTC (11:30 PM IST)
-  workflow_dispatch: # This adds a button so you can trigger it manually!
+    - cron: '30 16 * * *'   # 10:00 PM IST
+    - cron: '30 0 * * *'    # 6:00 AM IST
+  workflow_dispatch:
 
 jobs:
   scrape-and-update:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
