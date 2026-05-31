@@ -247,3 +247,22 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 if auto_refresh:
     time.sleep(60)
     st.rerun()
+    # --- DATABASE EXPLORER (Sector & Industry Only) ---
+st.markdown("<br><br>", unsafe_allow_html=True)
+with st.expander("🗄️ View Raw Supabase Tables"):
+    tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
+    
+    # Re-use your database engine connection
+    db_url = st.secrets["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg2://", 1)
+    engine = create_engine(db_url)
+    
+    with tab1:
+        st.subheader("Sector Analysis")
+        df_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
+        st.dataframe(df_sec, use_container_width=True)
+        
+    with tab2:
+        st.subheader("Industry Analysis")
+        st.subheader("Industry Analysis")
+        df_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
+        st.dataframe(df_ind, use_container_width=True)
