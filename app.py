@@ -12,7 +12,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS INJECTION (Same as before) ---
+# --- CSS INJECTION ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -46,16 +46,26 @@ TV_PAYLOAD = {
 # ==========================================
 # 2. DATA FETCHING (Cloud Only)
 # ==========================================
-@st.cache_data(ttl=3600) 
+@st.cache_data(ttl=600) 
 def fetch_database_reference():
-    """Pulls the Static Master List from Supabase Database"""
+    """Pulls the 3 Master Tables from Supabase safely"""
     try:
         conn = st.connection("postgresql", type="sql")
-        main_df = conn.query("SELECT ticker as \"Ticker\", sector as \"Sector\", broad_industry as \"Broad Industry\", relative_score as \"Relative score\" FROM stock_master")
-        return main_df
+        
+        # Pull main stock data (Relative Score & Mapping)
+        main_df = conn.query("SELECT ticker, sector, broad_industry, relative_score FROM stock_master")
+        
+        # Pull Sector ATH Rankings
+        sec_rank_df = conn.query("SELECT sector, rank as sec_rank, ath_pct as sec_ath_pct FROM sector_analysis")
+        
+        # Pull Industry ATH Rankings
+        ind_rank_df = conn.query("SELECT broad_industry, rank as ind_rank, ath_pct as ind_ath_pct FROM industry_analysis")
+        
+        return main_df, sec_rank_df, ind_rank_df
+
     except Exception as e:
-        st.sidebar.error(f"DB Error: Ensure Secrets are configured. ({e})")
-        return pd.DataFrame()
+        st.sidebar.error(f"DB Error: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -112,7 +122,7 @@ def get_combined_data():
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
     st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time institutional tracking from <b>Chartink</b> & <b>TradingView</b>.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
     current_time = datetime.now().strftime('%I:%M:%S %p')
@@ -134,35 +144,49 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df = fetch_database_reference()
+    main_df, sec_rank_df, ind_rank_df = fetch_database_reference()
     
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
-        
-        # Merge Live Data with Database Master List
-        if not main_df.empty:
-            df = df.merge(main_df, left_on="Symbol", right_on="Ticker", how="left")
-            if 'Sector' in df.columns:
-                df['Sec Rank'] = df.groupby('Sector')['Symbol'].transform('count') 
-            if 'Broad Industry' in df.columns:
-                df['Ind Rank'] = df.groupby('Broad Industry')['Symbol'].transform('count')
-        else:
-            df['Sector'], df['Broad Industry'], df['Relative score'], df['Sec Rank'], df['Ind Rank'] = "", "", "", "", ""
+        df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
-        for col in ['Sec Rank', 'Ind Rank', 'Relative score']:
+        # Merge Live Data with ALL 3 Database Tables
+        if not main_df.empty:
+            df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
+            df = df.merge(sec_rank_df, on="sector", how="left")
+            df = df.merge(ind_rank_df, on="broad_industry", how="left")
+        else:
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+
+        # Clean numeric columns
+        for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        if 'Sec Rank' in df.columns and 'Ind Rank' in df.columns:
-            valid_mask = (df['Sec Rank'] <= 5) & (df['Ind Rank'] <= 15)
-            valid_df = df[valid_mask].copy().sort_values(by=['Sec Rank', 'Ind Rank'], ascending=[True, True])
+        # Filter Top Tier based on Official Database Ranks (Sector Top 5, Industry Top 15)
+        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
+            valid_mask = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15)
+            valid_df = df[valid_mask].copy().sort_values(by=['sec_rank', 'ind_rank'], ascending=[True, True])
             valid_df['Screen Rank'] = range(1, len(valid_df) + 1)
             df['Screen Rank'] = np.nan
             df.loc[valid_df.index, 'Screen Rank'] = valid_df['Screen Rank']
         else:
             df['Screen Rank'] = np.nan
 
-        display_cols = ["Screen Rank", "Symbol", "Close", "% Change", "Volume", "Sector", "Sec Rank", "Broad Industry", "Ind Rank", "Relative score"]
-        display_df = df[[c for c in display_cols if c in df.columns]].copy().sort_values(by="Screen Rank", na_position="last").fillna("")
+        # Clean display format
+        display_cols = ["Screen Rank", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        
+        # Sort so Top Tier setups are at the top, followed by highest relative momentum
+        display_df = display_df.sort_values(by=["Screen Rank", "relative_score"], ascending=[True, False], na_position="last").fillna("")
+
+        # Rename columns to look pretty for the frontend table
+        display_df = display_df.rename(columns={
+            "sector": "Sector", 
+            "sec_rank": "Sector Rank", 
+            "broad_industry": "Industry", 
+            "ind_rank": "Ind. Rank", 
+            "relative_score": "Momentum Score"
+        })
 
         metric_col1, metric_col2, metric_col3 = st.columns(3)
         metric_col1.metric("🔥 Total Matches", len(display_df))
@@ -175,10 +199,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             except: return ''
                 
         styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Volume": "{:,.0f}",
+            "Close": "₹{:.2f}", 
+            "% Change": "{:.2f}%", 
+            "Volume": "{:,.0f}",
+            "Momentum Score": lambda x: f"{int(x)}" if x != "" else "",
             "Screen Rank": lambda x: f"👑 {int(x)}" if x != "" else "",
-            "Sec Rank": lambda x: f"{int(x)}" if x != "" else "",
-            "Ind Rank": lambda x: f"{int(x)}" if x != "" else "",
+            "Sector Rank": lambda x: f"#{int(x)}" if x != "" else "",
+            "Ind. Rank": lambda x: f"#{int(x)}" if x != "" else "",
         })
         st.table(styled_df)
     else:
