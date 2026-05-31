@@ -156,6 +156,11 @@ st.divider()
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     main_df, sec_rank_df, ind_rank_df = fetch_database_reference()
+    st.write("MAIN DF ROWS:", len(main_df))
+st.write("SECTOR DF ROWS:", len(sec_rank_df))
+st.write("INDUSTRY DF ROWS:", len(ind_rank_df))
+
+st.write(main_df.head())
     
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
