@@ -3,18 +3,21 @@ import time
 import random
 import re
 import pandas as pd
+import numpy as np
 import io  
 import os
 import warnings
 from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
 
+# Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # --- Cloud Database Setup ---
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    DATABASE_URL = "postgresql://postgres.yourproject:yourpassword@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+    print("❌ ERROR: No DATABASE_URL found. Check your GitHub Secrets.")
+    exit()
 
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
@@ -26,8 +29,8 @@ REQUEST_HEADERS = {
     "Cookie": "csrftoken=cBucGDxR9HDRLquxvu5coW5K84dVl71t; sessionid=agwll5zqzkdpo0lg7xdck2t8tw2a85p2"
 }
 
-def random_sleep():
-    time.sleep(random.uniform(0.8, 2.0))
+def random_sleep(min_ms=800, max_ms=2000):
+    time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
 
 def fetch_with_retry(session, url, retries=3):
     for attempt in range(1, retries + 1):
@@ -36,11 +39,11 @@ def fetch_with_retry(session, url, retries=3):
             if resp.status_code == 200: return resp.text
         except Exception:
             pass
-        random_sleep()
+        random_sleep(1000, 3000)
     return None
 
 def run_daily_scraper():
-    print("🚀 STARTING: Daily Deep Screener (Supabase Edition)")
+    print("🚀 STARTING: Cloud-Native Deep Screener")
     
     session = requests.Session()
     session.headers.update(REQUEST_HEADERS)
@@ -53,6 +56,9 @@ def run_daily_scraper():
     all_dataframes = []
     print(f"📄 Found {total_pages} pages to scrape...")
     
+    # ==========================================
+    # STEP 1: FAST LIVE SCRAPE
+    # ==========================================
     for page in range(1, total_pages + 1):
         page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
         html_content = first_page if page == 1 else fetch_with_retry(session, page_url)
@@ -80,32 +86,124 @@ def run_daily_scraper():
                 all_dataframes.append(df)
         except Exception as e:
             print(f"❌ Parse error page {page}: {e}")
-        random_sleep()
+            
+        if page < total_pages: random_sleep()
 
     final_df = pd.concat(all_dataframes, ignore_index=True)
     
-    # NOTE: Since you do a deep scrape to get Sector/Industry, ensure that logic is applied to final_df here.
-    # For now, we ensure the required columns exist for the database.
-    if 'Sector' not in final_df.columns: final_df['Sector'] = "Unknown"
-    if 'Broad Industry' not in final_df.columns: final_df['Broad Industry'] = "Unknown"
-    if 'Exchange' not in final_df.columns: final_df['Exchange'] = "NSE"
+    # ==========================================
+    # STEP 2: CALCULATE MOMENTUM SCORE
+    # ==========================================
+    print("🧮 Calculating Relative Momentum Scores...")
+    col_g = next((c for c in final_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
+    col_h = next((c for c in final_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
+    col_i = next((c for c in final_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
 
-    # --- PUSH DIRECTLY TO SUPABASE (No Google Sheets) ---
-    print("\n☁️ Pushing master data to Cloud Database...")
+    if col_g and col_h and col_i:
+        final_df[col_g] = pd.to_numeric(final_df[col_g], errors='coerce')
+        final_df[col_h] = pd.to_numeric(final_df[col_h], errors='coerce')
+        final_df[col_i] = pd.to_numeric(final_df[col_i], errors='coerce')
+
+        rank_g = final_df[col_g].rank(ascending=False, method='min')
+        rank_h = final_df[col_h].rank(ascending=False, method='min')
+        rank_i = final_df[col_i].rank(ascending=False, method='min')
+        
+        momentum_score = (rank_g * 2) + (rank_h * 4) + (rank_i * 4)
+        valid_mask = final_df[[col_g, col_h, col_i]].notna().all(axis=1)
+        final_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
+    else:
+        final_df['Relative score'] = np.nan
+
+    # ==========================================
+    # STEP 3: MERGE STATIC SECTORS FROM SUPABASE
+    # ==========================================
+    print("🔍 Fetching static sector and industry mappings from Supabase...")
     try:
-        master_df = final_df[['Ticker', 'Sector', 'Broad Industry']].copy()
-        
-        # Add a mock relative score column if needed for your strategy
-        master_df['Relative score'] = 99 
-        
-        # Clean column names for PostgreSQL standard (lowercase, no spaces)
-        master_df.columns = ['ticker', 'sector', 'broad_industry', 'relative_score']
-        
-        # This one line creates/replaces the table in Supabase instantly
-        master_df.to_sql("stock_master", engine, if_exists="replace", index=False)
-        print("✅ Cloud Database 'stock_master' updated successfully.")
+        sector_master_df = pd.read_sql("SELECT ticker, sector, broad_industry FROM sector_master", engine)
+        sector_master_df['ticker'] = sector_master_df['ticker'].astype(str).str.strip().str.upper()
     except Exception as e:
-        print(f"❌ Failed to push to Cloud DB: {e}")
+        print(f"⚠️ Could not read 'sector_master' table. Error: {e}")
+        sector_master_df = pd.DataFrame(columns=['ticker', 'sector', 'broad_industry'])
+
+    print("🥞 Merging live metrics with sector mappings...")
+    final_df['Ticker'] = final_df['Ticker'].astype(str).str.strip().str.upper()
+    
+    # Join the live data with the static Supabase table
+    merged_df = pd.merge(final_df, sector_master_df, left_on='Ticker', right_on='ticker', how='left')
+    
+    # Fill missing sectors just in case
+    merged_df['sector'] = merged_df['sector'].fillna('Unknown')
+    merged_df['broad_industry'] = merged_df['broad_industry'].fillna('Unknown')
+
+    # Clean all column names for PostgreSQL
+    cleaned_columns = []
+    for col in merged_df.columns:
+        clean = col.lower().strip().replace(" ", "_").replace(".", "").replace("/", "").replace("%", "pct").replace("(", "").replace(")", "").replace("-", "_")
+        cleaned_columns.append(clean)
+    merged_df.columns = cleaned_columns
+
+    if 'ticker_x' in merged_df.columns:
+        merged_df = merged_df.rename(columns={'ticker_x': 'ticker'}).drop(columns=['ticker_y'])
+
+    # ==========================================
+    # STEP 4: SECTOR & INDUSTRY ATH ANALYSIS
+    # ==========================================
+    print("📊 Calculating Sector and Industry ATH Rankings...")
+    try:
+        col_cmp = next(c for c in merged_df.columns if 'cmp' in c.lower())
+        col_ath = next(c for c in merged_df.columns if 'alltime' in c.lower() or 'ath' in c.lower())
+        
+        # Convert to numeric to be safe
+        merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
+        merged_df[col_ath] = pd.to_numeric(merged_df[col_ath], errors='coerce')
+
+        # Create ATH boolean mask (CMP >= 90% of ATH)
+        merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df[col_ath])
+
+        def build_summary_table(df, group_col):
+            # Ignore stocks missing a sector
+            valid_df = df[df[group_col] != "Unknown"]
+            summary = valid_df.groupby(group_col).agg(
+                total_stocks=('is_ath', 'count'),
+                ath_stocks=('is_ath', 'sum')
+            ).reset_index()
+            
+            summary['ath_pct'] = (summary['ath_stocks'] / summary['total_stocks'] * 100).round(2)
+            summary = summary.sort_values(by='ath_pct', ascending=False).reset_index(drop=True)
+            summary['rank'] = summary.index + 1
+            return summary
+
+        sector_summary_df = build_summary_table(merged_df, 'sector')
+        industry_summary_df = build_summary_table(merged_df, 'broad_industry')
+        
+    except Exception as e:
+        print(f"❌ Error calculating Sector Analysis: {e}")
+        sector_summary_df = pd.DataFrame()
+        industry_summary_df = pd.DataFrame()
+
+    # ==========================================
+    # STEP 5: PUSH TO SUPABASE
+    # ==========================================
+    print("☁️ Pushing final tables to Supabase...")
+    try:
+        # Push Main Table
+        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False)
+        print("✅ 'stock_master' updated.")
+        
+        # Push Sector Summary (Your old Column X)
+        if not sector_summary_df.empty:
+            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False)
+            print("✅ 'sector_analysis' updated.")
+            
+        # Push Industry Summary
+        if not industry_summary_df.empty:
+            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False)
+            print("✅ 'industry_analysis' updated.")
+            
+    except Exception as e:
+        print(f"❌ Database push failed: {e}")
+
+    print("🎉 ALL DONE! Daily run complete.")
 
 if __name__ == "__main__":
     run_daily_scraper()
