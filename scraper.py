@@ -70,7 +70,6 @@ def run_daily_scraper():
                 df = tables[0]
                 df = df[df['Name'] != 'Name'].copy()
                 
-                # Extract Tickers from the HTML links
                 soup = BeautifulSoup(html_content, 'html.parser')
                 table = soup.find('table')
                 codes = []
@@ -82,22 +81,29 @@ def run_daily_scraper():
                             code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
                             codes.append(code.upper())
                 
-                df['Ticker'] = codes
+                df['ticker'] = codes 
                 all_dataframes.append(df)
         except Exception as e:
             print(f"❌ Parse error page {page}: {e}")
             
         if page < total_pages: random_sleep()
 
+    if not all_dataframes:
+        print("❌ No data scraped. Exiting.")
+        return
+
     final_df = pd.concat(all_dataframes, ignore_index=True)
+    
+    # Clean up column names for the live scrape early to avoid dupes
+    final_df.columns = [str(c).lower().strip().replace(" ", "_").replace(".", "").replace("/", "") for c in final_df.columns]
     
     # ==========================================
     # STEP 2: CALCULATE MOMENTUM SCORE
     # ==========================================
     print("🧮 Calculating Relative Momentum Scores...")
-    col_g = next((c for c in final_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
-    col_h = next((c for c in final_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
-    col_i = next((c for c in final_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
+    col_g = next((c for c in final_df.columns if '1m' in c and 'return' in c), None)
+    col_h = next((c for c in final_df.columns if '3m' in c and 'return' in c), None)
+    col_i = next((c for c in final_df.columns if '6m' in c and 'return' in c), None)
 
     if col_g and col_h and col_i:
         final_df[col_g] = pd.to_numeric(final_df[col_g], errors='coerce')
@@ -110,92 +116,108 @@ def run_daily_scraper():
         
         momentum_score = (rank_g * 2) + (rank_h * 4) + (rank_i * 4)
         valid_mask = final_df[[col_g, col_h, col_i]].notna().all(axis=1)
-        final_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
+        final_df['relative_score'] = momentum_score.where(valid_mask, np.nan)
     else:
-        final_df['Relative score'] = np.nan
+        final_df['relative_score'] = np.nan
 
     # ==========================================
-    # STEP 3: MERGE STATIC SECTORS FROM SUPABASE
+    # STEP 3: BULLETPROOF STATIC DB MERGE
     # ==========================================
-    print("🔍 Fetching static sector and industry mappings from Supabase...")
+    print("🔍 Fetching static mappings and ATH data from Supabase...")
     try:
-        sector_master_df = pd.read_sql("SELECT ticker, sector, broad_industry FROM sector_master", engine)
+        # Pull the entire table to avoid case-sensitive column crashes
+        raw_static_df = pd.read_sql("SELECT * FROM sector_master", engine)
+        
+        # Dynamically find the right columns regardless of how Google Sheets named them
+        t_col = next((c for c in raw_static_df.columns if c.strip().lower() == 'ticker'), None)
+        s_col = next((c for c in raw_static_df.columns if c.strip().lower() == 'sector'), None)
+        i_col = next((c for c in raw_static_df.columns if 'industry' in c.lower()), None)
+        ath_col = next((c for c in raw_static_df.columns if 'alltime' in c.lower() or 'ath' in c.lower()), None)
+        
+        rename_dict = {}
+        if t_col: rename_dict[t_col] = 'ticker'
+        if s_col: rename_dict[s_col] = 'sector'
+        if i_col: rename_dict[i_col] = 'broad_industry'
+        if ath_col: rename_dict[ath_col] = 'ath_static'
+        
+        sector_master_df = raw_static_df.rename(columns=rename_dict)
+        cols_to_keep = [c for c in ['ticker', 'sector', 'broad_industry', 'ath_static'] if c in sector_master_df.columns]
+        sector_master_df = sector_master_df[cols_to_keep]
+        
         sector_master_df['ticker'] = sector_master_df['ticker'].astype(str).str.strip().str.upper()
     except Exception as e:
         print(f"⚠️ Could not read 'sector_master' table. Error: {e}")
         sector_master_df = pd.DataFrame(columns=['ticker', 'sector', 'broad_industry'])
 
     print("🥞 Merging live metrics with sector mappings...")
-    final_df['Ticker'] = final_df['Ticker'].astype(str).str.strip().str.upper()
+    final_df['ticker'] = final_df['ticker'].astype(str).str.strip().str.upper()
     
-    # Join the live data with the static Supabase table
-    merged_df = pd.merge(final_df, sector_master_df, left_on='Ticker', right_on='ticker', how='left')
+    # Merge and explicitly drop any duplicate columns that might accidentally form
+    merged_df = pd.merge(final_df, sector_master_df, on='ticker', how='left')
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
     
-    # Fill missing sectors just in case
-    merged_df['sector'] = merged_df['sector'].fillna('Unknown')
-    merged_df['broad_industry'] = merged_df['broad_industry'].fillna('Unknown')
-
-    # Clean all column names for PostgreSQL
-    cleaned_columns = []
-    for col in merged_df.columns:
-        clean = col.lower().strip().replace(" ", "_").replace(".", "").replace("/", "").replace("%", "pct").replace("(", "").replace(")", "").replace("-", "_")
-        cleaned_columns.append(clean)
-    merged_df.columns = cleaned_columns
-
-    if 'ticker_x' in merged_df.columns:
-        merged_df = merged_df.rename(columns={'ticker_x': 'ticker'}).drop(columns=['ticker_y'])
+    merged_df['sector'] = merged_df.get('sector', pd.Series(dtype=str)).fillna('Unknown')
+    merged_df['broad_industry'] = merged_df.get('broad_industry', pd.Series(dtype=str)).fillna('Unknown')
 
     # ==========================================
     # STEP 4: SECTOR & INDUSTRY ATH ANALYSIS
     # ==========================================
     print("📊 Calculating Sector and Industry ATH Rankings...")
     try:
-        col_cmp = next(c for c in merged_df.columns if 'cmp' in c.lower())
-        col_ath = next(c for c in merged_df.columns if 'alltime' in c.lower() or 'ath' in c.lower())
+        col_cmp = next((c for c in merged_df.columns if 'cmp' in c), None)
+        col_ath = 'ath_static' if 'ath_static' in merged_df.columns else None
         
-        # Convert to numeric to be safe
-        merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
-        merged_df[col_ath] = pd.to_numeric(merged_df[col_ath], errors='coerce')
+        if col_cmp and col_ath:
+            merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
+            merged_df[col_ath] = pd.to_numeric(merged_df[col_ath], errors='coerce')
 
-        # Create ATH boolean mask (CMP >= 90% of ATH)
-        merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df[col_ath])
+            # Calculate the 10% condition using the static ATH from your spreadsheet
+            merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df[col_ath])
 
-        def build_summary_table(df, group_col):
-            # Ignore stocks missing a sector
-            valid_df = df[df[group_col] != "Unknown"]
-            summary = valid_df.groupby(group_col).agg(
-                total_stocks=('is_ath', 'count'),
-                ath_stocks=('is_ath', 'sum')
-            ).reset_index()
+            def build_summary_table(df, group_col):
+                valid_df = df[df[group_col] != "Unknown"]
+                if valid_df.empty: return pd.DataFrame()
+                
+                summary = valid_df.groupby(group_col).agg(
+                    total_stocks=('is_ath', 'count'),
+                    ath_stocks=('is_ath', 'sum')
+                ).reset_index()
+                
+                summary['ath_pct'] = (summary['ath_stocks'] / summary['total_stocks'] * 100).round(2)
+                summary = summary.sort_values(by='ath_pct', ascending=False).reset_index(drop=True)
+                summary['rank'] = summary.index + 1
+                return summary
+
+            sector_summary_df = build_summary_table(merged_df, 'sector')
+            industry_summary_df = build_summary_table(merged_df, 'broad_industry')
+        else:
+            print(f"⚠️ Missing CMP or ATH columns. Skipping analysis.")
+            sector_summary_df = pd.DataFrame()
+            industry_summary_df = pd.DataFrame()
             
-            summary['ath_pct'] = (summary['ath_stocks'] / summary['total_stocks'] * 100).round(2)
-            summary = summary.sort_values(by='ath_pct', ascending=False).reset_index(drop=True)
-            summary['rank'] = summary.index + 1
-            return summary
-
-        sector_summary_df = build_summary_table(merged_df, 'sector')
-        industry_summary_df = build_summary_table(merged_df, 'broad_industry')
-        
     except Exception as e:
         print(f"❌ Error calculating Sector Analysis: {e}")
         sector_summary_df = pd.DataFrame()
         industry_summary_df = pd.DataFrame()
+
+    # Clean up the static ATH column before pushing to stock_master so it stays clean
+    if 'ath_static' in merged_df.columns:
+        merged_df = merged_df.drop(columns=['ath_static'])
+    if 'is_ath' in merged_df.columns:
+        merged_df = merged_df.drop(columns=['is_ath'])
 
     # ==========================================
     # STEP 5: PUSH TO SUPABASE
     # ==========================================
     print("☁️ Pushing final tables to Supabase...")
     try:
-        # Push Main Table
         merged_df.to_sql("stock_master", engine, if_exists="replace", index=False)
         print("✅ 'stock_master' updated.")
         
-        # Push Sector Summary (Your old Column X)
         if not sector_summary_df.empty:
             sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False)
             print("✅ 'sector_analysis' updated.")
             
-        # Push Industry Summary
         if not industry_summary_df.empty:
             industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False)
             print("✅ 'industry_analysis' updated.")
