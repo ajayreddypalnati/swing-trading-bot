@@ -48,52 +48,43 @@ TV_PAYLOAD = {
 # ==========================================
 # 2. DATA FETCHING (Cloud Native Database)
 # ==========================================
-@st.cache_data(ttl=600) 
+@st.cache_data(ttl=600)
 def fetch_database_reference():
-    """Pulls the 3 Master Tables from Supabase using SQLAlchemy to preserve headers"""
     try:
         db_url = st.secrets["DATABASE_URL"]
+
         if db_url.startswith("postgresql://"):
-            db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-        
+            db_url = db_url.replace(
+                "postgresql://",
+                "postgresql+psycopg2://",
+                1
+            )
+
         engine = create_engine(db_url)
-        
-        try:
-    main_df = pd.read_sql("""
-        SELECT
-            "Ticker" AS ticker,
-            "Sector" AS sector,
-            "Broad Industry" AS broad_industry,
-            "Relative score" AS relative_score
-        FROM stock_master
-    """, engine)
 
-    sec_rank_df = pd.read_sql("""
-        SELECT
-            "Sector" AS sector,
-            "Rank" AS sec_rank
-        FROM sector_analysis
-    """, engine)
+        main_df = pd.read_sql(
+            'SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master',
+            engine
+        )
 
-    ind_rank_df = pd.read_sql("""
-        SELECT
-            "Broad Industry" AS broad_industry,
-            "Rank" AS ind_rank
-        FROM industry_analysis
-    """, engine)
+        sec_rank_df = pd.read_sql(
+            'SELECT "Sector" as sector, "Rank" as sec_rank FROM sector_analysis',
+            engine
+        )
 
-    st.success(f"Loaded {len(main_df)} stocks")
-    st.success(f"Loaded {len(sec_rank_df)} sectors")
-    st.success(f"Loaded {len(ind_rank_df)} industries")
+        ind_rank_df = pd.read_sql(
+            'SELECT "Broad Industry" as broad_industry, "Rank" as ind_rank FROM industry_analysis',
+            engine
+        )
 
-except Exception as e:
-    st.error(f"DATABASE QUERY ERROR: {e}")
-    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-            
+        st.write("Stocks:", len(main_df))
+        st.write("Sectors:", len(sec_rank_df))
+        st.write("Industries:", len(ind_rank_df))
+
         return main_df, sec_rank_df, ind_rank_df
 
     except Exception as e:
-        st.sidebar.error(f"⚠️ Database Sync Bypassed: {e}")
+        st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def fetch_chartink_data():
