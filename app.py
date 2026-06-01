@@ -70,11 +70,19 @@ def fetch_database_reference():
         sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
         ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind
+        # --- NEW CODE: Fetch the timestamp ---
+        try:
+            sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
+            last_sync = sync_df['last_sync'].iloc[0]
+        except Exception:
+            last_sync = "Pending Run..."
+        # -------------------------------------
+
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error"
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -156,40 +164,8 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind = fetch_database_reference()
-
-# Last update indicator
-last_sync = "🔴 Pending"
-
-try:
-    db_url = st.secrets["DATABASE_URL"]
-
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace(
-            "postgresql://",
-            "postgresql+psycopg2://",
-            1
-        )
-
-    engine = create_engine(db_url)
-
-    sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
-
-    ist = timezone(timedelta(hours=5, minutes=30))
-    sync_time = pd.to_datetime(sync_df['last_sync'].iloc[0])
-
-    if sync_time.tzinfo is None:
-        sync_time = sync_time.replace(tzinfo=ist)
-    else:
-        sync_time = sync_time.astimezone(ist)
-
-    hours_old = (datetime.now(ist) - sync_time).total_seconds() / 3600
-
-    dot = "🟢" if hours_old <= 24 else "🔴"
-    last_sync = f"{dot} {sync_time.strftime('%d %b %Y, %I:%M %p')}"
-
-except:
-    pass
+    # --- NEW CODE: Catch the 6th variable ---
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync = fetch_database_reference()  
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -246,26 +222,14 @@ except:
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
+        # --- NEW CODE: Updated to 4 columns ---
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-
         metric_col1.metric("🔥 Total Matches", total_matches)
-        metric_col2.metric("⭐ Top Tier Setups", top_tier_count)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
         metric_col3.metric("📈 Database Syncs", db_sync_count)
-
-        metric_col4.markdown(
-         f"""
-          <div style="text-align:center;">
-        <div style="font-size:0.8rem;color:gray;font-weight:600;">
-            Last DB Update
-        </div>
-        <div style="font-size:1.15rem;font-weight:800;color:#1E88E5;">
-            {last_sync}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+        metric_col4.metric("🔄 Last DB Update", last_sync)
         st.markdown("<br>", unsafe_allow_html=True)
+        # --------------------------------------
         
         # --- NEW LEADERBOARD UI SECTION ---
         if not raw_sec.empty and not raw_ind.empty:
