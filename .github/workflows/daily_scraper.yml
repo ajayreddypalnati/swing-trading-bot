@@ -2,8 +2,10 @@ name: Daily Stock Scraper
 
 on:
   schedule:
-    - cron: '30 14 * * *'   # 8:00 PM IST (20:00)
-    - cron: '30 0 * * *'    # 6:00 AM IST
+    # 8:12 PM IST (Avoids the 8:00 / 8:30 rush hour)
+    - cron: '42 14 * * *'   
+    # 6:17 AM IST (Avoids the 6:00 / 6:30 rush hour)
+    - cron: '47 0 * * *'    
   workflow_dispatch:
 
 jobs:
