@@ -1,305 +1,303 @@
 import requests
-import time
-import random
-import re
+from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
-import io  
-import os
+import time
+from datetime import datetime, timezone, timedelta
+import streamlit as st
+import re
 import warnings
-from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- Cloud Database Setup ---
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    print("❌ ERROR: No DATABASE_URL found. Check your GitHub Secrets.")
-    exit()
+st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
-engine = create_engine(DATABASE_URL)
+# --- CSS INJECTION (Dark-Themed Sleek UI) ---
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+        #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+        .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
+        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; }
+        [data-testid="stTable"] table { width: 100%; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
+        [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
+        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
+        .blob.red { background: rgba(231, 76, 60, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-red 2s infinite; display: inline-block; }
+        @keyframes pulse-green { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { transform: scale(0.95); } }
+        @keyframes pulse-red { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); } }
+    </style>
+""", unsafe_allow_html=True)
 
-SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
-REQUEST_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Cookie": "csrftoken=cBucGDxR9HDRLquxvu5coW5K84dVl71t; sessionid=agwll5zqzkdpo0lg7xdck2t8tw2a85p2"
+# --- APIs & ENDPOINTS ---
+CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
+CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
+CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  5 and  daily volume * daily close >=  10000000 ) )"
+
+TV_URL = 'https://scanner.tradingview.com/india/scan'
+TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
+TV_PAYLOAD = {
+    "columns": ["ticker-view", "close", "type", "typespecs", "change", "volume", "sector.tr", "market", "sector"],
+    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 30000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 5]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
+    "options": {"lang": "en"}, "range": [0, 100], "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"}, "markets": ["india"]
 }
 
-def random_sleep(min_ms=800, max_ms=2000):
-    time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
-
-def fetch_with_retry(session, url, retries=3):
-    for attempt in range(1, retries + 1):
-        try:
-            resp = session.get(url, timeout=15)
-            if resp.status_code == 200: return resp.text
-        except Exception:
-            pass
-        random_sleep(1000, 3000)
-    return None
-
-def run_daily_scraper():
-    print("🚀 STARTING: Cloud-Native Screener (Exact Header Match Edition)")
-    
-    session = requests.Session()
-    session.headers.update(REQUEST_HEADERS)
-    
-    # ==========================================
-    # STEP 1: FETCH STATIC DB MAP (Extracting ONLY static columns)
-    # ==========================================
-    print("🧠 Reading existing 'sector_master' to build memory cache...")
+# ==========================================
+# 2. DATA FETCHING (Cloud Native Database)
+# ==========================================
+@st.cache_data(ttl=600)
+def fetch_database_reference():
     try:
-        static_df = pd.read_sql("SELECT * FROM sector_master", engine)
-        
-        # Flexibly find exact column names from your uploaded CSV, accounting for double spaces
-        col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
-        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
-        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
-        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
-        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
-        col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
-        
-        # --- NEW CODE: The Self-Cleaning Mechanism ---
-        from sqlalchemy import text
-        unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
-        if unknown_mask.any():
-            print(f"🧹 Found {unknown_mask.sum()} stocks with 'Unknown' data. Deleting to force re-scrape...")
-            with engine.begin() as conn:
-                conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
-            # Filter them out of the memory cache so Step 3 treats them as missing
-            static_df = static_df[~unknown_mask]
-        # ---------------------------------------------
-        
-        # Keep ONLY the static mapping columns so we don't accidentally merge old prices
-        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
-        static_subset = static_df[cols_to_keep].copy()
-        
-        # Rename them internally so the merge is flawless
-        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
-        static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
-        
-        known_names = set(static_subset['Name'].tolist())
-        print(f"✅ Loaded {len(known_names)} existing companies into memory.")
+        db_url = st.secrets["DATABASE_URL"]
+
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace(
+                "postgresql://",
+                "postgresql+psycopg2://",
+                1
+            )
+
+        engine = create_engine(db_url)
+
+        main_df = pd.read_sql(
+            'SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master',
+            engine
+        )
+
+        sec_rank_df = pd.read_sql(
+            'SELECT "Sector" as sector, "Rank" as sec_rank FROM sector_analysis',
+            engine
+        )
+
+        ind_rank_df = pd.read_sql(
+            'SELECT "Broad Industry" as broad_industry, "Rank" as ind_rank FROM industry_analysis',
+            engine
+        )
+
+        return main_df, sec_rank_df, ind_rank_df
+
     except Exception as e:
-        print(f"⚠️ Could not load cache: {e}")
-        known_names = set()
-        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
+        st.error(f"DATABASE ERROR: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    if 'Exchange' not in static_subset.columns:
-        static_subset['Exchange'] = "NSE"
-
-    # ==========================================
-    # STEP 2: FAST LIVE SCRAPE (MAIN TABLES)
-    # ==========================================
-    first_page = fetch_with_retry(session, SCREENER_URL)
-    if not first_page: return
-    page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
-    total_pages = int(page_match.group(1)) if page_match else 1
-    
-    all_dataframes = []
-    print(f"📄 Scraping {total_pages} live market pages...")
-    
-    for page in range(1, total_pages + 1):
-        page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
-        html_content = first_page if page == 1 else fetch_with_retry(session, page_url)
-        if not html_content: continue
-        
+def fetch_chartink_data():
+    with requests.Session() as session:
         try:
-            tables = pd.read_html(io.StringIO(html_content), thousands=',')
-            if tables:
-                df = tables[0]
-                df = df[df['Name'] != 'Name'].copy()
-                df['Name'] = df['Name'].astype(str).str.strip()
-                
-                soup = BeautifulSoup(html_content, 'html.parser')
-                table = soup.find('table')
-                codes = []
-                if table and table.find('tbody'):
-                    for tr in table.find('tbody').find_all('tr'):
-                        if tr.find('th'): continue
-                        a_tag = tr.find('a', href=re.compile(r'/company/([A-Za-z0-9_\-&]+)/'))
-                        if a_tag:
-                            code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
-                            codes.append(code.upper())
-                
-                df['live_ticker_slug'] = codes 
-                all_dataframes.append(df)
+            resp = session.get(CHARTINK_SCREENER_URL, timeout=10)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            meta_tag = soup.find('meta', {'name': 'csrf-token'})
+            if not meta_tag: return []
+            headers = {'x-csrf-token': meta_tag['content'], 'x-requested-with': 'XMLHttpRequest'}
+            api_response = session.post(CHARTINK_PROCESS_URL, headers=headers, data={'scan_clause': CHARTINK_SCAN_CLAUSE}, timeout=10)
+            data = api_response.json()
+            if 'data' in data and len(data['data']) > 0:
+                df = pd.DataFrame(data['data'])
+                return [[row['nsecode'], row['close'], row['per_chg'], row['volume'], 'NSE'] for _, row in df.iterrows()]
+            return []
         except Exception:
-            pass
-        if page < total_pages: random_sleep(800, 1500)
+            return []
 
-    if not all_dataframes: return
-    live_df = pd.concat(all_dataframes, ignore_index=True)
-    
-    # ==========================================
-    # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
-    # ==========================================
-    live_names = set(live_df['Name'].tolist())
-    missing_names = [n for n in live_names if n not in known_names]
-    
-    if missing_names:
-        missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
-        print(f"\n🔍 Found {len(missing_df)} NEW companies. Deep scraping...")
-        new_records = []
-        
-        for idx, row in missing_df.iterrows():
-            stock_name = row['Name']
-            code = row['live_ticker_slug']
-            url = f"https://www.screener.in/company/{code}/"
-            page_html = fetch_with_retry(session, url)
-            
-            sector, industry, exchange_class = "Unknown", "Unknown", ""
-            if page_html:
-                soup = BeautifulSoup(page_html, 'html.parser')
-                sec_tag = soup.find('a', title='Sector')
-                ind_tag = soup.find('a', title='Broad Industry')
-                if sec_tag: sector = sec_tag.text.strip()
-                if ind_tag: industry = ind_tag.text.strip()
-
-                nse_link = soup.find('a', href=re.compile(r'nseindia\.com/get-quotes/equity\?symbol='))
-                bse_link = soup.find('a', href=re.compile(r'bseindia\.com/stock-share-price/'))
-
-                if nse_link:
-                    span_tag = nse_link.find('span')
-                    exchange_class = "NSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "NSE"
-                elif bse_link:
-                    span_tag = bse_link.find('span')
-                    exchange_class = "BSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "BSE"
-                else:
-                    exchange_class = "BSE" if code.isdigit() else "NSE"
-            else:
-                exchange_class = "BSE" if code.isdigit() else "NSE"
-                
-            # Appending to Sector Master with the EXACT original column headers from the DB
-            try:
-                original_col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
-                original_col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
-                original_col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
-                original_col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
-                original_col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
-                
-                new_records.append({
-                    original_col_n: stock_name,
-                    original_col_t: code, 
-                    original_col_s: sector, 
-                    original_col_i: industry, 
-                    original_col_e: exchange_class
-                })
-            except Exception:
-                pass
-            
-            random_sleep(800, 1500)
-            
-        if new_records:
-            new_static_df = pd.DataFrame(new_records)
-            print("☁️ Appending new companies permanently to 'sector_master'...")
-            try:
-                new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
-                print("✅ 'sector_master' updated with new companies.")
-                
-                # Update memory cache dynamically
-                new_static_mapped = pd.DataFrame({
-                    'Name': [r.get(original_col_n) for r in new_records],
-                    'Ticker': [r.get(original_col_t) for r in new_records],
-                    'Sector': [r.get(original_col_s) for r in new_records],
-                    'Broad Industry': [r.get(original_col_i) for r in new_records],
-                    'Exchange': [r.get(original_col_e) for r in new_records],
-                    'Static_ATH': [np.nan for _ in new_records]
-                })
-                static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
-            except Exception as e:
-                print(f"❌ Failed to append to sector_master: {e}")
-    else:
-        print("\n✅ No new companies found. Database is perfectly synced.")
-
-    # ==========================================
-    # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
-    # ==========================================
-    print("🥞 Merging live data with full sector cache...")
-    
-    ret_1m = next((c for c in live_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
-    ret_3m = next((c for c in live_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
-    ret_6m = next((c for c in live_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
-
-    if ret_1m and ret_3m and ret_6m:
-        live_df[ret_1m] = pd.to_numeric(live_df[ret_1m], errors='coerce')
-        live_df[ret_3m] = pd.to_numeric(live_df[ret_3m], errors='coerce')
-        live_df[ret_6m] = pd.to_numeric(live_df[ret_6m], errors='coerce')
-
-        rank_1m = live_df[ret_1m].rank(ascending=False, method='min')
-        rank_3m = live_df[ret_3m].rank(ascending=False, method='min')
-        rank_6m = live_df[ret_6m].rank(ascending=False, method='min')
-        
-        momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
-        valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
-        live_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
-    else:
-        live_df['Relative score'] = np.nan
-
-    # Throw away the raw URL slug 
-    live_df = live_df.drop(columns=['live_ticker_slug'])
-    
-    # Merge on the 'Name' column precisely
-    merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
-    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
-
-    # ==========================================
-    # STEP 5: SECTOR & INDUSTRY ATH (Excluding SMEs)
-    # ==========================================
-    print("📊 Calculating Sector and Industry ATH Rankings (Filtering out SMEs)...")
-    
-    col_cmp = next((c for c in merged_df.columns if 'cmp' in c.lower()), None)
-    
-    sector_summary_df = pd.DataFrame()
-    industry_summary_df = pd.DataFrame()
-    
-    if col_cmp and 'Static_ATH' in merged_df.columns:
-        merged_df['Static_ATH'] = pd.to_numeric(merged_df['Static_ATH'], errors='coerce')
-        merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
-        
-        merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df['Static_ATH'])
-        analysis_df = merged_df[~merged_df['Exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
-
-        def build_summary_table(df, group_col):
-            valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
-            if valid_df.empty: return pd.DataFrame()
-            summary = valid_df.groupby(group_col).agg(
-                Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')
-            ).reset_index()
-            summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
-            summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
-            summary['Rank'] = summary.index + 1
-            return summary
-
-        sector_summary_df = build_summary_table(analysis_df, 'Sector')
-        industry_summary_df = build_summary_table(analysis_df, 'Broad Industry')
-        
-        # Drop temporary ATH variables so they don't clutter the main table
-        merged_df = merged_df.drop(columns=['Static_ATH', 'is_ath'])
-
-    # ==========================================
-    # STEP 6: PUSH TO SUPABASE
-    # ==========================================
-    print("☁️ Pushing final tables to Supabase with exact Google Sheets Formatting...")
+def fetch_tradingview_data():
     try:
-        # Pushing stock_master with exact Capital Letters and Spaces preserved!
-        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False)
-        print("✅ 'stock_master' overwritten successfully.")
+        response = requests.post(TV_URL, headers=TV_HEADERS, json=TV_PAYLOAD, timeout=10)
+        raw_data = response.json().get("data", [])
+        formatted_data = []
+        for item in raw_data:
+            full_ticker = item.get("s", "")
+            exchange, clean_name = full_ticker.split(':') if ':' in full_ticker else ("NSE", full_ticker)
+            formatted_data.append([clean_name, item["d"][1], item["d"][4], item["d"][5], exchange])
+        return formatted_data
+    except Exception:
+        return []
+
+@st.cache_data(ttl=60)
+def get_combined_data():
+    chartink_list = fetch_chartink_data()
+    tv_list = fetch_tradingview_data()
+    tv_list.sort(key=lambda x: 0 if x[4] == 'NSE' else 1)
+    
+    combined_data, seen_symbols = [], set()
+    for row in chartink_list:
+        symbol = re.sub(r'\s+', '', str(row[0])).upper()
+        combined_data.append(row)
+        seen_symbols.add(symbol)
         
-        if not sector_summary_df.empty:
-            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False)
-            
-        if not industry_summary_df.empty:
-            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False)
-            
-    except Exception as e:
-        print(f"❌ Database push failed: {e}")
+    for row in tv_list:
+        symbol = re.sub(r'\s+', '', str(row[0])).upper()
+        if symbol not in seen_symbols:
+            combined_data.append(row)
+            seen_symbols.add(symbol)
+    return combined_data
 
-    print("🎉 ALL DONE! Daily run complete.")
+# ==========================================
+# 3. DASHBOARD UI LAYOUT
+# ==========================================
+header_col1, header_col2 = st.columns([2, 1])
+with header_col1:
+    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    run_daily_scraper()
+with header_col2:
+    # Force Indian Standard Time (IST) timezone
+    ist = timezone(timedelta(hours=5, minutes=30))
+    current_time = datetime.now(ist).strftime('%I:%M:%S %p')
+    current_date = datetime.now(ist).strftime('%d %b %Y')
+    
+    auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
+    dot_color = "green" if auto_refresh else "red"
+    status_text = "LIVE DATA" if auto_refresh else "PAUSED"
+    st.markdown(f"""
+        <div style="text-align: right; margin-top: 5px; color: gray;">
+            <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
+                {status_text} <div class="blob {dot_color}"></div><br>
+                <span style="color: #1E88E5; font-size: 1.4rem; font-weight: 800;">{current_time}</span><br>
+                <span style="font-size: 0.85rem;">{current_date}</span>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.divider()
+
+with st.spinner("Scanning live markets & syncing with Supabase..."):
+    data = get_combined_data()
+    main_df, sec_rank_df, ind_rank_df = fetch_database_reference()  
+    if data:
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
+        df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
+
+        # Merge Live Scraped Data with Master Tables
+        if not main_df.empty:
+            df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
+            df = df.merge(sec_rank_df, on="sector", how="left")
+            df = df.merge(ind_rank_df, on="broad_industry", how="left")
+        else:
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+
+        # Clean numeric parameters safely
+        for col in ['sec_rank', 'ind_rank', 'relative_score']:
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # ==========================================
+        # 1. MULTI-TIER PRIORITY TIERING
+        # ==========================================
+        df['Priority'] = np.nan
+        df['Composite Score'] = np.nan
+
+        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
+            p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
+            p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
+            p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
+            p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+
+            df.loc[p1, 'Priority'] = 1
+            df.loc[p2, 'Priority'] = 2
+            df.loc[p3, 'Priority'] = 3
+            df.loc[p4, 'Priority'] = 4
+
+            # ==========================================
+            # 2. DYNAMIC COMPOSITE SCORING (40/40/20)
+            # ==========================================
+            # Normalize to 0-100 scale (Invert rank so Rank 1 = 100% score)
+            sec_norm = (1 - df['sec_rank'].rank(pct=True, na_option='keep')) * 100
+            ind_norm = (1 - df['ind_rank'].rank(pct=True, na_option='keep')) * 100
+            rel_norm = (1 - df['relative_score'].rank(pct=True, na_option='keep')) * 100
+
+            def calc_composite(row):
+                s, i, r = row['sec_norm'], row['ind_norm'], row['rel_norm']
+                w_s, w_i, w_r = 0.4, 0.4, 0.2  # 40% Sector, 40% Ind, 20% Momentum
+
+                # Zero out weights if data is missing
+                if pd.isna(s): w_s = 0
+                if pd.isna(i): w_i = 0
+                if pd.isna(r): w_r = 0
+
+                total_w = w_s + w_i + w_r
+                if total_w == 0: return np.nan
+
+                # Dynamically redistribute to 100% allocation
+                w_s, w_i, w_r = w_s / total_w, w_i / total_w, w_r / total_w
+
+                return (np.nan_to_num(s) * w_s) + (np.nan_to_num(i) * w_i) + (np.nan_to_num(r) * w_r)
+
+            df['sec_norm'], df['ind_norm'], df['rel_norm'] = sec_norm, ind_norm, rel_norm
+            df['Composite Score'] = df.apply(calc_composite, axis=1)
+            df = df.drop(columns=['sec_norm', 'ind_norm', 'rel_norm'])
+
+        # ==========================================
+        # 3. VISUAL LAYOUT & SORTING
+        # ==========================================
+        display_cols = ["Priority", "Composite Score", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        
+        # Sort purely by Priority Tier first, then by the highest Composite Score
+        display_df = display_df.sort_values(by=["Priority", "Composite Score"], ascending=[True, False], na_position="last").fillna("")
+
+        # User-friendly Display Renaming
+        display_df = display_df.rename(columns={
+            "sector": "Sector", 
+            "sec_rank": "Sector Rank", 
+            "broad_industry": "Industry", 
+            "ind_rank": "Ind. Rank", 
+            "relative_score": "Momentum Score"
+        })
+
+        # Calculate high-level metrics safely
+        total_matches = len(display_df)
+        top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
+        db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
+
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
+        metric_col1.metric("🔥 Total Matches", total_matches)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
+        metric_col3.metric("📈 Database Syncs", db_sync_count)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        def highlight_change(val):
+            try: return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else 'background-color: rgba(231, 76, 60, 0.15)'
+            except: return ''
+        
+        # Safe integer parsing to completely safeguard rendering engine from crashing
+        def safe_int(val, prefix="", suffix=""):
+            if val == "" or pd.isna(val): return ""
+            try: return f"{prefix}{int(float(val))}{suffix}"
+            except: return ""
+
+        styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
+            "Close": "₹{:.2f}", 
+            "% Change": "{:.2f}%", 
+            "Volume": "{:,.0f}",
+            "Composite Score": lambda x: safe_int(x, "", " / 100"),
+            "Momentum Score": lambda x: safe_int(x),
+            "Priority": lambda x: safe_int(x, "Tier "),
+            "Sector Rank": lambda x: safe_int(x, "#"),
+            "Ind. Rank": lambda x: safe_int(x, "#"),
+        })
+        st.table(styled_df)
+    else:
+        st.info("No stocks matching criteria right now. Waiting for momentum...")
+
+if auto_refresh:
+    time.sleep(60)
+    st.rerun()
+
+# --- DATABASE EXPLORER (Sector & Industry Only) ---
+st.markdown("<br><br>", unsafe_allow_html=True)
+with st.expander("🗄️ View Raw Supabase Tables"):
+    tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
+    
+    # Re-use your database engine connection
+    db_url = st.secrets["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg2://", 1)
+    engine = create_engine(db_url)
+    
+    with tab1:
+        st.subheader("Sector Analysis")
+        df_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
+        st.dataframe(df_sec, use_container_width=True)
+        
+    with tab2:
+        st.subheader("Industry Analysis")
+        df_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
+        st.dataframe(df_ind, use_container_width=True)
