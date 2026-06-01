@@ -62,26 +62,19 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        main_df = pd.read_sql(
-            'SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master',
-            engine
-        )
+        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
+        raw_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
+        raw_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
 
-        sec_rank_df = pd.read_sql(
-            'SELECT "Sector" as sector, "Rank" as sec_rank FROM sector_analysis',
-            engine
-        )
+        # Prepare targeted formatting for the core logic merge
+        sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
+        ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-        ind_rank_df = pd.read_sql(
-            'SELECT "Broad Industry" as broad_industry, "Rank" as ind_rank FROM industry_analysis',
-            engine
-        )
-
-        return main_df, sec_rank_df, ind_rank_df
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -163,7 +156,8 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind = fetch_database_reference()  
+
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
@@ -184,7 +178,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         # 1. MULTI-TIER PRIORITY TIERING
         # ==========================================
         df['Priority'] = np.nan
-        df['Composite Score'] = np.nan
 
         if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
             p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
@@ -197,43 +190,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-            # ==========================================
-            # 2. DYNAMIC COMPOSITE SCORING (40/40/20)
-            # ==========================================
-            # Normalize to 0-100 scale (Invert rank so Rank 1 = 100% score)
-            sec_norm = (1 - df['sec_rank'].rank(pct=True, na_option='keep')) * 100
-            ind_norm = (1 - df['ind_rank'].rank(pct=True, na_option='keep')) * 100
-            rel_norm = (1 - df['relative_score'].rank(pct=True, na_option='keep')) * 100
-
-            def calc_composite(row):
-                s, i, r = row['sec_norm'], row['ind_norm'], row['rel_norm']
-                w_s, w_i, w_r = 0.4, 0.4, 0.2  # 40% Sector, 40% Ind, 20% Momentum
-
-                # Zero out weights if data is missing
-                if pd.isna(s): w_s = 0
-                if pd.isna(i): w_i = 0
-                if pd.isna(r): w_r = 0
-
-                total_w = w_s + w_i + w_r
-                if total_w == 0: return np.nan
-
-                # Dynamically redistribute to 100% allocation
-                w_s, w_i, w_r = w_s / total_w, w_i / total_w, w_r / total_w
-
-                return (np.nan_to_num(s) * w_s) + (np.nan_to_num(i) * w_i) + (np.nan_to_num(r) * w_r)
-
-            df['sec_norm'], df['ind_norm'], df['rel_norm'] = sec_norm, ind_norm, rel_norm
-            df['Composite Score'] = df.apply(calc_composite, axis=1)
-            df = df.drop(columns=['sec_norm', 'ind_norm', 'rel_norm'])
-
         # ==========================================
-        # 3. VISUAL LAYOUT & SORTING
+        # 2. VISUAL LAYOUT & SORTING
         # ==========================================
-        display_cols = ["Priority", "Composite Score", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_cols = ["Priority", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort purely by Priority Tier first, then by the highest Composite Score
-        display_df = display_df.sort_values(by=["Priority", "Composite Score"], ascending=[True, False], na_position="last").fillna("")
+        # Sort purely by Priority Tier first, then by Momentum Score for tie-breakers
+        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, False], na_position="last").fillna("")
 
         # User-friendly Display Renaming
         display_df = display_df.rename(columns={
@@ -255,6 +219,27 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         metric_col3.metric("📈 Database Syncs", db_sync_count)
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # --- NEW LEADERBOARD UI SECTION ---
+        if not raw_sec.empty and not raw_ind.empty:
+            with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
+                lead_col1, lead_col2 = st.columns(2)
+                
+                with lead_col1:
+                    st.markdown("##### 🔥 Top 5 Sectors")
+                    top_sec = raw_sec.nsmallest(5, 'Rank')[['Rank', 'Sector', 'ATH %']]
+                    # Format ATH % to look nice
+                    top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                    st.dataframe(top_sec.set_index('Rank'), use_container_width=True)
+                    
+                with lead_col2:
+                    st.markdown("##### 🚀 Top 15 Industries")
+                    top_ind = raw_ind.nsmallest(15, 'Rank')[['Rank', 'Broad Industry', 'ATH %']]
+                    # Format ATH % to look nice
+                    top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                    st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+        # -----------------------------------
+
         def highlight_change(val):
             try: return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else 'background-color: rgba(231, 76, 60, 0.15)'
             except: return ''
@@ -269,7 +254,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
             "Volume": "{:,.0f}",
-            "Composite Score": lambda x: safe_int(x, "", " / 100"),
             "Momentum Score": lambda x: safe_int(x),
             "Priority": lambda x: safe_int(x, "Tier "),
             "Sector Rank": lambda x: safe_int(x, "#"),
@@ -283,21 +267,13 @@ if auto_refresh:
     time.sleep(60)
     st.rerun()
 
-# --- DATABASE EXPLORER (Sector & Industry Only) ---
+# --- DATABASE EXPLORER (Bottom Page Backup) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
-with st.expander("🗄️ View Raw Supabase Tables"):
+with st.expander("🗄️ View Full Raw Supabase Tables"):
     tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
-    
-    # Re-use your database engine connection
-    db_url = st.secrets["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg2://", 1)
-    engine = create_engine(db_url)
-    
-    with tab1:
-        st.subheader("Sector Analysis")
-        df_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
-        st.dataframe(df_sec, use_container_width=True)
-        
-    with tab2:
-        st.subheader("Industry Analysis")
-        df_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
-        st.dataframe(df_ind, use_container_width=True)
+    if not raw_sec.empty:
+        with tab1:
+            st.dataframe(raw_sec, use_container_width=True)
+    if not raw_ind.empty:
+        with tab2:
+            st.dataframe(raw_ind, use_container_width=True)
