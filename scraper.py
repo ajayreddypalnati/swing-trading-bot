@@ -301,3 +301,27 @@ with st.expander("🗄️ View Raw Supabase Tables"):
         st.subheader("Industry Analysis")
         df_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
         st.dataframe(df_ind, use_container_width=True)
+        # ==========================================
+    # STEP 6: PUSH TO SUPABASE
+    # ==========================================
+    print("☁️ Pushing final tables to Supabase with exact Google Sheets Formatting...")
+    try:
+        # Pushing stock_master with exact Capital Letters and Spaces preserved!
+        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False)
+        print("✅ 'stock_master' overwritten successfully.")
+        
+        if not sector_summary_df.empty:
+            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False)
+            
+        if not industry_summary_df.empty:
+            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False)
+            
+        # --- NEW CODE: Stamp the exact completion time in IST ---
+        sync_df = pd.DataFrame([{"last_sync": pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')}])
+        sync_df.to_sql("sync_log", engine, if_exists="replace", index=False)
+        # --------------------------------------------------------
+            
+    except Exception as e:
+        print(f"❌ Database push failed: {e}")
+
+    print("🎉 ALL DONE! Daily run complete.")
