@@ -70,11 +70,19 @@ def fetch_database_reference():
         sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
         ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind
+        # --- NEW CODE: Fetch the timestamp ---
+        try:
+            sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
+            last_sync = sync_df['last_sync'].iloc[0]
+        except Exception:
+            last_sync = "Pending Run..."
+        # -------------------------------------
+
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error"
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -156,7 +164,8 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind = fetch_database_reference()  
+    # --- NEW CODE: Catch the 6th variable ---
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync = fetch_database_reference()  
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -213,11 +222,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
-        metric_col1, metric_col2, metric_col3 = st.columns(3)
+        # --- NEW CODE: Updated to 4 columns ---
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
         metric_col1.metric("🔥 Total Matches", total_matches)
         metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
         metric_col3.metric("📈 Database Syncs", db_sync_count)
+        metric_col4.metric("🔄 Last DB Update", last_sync)
         st.markdown("<br>", unsafe_allow_html=True)
+        # --------------------------------------
         
         # --- NEW LEADERBOARD UI SECTION ---
         if not raw_sec.empty and not raw_ind.empty:
