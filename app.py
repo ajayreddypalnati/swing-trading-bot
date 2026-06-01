@@ -77,10 +77,6 @@ def fetch_database_reference():
             engine
         )
 
-        st.write("Stocks:", len(main_df))
-        st.write("Sectors:", len(sec_rank_df))
-        st.write("Industries:", len(ind_rank_df))
-
         return main_df, sec_rank_df, ind_rank_df
 
     except Exception as e:
@@ -184,22 +180,60 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # Calculate Internal Screen Rank if ranks are available
-        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
-            valid_mask = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15)
-            valid_df = df[valid_mask].copy().sort_values(by=['sec_rank', 'ind_rank'], ascending=[True, True])
-            valid_df['Screen Rank'] = range(1, len(valid_df) + 1)
-            df['Screen Rank'] = np.nan
-            df.loc[valid_df.index, 'Screen Rank'] = valid_df['Screen Rank']
-        else:
-            df['Screen Rank'] = np.nan
+        # ==========================================
+        # 1. MULTI-TIER PRIORITY TIERING
+        # ==========================================
+        df['Priority'] = np.nan
+        df['Composite Score'] = np.nan
 
-        # Clean visual hierarchy layout
-        display_cols = ["Screen Rank", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
+            p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
+            p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
+            p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
+            p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+
+            df.loc[p1, 'Priority'] = 1
+            df.loc[p2, 'Priority'] = 2
+            df.loc[p3, 'Priority'] = 3
+            df.loc[p4, 'Priority'] = 4
+
+            # ==========================================
+            # 2. DYNAMIC COMPOSITE SCORING (40/40/20)
+            # ==========================================
+            # Normalize to 0-100 scale (Invert rank so Rank 1 = 100% score)
+            sec_norm = (1 - df['sec_rank'].rank(pct=True, na_option='keep')) * 100
+            ind_norm = (1 - df['ind_rank'].rank(pct=True, na_option='keep')) * 100
+            rel_norm = (1 - df['relative_score'].rank(pct=True, na_option='keep')) * 100
+
+            def calc_composite(row):
+                s, i, r = row['sec_norm'], row['ind_norm'], row['rel_norm']
+                w_s, w_i, w_r = 0.4, 0.4, 0.2  # 40% Sector, 40% Ind, 20% Momentum
+
+                # Zero out weights if data is missing
+                if pd.isna(s): w_s = 0
+                if pd.isna(i): w_i = 0
+                if pd.isna(r): w_r = 0
+
+                total_w = w_s + w_i + w_r
+                if total_w == 0: return np.nan
+
+                # Dynamically redistribute to 100% allocation
+                w_s, w_i, w_r = w_s / total_w, w_i / total_w, w_r / total_w
+
+                return (np.nan_to_num(s) * w_s) + (np.nan_to_num(i) * w_i) + (np.nan_to_num(r) * w_r)
+
+            df['sec_norm'], df['ind_norm'], df['rel_norm'] = sec_norm, ind_norm, rel_norm
+            df['Composite Score'] = df.apply(calc_composite, axis=1)
+            df = df.drop(columns=['sec_norm', 'ind_norm', 'rel_norm'])
+
+        # ==========================================
+        # 3. VISUAL LAYOUT & SORTING
+        # ==========================================
+        display_cols = ["Priority", "Composite Score", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort values putting premium setups first, then highest relative momentum scores
-        display_df = display_df.sort_values(by=["Screen Rank", "relative_score"], ascending=[True, False], na_position="last").fillna("")
+        # Sort purely by Priority Tier first, then by the highest Composite Score
+        display_df = display_df.sort_values(by=["Priority", "Composite Score"], ascending=[True, False], na_position="last").fillna("")
 
         # User-friendly Display Renaming
         display_df = display_df.rename(columns={
@@ -212,7 +246,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
         # Calculate high-level metrics safely
         total_matches = len(display_df)
-        top_tier_count = len(display_df[display_df['Screen Rank'] != ""]) if 'Screen Rank' in display_df.columns else 0
+        top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
         metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -226,17 +260,18 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             except: return ''
         
         # Safe integer parsing to completely safeguard rendering engine from crashing
-        def safe_int(val, prefix=""):
+        def safe_int(val, prefix="", suffix=""):
             if val == "" or pd.isna(val): return ""
-            try: return f"{prefix}{int(float(val))}"
+            try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
         styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
             "Volume": "{:,.0f}",
+            "Composite Score": lambda x: safe_int(x, "", " / 100"),
             "Momentum Score": lambda x: safe_int(x),
-            "Screen Rank": lambda x: safe_int(x, "👑 "),
+            "Priority": lambda x: safe_int(x, "Tier "),
             "Sector Rank": lambda x: safe_int(x, "#"),
             "Ind. Rank": lambda x: safe_int(x, "#"),
         })
@@ -247,7 +282,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 if auto_refresh:
     time.sleep(60)
     st.rerun()
-    # --- DATABASE EXPLORER (Sector & Industry Only) ---
+
+# --- DATABASE EXPLORER (Sector & Industry Only) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Raw Supabase Tables"):
     tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
@@ -262,7 +298,6 @@ with st.expander("🗄️ View Raw Supabase Tables"):
         st.dataframe(df_sec, use_container_width=True)
         
     with tab2:
-        st.subheader("Industry Analysis")
         st.subheader("Industry Analysis")
         df_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
         st.dataframe(df_ind, use_container_width=True)
