@@ -18,27 +18,17 @@ st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="w
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
-        
-        /* 1. SMALLER GLOBAL FONT SIZE */
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; font-size: 14px !important; }
-        
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
-        
-        /* Smaller Metric Cards */
-        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 15px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; }
-        [data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700 !important; }
-        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
-        
-        /* Smaller Table Layout */
+        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; }
         [data-testid="stTable"] table { width: 100%; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.75rem !important; padding: 10px !important; }
-        [data-testid="stTable"] td { text-align: center !important; padding: 8px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; font-size: 0.8rem !important; }
-        
-        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
-        .blob.red { background: rgba(231, 76, 60, 1); border-radius: 50%; margin: 8px; height: 10px; width: 10px; animation: pulse-red 2s infinite; display: inline-block; }
-        @keyframes pulse-green { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(39, 174, 96, 0); } 100% { transform: scale(0.95); } }
-        @keyframes pulse-red { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); } }
+        [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
+        [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
+        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
+        .blob.red { background: rgba(231, 76, 60, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-red 2s infinite; display: inline-block; }
+        @keyframes pulse-green { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { transform: scale(0.95); } }
+        @keyframes pulse-red { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); } }
     </style>
 """, unsafe_allow_html=True)
 
@@ -80,31 +70,11 @@ def fetch_database_reference():
         sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
         ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-        # --- TIMESTAMP 24-HOUR INDICATOR LOGIC ---
-        ist = timezone(timedelta(hours=5, minutes=30))
-        try:
-            sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
-            raw_sync_time = sync_df['last_sync'].iloc[0]
-            
-            # Parse the string back into a datetime object
-            sync_dt = datetime.strptime(raw_sync_time, '%d %b %Y, %I:%M %p').replace(tzinfo=ist)
-            now_dt = datetime.now(ist)
-            
-            # If the difference is less than or equal to 24 hours (86,400 seconds)
-            if (now_dt - sync_dt).total_seconds() <= 86400:
-                last_sync = f"🟢 {raw_sync_time}"
-            else:
-                last_sync = f"🔴 {raw_sync_time}"
-                
-        except Exception:
-            last_sync = "🔴 Pending Run..."
-        # -------------------------------------
-
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error"
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -161,7 +131,7 @@ def get_combined_data():
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
     st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: gray; font-size: 0.9rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
     # Force Indian Standard Time (IST) timezone
@@ -170,28 +140,14 @@ with header_col2:
     current_date = datetime.now(ist).strftime('%d %b %Y')
     
     auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
-    
-    # --- MANUAL SYNC BUTTON ---
-    if st.button("⚙️ Manual Sync"):
-        with st.spinner("Executing background scraper... this may take a few minutes."):
-            try:
-                import scraper
-                scraper.run_daily_scraper()
-                st.toast("✅ Scrape Complete! Refreshing...")
-                time.sleep(2)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Failed to run scraper locally: {e}")
-    # --------------------------
-    
     dot_color = "green" if auto_refresh else "red"
     status_text = "LIVE DATA" if auto_refresh else "PAUSED"
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
-            <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">
+            <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
                 {status_text} <div class="blob {dot_color}"></div><br>
-                <span style="color: #1E88E5; font-size: 1.2rem; font-weight: 800;">{current_time}</span><br>
-                <span style="font-size: 0.75rem;">{current_date}</span>
+                <span style="color: #1E88E5; font-size: 1.4rem; font-weight: 800;">{current_time}</span><br>
+                <span style="font-size: 0.85rem;">{current_date}</span>
             </span>
         </div>
         """, unsafe_allow_html=True)
@@ -200,7 +156,7 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind = fetch_database_reference()  
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -257,45 +213,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
         metric_col1.metric("🔥 Total Matches", total_matches)
         metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
         metric_col3.metric("📈 Database Syncs", db_sync_count)
-        metric_col4.markdown(
-    f"""
-    <div style="text-align:center;">
-        <div style="font-size:0.9rem;color:gray;font-weight:600;">
-            🔄 Last DB Update
-        </div>
-        <div style="
-            font-size:1.4rem;
-            font-weight:800;
-            color:#1E88E5;
-            margin-top:4px;
-        ">
-            metric_col4.markdown(
-    f"""
-    <div style="text-align:center;">
-        <div style="font-size:0.9rem;color:gray;font-weight:600;">
-            🔄 Last DB Update
-        </div>
-        <div style="
-            font-size:1.4rem;
-            font-weight:800;
-            color:#1E88E5;
-            margin-top:4px;
-        ">
-            {sync_dot} {sync_display}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
         st.markdown("<br>", unsafe_allow_html=True)
         
         # --- NEW LEADERBOARD UI SECTION ---
@@ -307,16 +228,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     st.markdown("##### 🔥 Top 5 Sectors")
                     top_sec = raw_sec.nsmallest(5, 'Rank')[['Rank', 'Sector', 'ATH %']]
                     # Format ATH % to look nice
-                    if 'ATH %' in top_sec.columns:
-                        top_sec['ATH %'] = pd.to_numeric(top_sec['ATH %'], errors='coerce').map("{:.2f}%".format)
+                    top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
                     st.dataframe(top_sec.set_index('Rank'), use_container_width=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
                     top_ind = raw_ind.nsmallest(15, 'Rank')[['Rank', 'Broad Industry', 'ATH %']]
                     # Format ATH % to look nice
-                    if 'ATH %' in top_ind.columns:
-                        top_ind['ATH %'] = pd.to_numeric(top_ind['ATH %'], errors='coerce').map("{:.2f}%".format)
+                    top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
                     st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
         # -----------------------------------
@@ -340,11 +259,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "Sector Rank": lambda x: safe_int(x, "#"),
             "Ind. Rank": lambda x: safe_int(x, "#"),
         })
-        st.dataframe(
-    display_df,
-    use_container_width=True,
-    hide_index=True
-)
+        st.table(styled_df)
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
