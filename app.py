@@ -261,7 +261,24 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         metric_col1.metric("🔥 Total Matches", total_matches)
         metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
         metric_col3.metric("📈 Database Syncs", db_sync_count)
-        metric_col4.metric("🔄 Last DB Update", last_sync)
+        metric_col4.markdown(
+    f"""
+    <div style="text-align:center;">
+        <div style="font-size:0.9rem;color:gray;font-weight:600;">
+            🔄 Last DB Update
+        </div>
+        <div style="
+            font-size:1.4rem;
+            font-weight:800;
+            color:#1E88E5;
+            margin-top:4px;
+        ">
+            {sync_dot} {sync_display}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
         st.markdown("<br>", unsafe_allow_html=True)
         
         # --- NEW LEADERBOARD UI SECTION ---
