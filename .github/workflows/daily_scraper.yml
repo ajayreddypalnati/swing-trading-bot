@@ -2,9 +2,8 @@ name: Daily Stock Scraper
 
 on:
   schedule:
-    - cron: '29 6 * * *'    # Temporary Test: 11:59 AM IST (5 minutes from now)
-    - cron: '30 16 * * *'   # Regular Schedule: 10:00 PM IST
-    - cron: '30 0 * * *'    # Regular Schedule: 6:00 AM IST
+    - cron: '30 14 * * *'   # 8:00 PM IST (20:00)
+    - cron: '30 0 * * *'    # 6:00 AM IST
   workflow_dispatch:
 
 jobs:
