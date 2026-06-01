@@ -248,13 +248,13 @@ except:
 
         metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 
-metric_col1.metric("🔥 Total Matches", total_matches)
-metric_col2.metric("⭐ Top Tier Setups", top_tier_count)
-metric_col3.metric("📈 Database Syncs", db_sync_count)
+        metric_col1.metric("🔥 Total Matches", total_matches)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count)
+        metric_col3.metric("📈 Database Syncs", db_sync_count)
 
-metric_col4.markdown(
-    f"""
-    <div style="text-align:center;">
+        metric_col4.markdown(
+         f"""
+          <div style="text-align:center;">
         <div style="font-size:0.8rem;color:gray;font-weight:600;">
             Last DB Update
         </div>
