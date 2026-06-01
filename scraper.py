@@ -63,6 +63,17 @@ def run_daily_scraper():
         col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
         col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
         
+        # --- NEW CODE: The Self-Cleaning Mechanism ---
+        from sqlalchemy import text
+        unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
+        if unknown_mask.any():
+            print(f"🧹 Found {unknown_mask.sum()} stocks with 'Unknown' data. Deleting to force re-scrape...")
+            with engine.begin() as conn:
+                conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
+            # Filter them out of the memory cache so Step 3 treats them as missing
+            static_df = static_df[~unknown_mask]
+        # ---------------------------------------------
+        
         # Keep ONLY the static mapping columns so we don't accidentally merge old prices
         cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
         static_subset = static_df[cols_to_keep].copy()
