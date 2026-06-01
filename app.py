@@ -323,7 +323,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "Sector Rank": lambda x: safe_int(x, "#"),
             "Ind. Rank": lambda x: safe_int(x, "#"),
         })
-        st.table(styled_df)
+        st.dataframe(
+    display_df,
+    use_container_width=True,
+    hide_index=True
+)
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
