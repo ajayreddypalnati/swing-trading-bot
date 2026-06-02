@@ -66,23 +66,28 @@ def fetch_database_reference():
         raw_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
         raw_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
 
-        # Prepare targeted formatting for the core logic merge
         sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
         ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-        # --- NEW CODE: Fetch the timestamp ---
         try:
             sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
             last_sync = sync_df['last_sync'].iloc[0]
         except Exception:
             last_sync = "Pending Run..."
-        # -------------------------------------
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync
+        # --- NEW CODE: Fetch the Market Breadth Trend Regime ---
+        try:
+            trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
+            trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
+        except Exception:
+            trend_regime = "N/A"
+        # --------------------------------------------------------
+
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error"
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -142,7 +147,6 @@ with header_col1:
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
-    # Force Indian Standard Time (IST) timezone
     ist = timezone(timedelta(hours=5, minutes=30))
     current_time = datetime.now(ist).strftime('%I:%M:%S %p')
     current_date = datetime.now(ist).strftime('%d %b %Y')
@@ -164,14 +168,13 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    # --- NEW CODE: Catch the 6th variable ---
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync = fetch_database_reference()  
+    # Updated to catch the 7th variable (trend_regime)
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
-        # Merge Live Scraped Data with Master Tables
         if not main_df.empty:
             df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
             df = df.merge(sec_rank_df, on="sector", how="left")
@@ -179,13 +182,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
 
-        # Clean numeric parameters safely
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # ==========================================
-        # 1. MULTI-TIER PRIORITY TIERING
-        # ==========================================
         df['Priority'] = np.nan
 
         if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
@@ -199,16 +198,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-        # ==========================================
-        # 2. VISUAL LAYOUT & SORTING
-        # ==========================================
         display_cols = ["Priority", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort purely by Priority Tier first, then by Momentum Score for tie-breakers
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, False], na_position="last").fillna("")
 
-        # User-friendly Display Renaming
         display_df = display_df.rename(columns={
             "sector": "Sector", 
             "sec_rank": "Sector Rank", 
@@ -217,21 +211,20 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Score"
         })
 
-        # Calculate high-level metrics safely
         total_matches = len(display_df)
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
-        # --- NEW CODE: Updated to 4 columns ---
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        # --- NEW CODE: Updated to 5 metric columns to include Market Breadth prominently ---
+        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
         metric_col1.metric("🔥 Total Matches", total_matches)
         metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
-        metric_col3.metric("📈 Database Syncs", db_sync_count)
-        metric_col4.metric("🔄 Last DB Update", last_sync)
+        metric_col3.metric("⚖️ Market Breadth", trend_regime)  # Placed squarely in the middle!
+        metric_col4.metric("📈 Database Syncs", db_sync_count)
+        metric_col5.metric("🔄 Last DB Update", last_sync)
         st.markdown("<br>", unsafe_allow_html=True)
-        # --------------------------------------
+        # -----------------------------------------------------------------------------------
         
-        # --- NEW LEADERBOARD UI SECTION ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
@@ -239,24 +232,20 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
                     top_sec = raw_sec.nsmallest(5, 'Rank')[['Rank', 'Sector', 'ATH %']]
-                    # Format ATH % to look nice
                     top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
                     st.dataframe(top_sec.set_index('Rank'), use_container_width=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
                     top_ind = raw_ind.nsmallest(15, 'Rank')[['Rank', 'Broad Industry', 'ATH %']]
-                    # Format ATH % to look nice
                     top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
                     st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
-        # -----------------------------------
 
         def highlight_change(val):
             try: return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else 'background-color: rgba(231, 76, 60, 0.15)'
             except: return ''
         
-        # Safe integer parsing to completely safeguard rendering engine from crashing
         def safe_int(val, prefix="", suffix=""):
             if val == "" or pd.isna(val): return ""
             try: return f"{prefix}{int(float(val))}{suffix}"
@@ -279,7 +268,6 @@ if auto_refresh:
     time.sleep(60)
     st.rerun()
 
-# --- DATABASE EXPLORER (Bottom Page Backup) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
     tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
