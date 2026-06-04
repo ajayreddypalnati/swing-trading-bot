@@ -214,6 +214,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
+        # Added 'Turnover (Cr)' right before 'Volume'
         display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
@@ -228,10 +229,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Score"
         })
 
-        metric_col1, metric_col2 = st.columns(2)
+        # --- 3-COLUMN METRICS GRID ---
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
         metric_col1.metric("📊 Market Breadth (Live)", live_sheet_breadth)
         metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
+        metric_col3.metric("🔄 Last DB Update", last_sync)
         st.markdown("<br>", unsafe_allow_html=True)
+        # -----------------------------
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
