@@ -46,7 +46,7 @@ TV_PAYLOAD = {
 }
 
 # ==========================================
-# 2. DATA FETCHING (Cloud Native Database)
+# 2. DATA FETCHING (Cloud Native Database & Sheets)
 # ==========================================
 @st.cache_data(ttl=600)
 def fetch_database_reference():
@@ -86,6 +86,25 @@ def fetch_database_reference():
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
+
+
+@st.cache_data(ttl=60)
+def fetch_market_breadth_from_gsheets():
+    try:
+        sheet_id = "1ngF7Ci5SrN8lP0-QSB0Be1Ave84Asig04pCaY8qDXKU"
+        sheet_name = "Sectors"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+        
+        df = pd.read_csv(url, header=None)
+        # Cell H6 translates to 0-indexed row 5, col 7
+        market_breadth_value = df.iloc[5, 7]
+        
+        if pd.isna(market_breadth_value):
+            return "N/A"
+        return str(market_breadth_value)
+    except Exception:
+        return "N/A"
+
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -141,7 +160,8 @@ def get_combined_data():
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
-    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
+    # Title modified according to instructions
+    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
@@ -149,9 +169,10 @@ with header_col2:
     current_time = datetime.now(ist).strftime('%I:%M:%S %p')
     current_date = datetime.now(ist).strftime('%d %b %Y')
     
-    auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
-    dot_color = "green" if auto_refresh else "red"
-    status_text = "LIVE DATA" if auto_refresh else "PAUSED"
+    # Auto-refresh option removed from layout view, hardcoded to True
+    auto_refresh = True
+    dot_color = "green"
+    status_text = "LIVE DATA"
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
@@ -167,6 +188,7 @@ st.divider()
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
+    live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -178,13 +200,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df = df.merge(ind_rank_df, on="broad_industry", how="left")
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
-
-        # Convert to numeric to prepare for Turnover calculation
-        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
-        
-        # Calculate Turnover in Crores (Volume * Close / 10,000,000)
-        df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
 
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -202,12 +217,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-        # Added 'Turnover (Cr)' right before 'Volume'
-        display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_cols = ["Priority", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort by Priority (Tier 1 first) then relative_score ascending (Lowest score / Rank 1 first)
-        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
+        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, False], na_position="last").fillna("")
 
         display_df = display_df.rename(columns={
             "sector": "Sector", 
@@ -221,13 +234,34 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
-        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
-        metric_col1.metric("🔥 Total Matches", total_matches)
-        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
-        metric_col3.metric("⚖️ Market Breadth", trend_regime) 
-        metric_col4.metric("📈 Database Syncs", db_sync_count)
-        metric_col5.metric("🔄 Last DB Update", last_sync)
+        # --- UPDATED COLUMN GRID FOR METRICS ---
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns([1.2, 1.2, 1.1, 1.5])
+        
+        # 1. Market Breadth Live (From Sheets)
+        metric_col1.metric("📊 Market Breadth (Live Sheets)", live_sheet_breadth)
+        
+        # 2. Market Breadth NSE (From Database)
+        metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
+        
+        # 3. Stacked Column containing all 3 matching indices
+        with metric_col3:
+            st.metric("🔥 Total Matches", total_matches)
+            st.metric("⭐ Top Tier Setups", top_tier_count)
+            st.metric("📈 Database Syncs", db_sync_count)
+            
+        # 4. Last DB Update styled as a bold card 
+        with metric_col4:
+            st.markdown(f"""
+                <div style="background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); 
+                            border-radius: 12px; padding: 22px; text-align: center; height: 100%;
+                            border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                    <span style="font-size: 0.85rem; color: gray; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">📅 Last DB Update</span><br>
+                    <span style="color: #FFFFFF; font-size: 1.45rem; font-weight: 900; display: block; margin-top: 14px; white-space: nowrap;">{last_sync}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
         st.markdown("<br>", unsafe_allow_html=True)
+        # -----------------------------------------------------------------------------------
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
@@ -258,7 +292,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
-            "Turnover (Cr)": "₹{:.2f} Cr",
             "Volume": "{:,.0f}",
             "Momentum Score": lambda x: safe_int(x),
             "Priority": lambda x: safe_int(x, "Tier "),
