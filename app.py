@@ -287,16 +287,19 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
-        def highlight_change(val):
-            try: return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else 'background-color: rgba(231, 76, 60, 0.15)'
-            except: return ''
+        # Highlight applied to Priority column instead of % Change
+        def highlight_priority(val):
+            try: 
+                return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else ''
+            except: 
+                return ''
         
         def safe_int(val, prefix="", suffix=""):
             if val == "" or pd.isna(val): return ""
             try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
-        styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
+        styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
             "Turnover (Cr)": "₹{:.2f} Cr",
