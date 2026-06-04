@@ -46,7 +46,7 @@ TV_PAYLOAD = {
 }
 
 # ==========================================
-# 2. DATA FETCHING 
+# 2. DATA FETCHING (Cloud Native Database)
 # ==========================================
 @st.cache_data(ttl=600)
 def fetch_database_reference():
@@ -86,18 +86,6 @@ def fetch_database_reference():
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
-
-@st.cache_data(ttl=60)
-def fetch_market_breadth_from_gsheets():
-    try:
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv"
-        df = pd.read_csv(url, header=None)
-        market_breadth_value = df.iloc[5, 7] 
-        if pd.isna(market_breadth_value):
-            return "N/A"
-        return str(market_breadth_value)
-    except Exception:
-        return "N/A"
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -153,7 +141,7 @@ def get_combined_data():
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
-    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
@@ -161,8 +149,9 @@ with header_col2:
     current_time = datetime.now(ist).strftime('%I:%M:%S %p')
     current_date = datetime.now(ist).strftime('%d %b %Y')
     
-    dot_color = "green"
-    status_text = "LIVE DATA"
+    auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
+    dot_color = "green" if auto_refresh else "red"
+    status_text = "LIVE DATA" if auto_refresh else "PAUSED"
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
@@ -178,7 +167,6 @@ st.divider()
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
-    live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -229,13 +217,17 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Score"
         })
 
-        # --- 3-COLUMN METRICS GRID ---
-        metric_col1, metric_col2, metric_col3 = st.columns(3)
-        metric_col1.metric("📊 Market Breadth (Live)", live_sheet_breadth)
-        metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
-        metric_col3.metric("🔄 Last DB Update", last_sync)
+        total_matches = len(display_df)
+        top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
+        db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
+
+        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+        metric_col1.metric("🔥 Total Matches", total_matches)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
+        metric_col3.metric("⚖️ Market Breadth", trend_regime) 
+        metric_col4.metric("📈 Database Syncs", db_sync_count)
+        metric_col5.metric("🔄 Last DB Update", last_sync)
         st.markdown("<br>", unsafe_allow_html=True)
-        # -----------------------------
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
@@ -277,8 +269,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
-time.sleep(60)
-st.rerun()
+if auto_refresh:
+    time.sleep(60)
+    st.rerun()
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
