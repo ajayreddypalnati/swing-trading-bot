@@ -151,20 +151,21 @@ def get_breadth_color(breadth_str):
         if match:
             val = float(match.group(1))
             if val <= 30.0:
-                return "rgba(231, 76, 60, 0.15)"  # Soft Red
+                return "rgba(231, 76, 60, 0.20)"  # Soft Red
             elif val >= 55.0:
-                return "rgba(39, 174, 96, 0.15)"  # Soft Green
+                return "rgba(39, 174, 96, 0.20)"  # Soft Green
             else:
-                return "rgba(241, 196, 15, 0.15)" # Soft Yellow
+                return "rgba(241, 196, 15, 0.20)" # Soft Yellow
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
 def create_metric_card(title, value, bg_color="linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"):
+    # Updated font colors for perfect visibility on light/colored backgrounds
     return f"""
     <div style="background: {bg_color}; border-radius: 12px; padding: 15px 10px; text-align: center; height: 100%; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
-        <span style="font-size: 0.70rem; color: gray; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span><br>
-        <span style="color: #FFFFFF; font-size: 1.15rem; font-weight: 900; display: block; margin-top: 5px; white-space: nowrap;">{value}</span>
+        <span style="font-size: 0.70rem; color: #4B5563; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span><br>
+        <span style="color: #0F172A; font-size: 1.15rem; font-weight: 900; display: block; margin-top: 5px; white-space: nowrap;">{value}</span>
     </div>
     """
 
@@ -232,6 +233,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
         display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        
+        # Calculate Top Tier Count BEFORE dropping the empty ones
+        top_tier_count = len(display_df.dropna(subset=['Priority']))
+        
+        # Only keep top tier setups for the visual table
+        display_df = display_df.dropna(subset=['Priority'])
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
         display_df = display_df.rename(columns={
@@ -242,23 +249,17 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Score"
         })
 
-        total_matches = len(display_df)
-        top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
-        db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
-
         # Calculate dynamic colors for breadths
         live_breadth_bg = get_breadth_color(live_sheet_breadth)
         nse_breadth_bg = get_breadth_color(trend_regime)
 
-        # --- CUSTOM HORIZONTAL INLINE METRICS GRID ---
-        m1, m2, m3, m4, m5, m6 = st.columns(6)
+        # --- RESTRUCTURED 4-COLUMN INLINE METRICS GRID ---
+        m1, m2, m3, m4 = st.columns(4)
         
         with m1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_breadth_bg), unsafe_allow_html=True)
-        with m2: st.markdown(create_metric_card("🔥 Total Matches", total_matches), unsafe_allow_html=True)
+        with m2: st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_breadth_bg), unsafe_allow_html=True)
         with m3: st.markdown(create_metric_card("⭐ Top Tier Setups", top_tier_count), unsafe_allow_html=True)
-        with m4: st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_breadth_bg), unsafe_allow_html=True)
-        with m5: st.markdown(create_metric_card("📈 Database Syncs", db_sync_count), unsafe_allow_html=True)
-        with m6: st.markdown(create_metric_card("📅 Last DB Update", last_sync), unsafe_allow_html=True)
+        with m4: st.markdown(create_metric_card("📅 Last DB Update", last_sync), unsafe_allow_html=True)
                 
         st.markdown("<br>", unsafe_allow_html=True)
         # ----------------------------------------
