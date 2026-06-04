@@ -26,9 +26,6 @@ st.markdown("""
         [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
         [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
-        .blob.red { background: rgba(231, 76, 60, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-red 2s infinite; display: inline-block; }
-        @keyframes pulse-green { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { transform: scale(0.95); } }
-        @keyframes pulse-red { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); } }
     </style>
 """, unsafe_allow_html=True)
 
@@ -180,6 +177,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
+    # --- 3-COLUMN METRICS GRID ---
+    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1.metric("📊 Market Breadth (Live)", live_sheet_breadth)
+    metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
+    metric_col3.metric("🔄 Last DB Update", last_sync)
+    st.markdown("<br>", unsafe_allow_html=True)
+    # -----------------------------
+
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
@@ -228,14 +233,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "ind_rank": "Ind. Rank", 
             "relative_score": "Momentum Score"
         })
-
-        # --- 3-COLUMN METRICS GRID ---
-        metric_col1, metric_col2, metric_col3 = st.columns(3)
-        metric_col1.metric("📊 Market Breadth (Live)", live_sheet_breadth)
-        metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
-        metric_col3.metric("🔄 Last DB Update", last_sync)
-        st.markdown("<br>", unsafe_allow_html=True)
-        # -----------------------------
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
