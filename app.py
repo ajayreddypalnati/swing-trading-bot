@@ -87,43 +87,6 @@ def fetch_database_reference():
         st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
 
-# --- NEW GOOGLE SHEETS FETCHER & FORMATTING ---
-@st.cache_data(ttl=60)
-def fetch_market_breadth_from_gsheets():
-    try:
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv"
-        df = pd.read_csv(url, header=None)
-        market_breadth_value = df.iloc[5, 7] 
-        if pd.isna(market_breadth_value):
-            return "N/A"
-        return str(market_breadth_value)
-    except Exception:
-        return "N/A"
-
-def get_breadth_color(breadth_str):
-    try:
-        match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
-        if match:
-            val = float(match.group(1))
-            if val <= 30.0:
-                return "rgba(231, 76, 60, 0.25)"  # Red
-            elif val >= 55.0:
-                return "rgba(39, 174, 96, 0.25)"  # Green
-            else:
-                return "rgba(241, 196, 15, 0.30)" # Yellow
-        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
-    except:
-        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
-
-def create_metric_card(title, value, bg_color):
-    return f"""
-    <div style="background: {bg_color}; border-radius: 12px; padding: 12px 10px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.2); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
-        <span style="font-size: 0.75rem; color: #1E293B; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span><br>
-        <span style="color: #0F172A; font-size: 1.25rem; font-weight: 900; display: block; margin-top: 4px; white-space: nowrap;">{value}</span>
-    </div>
-    """
-# ----------------------------------------------
-
 def fetch_chartink_data():
     with requests.Session() as session:
         try:
@@ -178,7 +141,7 @@ def get_combined_data():
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
-    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing Screener</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
 with header_col2:
@@ -186,10 +149,9 @@ with header_col2:
     current_time = datetime.now(ist).strftime('%I:%M:%S %p')
     current_date = datetime.now(ist).strftime('%d %b %Y')
     
-    # Auto-refresh forced to True implicitly, button removed
-    auto_refresh = True
-    dot_color = "green"
-    status_text = "LIVE DATA"
+    auto_refresh = st.toggle("⏱️ Auto-Refresh (60s)", value=True)
+    dot_color = "green" if auto_refresh else "red"
+    status_text = "LIVE DATA" if auto_refresh else "PAUSED"
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
@@ -205,19 +167,6 @@ st.divider()
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
-
-    # --- HORIZONTAL MARKET BREADTH METRICS ONLY ---
-    live_sheet_breadth = fetch_market_breadth_from_gsheets()
-    live_bg = get_breadth_color(live_sheet_breadth)
-    nse_bg = get_breadth_color(trend_regime)
-
-    m1, m2 = st.columns(2)
-    with m1:
-        st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
-    with m2:
-        st.markdown(create_metric_card("⚖️ Market Breadth", trend_regime, nse_bg), unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-    # ----------------------------------------------
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -267,6 +216,18 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "ind_rank": "Ind. Rank", 
             "relative_score": "Momentum Score"
         })
+
+        total_matches = len(display_df)
+        top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
+        db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
+
+        metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+        metric_col1.metric("🔥 Total Matches", total_matches)
+        metric_col2.metric("⭐ Top Tier Setups", top_tier_count) 
+        metric_col3.metric("⚖️ Market Breadth", trend_regime) 
+        metric_col4.metric("📈 Database Syncs", db_sync_count)
+        metric_col5.metric("🔄 Last DB Update", last_sync)
+        st.markdown("<br>", unsafe_allow_html=True)
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
