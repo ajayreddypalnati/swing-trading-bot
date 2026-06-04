@@ -21,7 +21,6 @@ st.markdown("""
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
-        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; }
         [data-testid="stTable"] table { width: 100%; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
         [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
@@ -145,6 +144,35 @@ def get_combined_data():
             seen_symbols.add(symbol)
     return combined_data
 
+# --- HELPER: Dynamic Background Colors (Soft Pastels) ---
+def get_breadth_color(breadth_str):
+    try:
+        match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
+        if match:
+            val = float(match.group(1))
+            if val <= 30.0:
+                return "rgba(252, 165, 165, 0.4)"  # Little more red
+            elif val <= 40.0:
+                return "rgba(254, 202, 202, 0.4)"  # Little less red
+            elif val <= 50.0:
+                return "rgba(253, 230, 138, 0.4)"  # Light yellow
+            elif val <= 60.0:
+                return "rgba(187, 247, 208, 0.4)"  # Light green
+            else:
+                return "rgba(134, 239, 172, 0.4)"  # More light green
+        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+    except:
+        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+
+def create_metric_card(title, value, bg_color):
+    # Pure black text (#000000) mapping to standard Streamlit native metric sizing
+    return f"""
+    <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); height: 100%;">
+        <span style="font-size: 0.875rem; color: #4B5563; font-weight: 500; font-family: 'Inter', sans-serif;">{title}</span><br>
+        <span style="color: #000000; font-size: 1.875rem; font-weight: 600; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif;">{value}</span>
+    </div>
+    """
+
 # ==========================================
 # 3. DASHBOARD UI LAYOUT
 # ==========================================
@@ -177,11 +205,19 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
+    # Calculate the active background colors
+    live_bg = get_breadth_color(live_sheet_breadth)
+    nse_bg = get_breadth_color(trend_regime)
+    default_bg = "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+
     # --- 3-COLUMN METRICS GRID ---
     metric_col1, metric_col2, metric_col3 = st.columns(3)
-    metric_col1.metric("📊 Market Breadth (Live)", live_sheet_breadth)
-    metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
-    metric_col3.metric("🔄 Last DB Update", last_sync)
+    with metric_col1:
+        st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
+    with metric_col2:
+        st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_bg), unsafe_allow_html=True)
+    with metric_col3:
+        st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     # -----------------------------
 
