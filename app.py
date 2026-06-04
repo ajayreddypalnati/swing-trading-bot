@@ -21,14 +21,11 @@ st.markdown("""
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
-        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; }
+        [data-testid="stMetric"] { background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); border-radius: 12px; padding: 15px; text-align: center; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: all 0.3s ease; height: 100%; }
         [data-testid="stTable"] table { width: 100%; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
         [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
-        .blob.red { background: rgba(231, 76, 60, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-red 2s infinite; display: inline-block; }
-        @keyframes pulse-green { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); } 100% { transform: scale(0.95); } }
-        @keyframes pulse-red { 0% { transform: scale(0.95); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); } 100% { transform: scale(0.95); } }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,16 +49,10 @@ TV_PAYLOAD = {
 def fetch_database_reference():
     try:
         db_url = st.secrets["DATABASE_URL"]
-
         if db_url.startswith("postgresql://"):
-            db_url = db_url.replace(
-                "postgresql://",
-                "postgresql+psycopg2://",
-                1
-            )
+            db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
         engine = create_engine(db_url)
-
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
         raw_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
         raw_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
@@ -82,11 +73,9 @@ def fetch_database_reference():
             trend_regime = "N/A"
 
         return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
-
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
-
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -104,7 +93,6 @@ def fetch_market_breadth_from_gsheets():
         return str(market_breadth_value)
     except Exception:
         return "N/A"
-
 
 def fetch_chartink_data():
     with requests.Session() as session:
@@ -160,7 +148,6 @@ def get_combined_data():
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
-    # Title modified according to instructions
     st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
 
@@ -169,14 +156,10 @@ with header_col2:
     current_time = datetime.now(ist).strftime('%I:%M:%S %p')
     current_date = datetime.now(ist).strftime('%d %b %Y')
     
-    # Auto-refresh option removed from layout view, hardcoded to True
-    auto_refresh = True
-    dot_color = "green"
-    status_text = "LIVE DATA"
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
-                {status_text} <div class="blob {dot_color}"></div><br>
+                LIVE DATA <div class="blob green"></div><br>
                 <span style="color: #1E88E5; font-size: 1.4rem; font-weight: 800;">{current_time}</span><br>
                 <span style="font-size: 0.85rem;">{current_date}</span>
             </span>
@@ -201,6 +184,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
 
+        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+        df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
+
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
             if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
@@ -217,10 +204,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-        display_cols = ["Priority", "Symbol", "Close", "% Change", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
-        
-        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, False], na_position="last").fillna("")
+        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
         display_df = display_df.rename(columns={
             "sector": "Sector", 
@@ -234,34 +220,28 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         top_tier_count = len(display_df[display_df['Priority'] != ""]) if 'Priority' in display_df.columns else 0
         db_sync_count = len(display_df[display_df['Sector'] != ""]) if 'Sector' in display_df.columns else 0
 
-        # --- UPDATED COLUMN GRID FOR METRICS ---
-        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns([1.2, 1.2, 1.1, 1.5])
+        # --- HORIZONTAL INLINE METRICS GRID ---
+        # 6 equal columns so everything stays inline, no stacking.
+        m1, m2, m3, m4, m5, m6 = st.columns([1.3, 1.3, 0.9, 0.9, 0.9, 1.5])
         
-        # 1. Market Breadth Live (From Sheets)
-        metric_col1.metric("📊 Market Breadth (Live Sheets)", live_sheet_breadth)
+        m1.metric("📊 Breadth (Live)", live_sheet_breadth)
+        m2.metric("⚖️ Breadth (NSE)", trend_regime) 
+        m3.metric("🔥 Matches", total_matches)
+        m4.metric("⭐ Top Tier", top_tier_count)
+        m5.metric("📈 DB Syncs", db_sync_count)
         
-        # 2. Market Breadth NSE (From Database)
-        metric_col2.metric("⚖️ Market Breadth (NSE)", trend_regime) 
-        
-        # 3. Stacked Column containing all 3 matching indices
-        with metric_col3:
-            st.metric("🔥 Total Matches", total_matches)
-            st.metric("⭐ Top Tier Setups", top_tier_count)
-            st.metric("📈 Database Syncs", db_sync_count)
-            
-        # 4. Last DB Update styled as a bold card 
-        with metric_col4:
+        with m6:
             st.markdown(f"""
                 <div style="background: linear-gradient(145deg, rgba(128, 128, 128, 0.05) 0%, rgba(128, 128, 128, 0.02) 100%); 
-                            border-radius: 12px; padding: 22px; text-align: center; height: 100%;
+                            border-radius: 12px; padding: 15px 10px; text-align: center; height: 100%;
                             border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
-                    <span style="font-size: 0.85rem; color: gray; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">📅 Last DB Update</span><br>
-                    <span style="color: #FFFFFF; font-size: 1.45rem; font-weight: 900; display: block; margin-top: 14px; white-space: nowrap;">{last_sync}</span>
+                    <span style="font-size: 0.75rem; color: gray; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">📅 Last DB Update</span><br>
+                    <span style="color: #FFFFFF; font-size: 1.15rem; font-weight: 900; display: block; margin-top: 5px; white-space: nowrap;">{last_sync}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
         st.markdown("<br>", unsafe_allow_html=True)
-        # -----------------------------------------------------------------------------------
+        # ----------------------------------------
         
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
@@ -292,6 +272,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         styled_df = display_df.style.hide(axis="index").map(highlight_change, subset=['% Change']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
+            "Turnover (Cr)": "₹{:.2f} Cr",
             "Volume": "{:,.0f}",
             "Momentum Score": lambda x: safe_int(x),
             "Priority": lambda x: safe_int(x, "Tier "),
@@ -302,9 +283,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
-if auto_refresh:
-    time.sleep(60)
-    st.rerun()
+# Auto refresh loop (hardcoded, widget removed)
+time.sleep(60)
+st.rerun()
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
