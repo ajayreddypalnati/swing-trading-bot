@@ -6,56 +6,128 @@ import pandas as pd
 import numpy as np
 import io  
 import os
+import sys
 import warnings
 from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
+from sqlalchemy import text
+from playwright.sync_api import sync_playwright
 
-# Silence terminal spam
+# Force unbuffered output so execution logs write instantly to Windows command prompt
+sys.stdout.reconfigure(line_buffering=True)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# --- Cloud Database Setup ---
+# ==========================================
+# 0. CREDENTIALS & DATABASE CONFIG
+# ==========================================
+SCREENER_EMAIL = "ajayreddypalnati@gmail.com"
+SCREENER_PASSWORD = "sunnyreddi999@AA"
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    print("❌ ERROR: No DATABASE_URL found. Check your GitHub Secrets.")
-    exit()
+    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing on this machine.")
+    sys.exit(1)
 
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
-engine = create_engine(DATABASE_URL)
+
+if "?pgbouncer=true" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("?pgbouncer=true", "")
+
+try:
+    print("\n🔌 SYSTEM: Connecting to Supabase Cloud Database...")
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
+    print("✅ SYSTEM: Database connection established successfully.")
+except Exception as e:
+    print(f"❌ FATAL ERROR: Could not connect to database: {e}")
+    sys.exit(1)
 
 SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
-REQUEST_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Cookie": "csrftoken=cBucGDxR9HDRLquxvu5coW5K84dVl71t; sessionid=agwll5zqzkdpo0lg7xdck2t8tw2a85p2"
-}
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+# ==========================================
+# 1. AUTO-LOGIN FUNCTION (PLAYWRIGHT)
+# ==========================================
+def get_fresh_screener_cookies(email, password):
+    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate with Screener...")
+    cookie_string = ""
+    
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(user_agent=USER_AGENT)
+            page = context.new_page()
+
+            page.goto("https://www.screener.in/login/")
+            page.fill("input[name='username']", email)
+            page.fill("input[name='password']", password)
+            page.click("button[type='submit']")
+
+            page.wait_for_timeout(8000)
+            
+            cookies = context.cookies()
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            csrf = cookie_dict.get('csrftoken', '')
+            session = cookie_dict.get('sessionid', '')
+            
+            if session:
+                print("   ✅ Login successful! Extracted fresh session tokens.")
+            else:
+                print("   ❌ WARNING: Could not find 'sessionid'. Login likely failed.")
+                sys.exit(1)
+            
+            cookie_string = f"csrftoken={csrf}; sessionid={session}"
+            browser.close()
+            
+    except Exception as e:
+        print(f"   ❌ Auto-login script crashed: {e}")
+        sys.exit(1)
+        
+    return cookie_string
+
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
 def random_sleep(min_ms=800, max_ms=2000):
     time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
 
-def fetch_with_retry(session, url, retries=3):
+def fetch_with_retry(session, url, referer_url=None, retries=3):
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Cookie": session.screener_cookies
+    }
+    if referer_url: headers["Referer"] = referer_url
+        
     for attempt in range(1, retries + 1):
         try:
-            resp = session.get(url, timeout=15)
+            resp = session.get(url, headers=headers, timeout=15)
             if resp.status_code == 200: return resp.text
+            elif resp.status_code == 429:
+                print(f"   ⚠️ WARNING: Rate limited by Screener (429). Pausing for 15 seconds...")
+                time.sleep(15)
         except Exception:
             pass
-        random_sleep(1000, 3000)
+        random_sleep(1500, 3500)
     return None
 
 def run_daily_scraper():
-    print("🚀 STARTING: Cloud-Native Screener (Exact Header Match Edition)")
+    print("\n" + "="*60)
+    print("🚀 STARTING: Cloud-Native Market Scraper & Trend Engine")
+    print("="*60)
     
+    fresh_cookies = get_fresh_screener_cookies(SCREENER_EMAIL, SCREENER_PASSWORD)
     session = requests.Session()
-    session.headers.update(REQUEST_HEADERS)
+    session.screener_cookies = fresh_cookies
     
     # ==========================================
-    # STEP 1: FETCH STATIC DB MAP (Extracting ONLY static columns)
+    # STEP 1: FETCH STATIC DB MAP & CACHE
     # ==========================================
-    print("🧠 Reading existing 'sector_master' to build memory cache...")
+    print("\n📚 STEP 1: Checking database for companies we already know...")
     try:
         static_df = pd.read_sql("SELECT * FROM sector_master", engine)
         
-        # Flexibly find exact column names from your uploaded CSV, accounting for double spaces
         col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
         col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
         col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
@@ -63,29 +135,22 @@ def run_daily_scraper():
         col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
         col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
         
-        # --- NEW CODE: The Self-Cleaning Mechanism ---
-        from sqlalchemy import text
         unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
         if unknown_mask.any():
-            print(f"🧹 Found {unknown_mask.sum()} stocks with 'Unknown' data. Deleting to force re-scrape...")
+            print(f"   🧹 Found {unknown_mask.sum()} incomplete profiles. Forcing a re-scrape for them...")
             with engine.begin() as conn:
                 conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
-            # Filter them out of the memory cache so Step 3 treats them as missing
             static_df = static_df[~unknown_mask]
-        # ---------------------------------------------
         
-        # Keep ONLY the static mapping columns so we don't accidentally merge old prices
         cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
         static_subset = static_df[cols_to_keep].copy()
-        
-        # Rename them internally so the merge is flawless
         static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
         static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
         
         known_names = set(static_subset['Name'].tolist())
-        print(f"✅ Loaded {len(known_names)} existing companies into memory.")
+        print(f"   ✅ Cache Loaded: We currently have {len(known_names)} companies saved in Supabase.")
     except Exception as e:
-        print(f"⚠️ Could not load cache: {e}")
+        print(f"   ⚠️ Could not load database cache. Starting fresh. ({e})")
         known_names = set()
         static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
 
@@ -95,17 +160,23 @@ def run_daily_scraper():
     # ==========================================
     # STEP 2: FAST LIVE SCRAPE (MAIN TABLES)
     # ==========================================
+    print("\n📡 STEP 2: Scanning Screener.in for live market prices...")
     first_page = fetch_with_retry(session, SCREENER_URL)
-    if not first_page: return
+    if not first_page: 
+        print("   ❌ FATAL ERROR: Cannot reach Screener.in. Check internet connection.")
+        return
+        
     page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
     total_pages = int(page_match.group(1)) if page_match else 1
+    print(f"   📋 Found {total_pages} pages of live market data. Downloading now...")
     
     all_dataframes = []
-    print(f"📄 Scraping {total_pages} live market pages...")
     
     for page in range(1, total_pages + 1):
         page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
-        html_content = first_page if page == 1 else fetch_with_retry(session, page_url)
+        referer_url = None if page == 1 else (SCREENER_URL if page == 2 else f"{SCREENER_URL}?page={page-1}")
+        
+        html_content = first_page if page == 1 else fetch_with_retry(session, page_url, referer_url=referer_url)
         if not html_content: continue
         
         try:
@@ -126,31 +197,54 @@ def run_daily_scraper():
                             code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
                             codes.append(code.upper())
                 
-                df['live_ticker_slug'] = codes 
-                all_dataframes.append(df)
-        except Exception:
-            pass
+                if len(codes) == len(df):
+                    df['live_ticker_slug'] = codes 
+                    all_dataframes.append(df)
+                else:
+                    print(f"      ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                    
+        except Exception as e:
+            print(f"      ⚠️ ERROR parsing page {page}: {e}")
+            
+        if page % 10 == 0 or page == total_pages:
+            print(f"      -> Processed {page}/{total_pages} pages...")
+            
         if page < total_pages: random_sleep(800, 1500)
 
-    if not all_dataframes: return
+    if not all_dataframes: 
+        print("   ❌ FATAL ERROR: No data scraped. Exiting.")
+        return
+        
     live_df = pd.concat(all_dataframes, ignore_index=True)
+    print(f"   ✅ Done! Collected live data for {len(live_df)} active companies.")
     
     # ==========================================
     # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
     # ==========================================
+    print("\n🕵️‍♂️ STEP 3: Checking for brand new companies (IPOs, name changes)...")
     live_names = set(live_df['Name'].tolist())
     missing_names = [n for n in live_names if n not in known_names]
     
     if missing_names:
         missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
-        print(f"\n🔍 Found {len(missing_df)} NEW companies. Deep scraping...")
+        total_missing = len(missing_df)
+        print(f"   🚨 Found {total_missing} NEW companies! Fetching their sector details...")
         new_records = []
         
+        current_count = 0
         for idx, row in missing_df.iterrows():
+            current_count += 1
             stock_name = row['Name']
             code = row['live_ticker_slug']
             url = f"https://www.screener.in/company/{code}/"
-            page_html = fetch_with_retry(session, url)
+            
+            if current_count > 1 and current_count % 25 == 0:
+                cooldown = random.randint(6, 12)
+                print(f"      💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
+                time.sleep(cooldown)
+
+            print(f"      -> [{current_count}/{total_missing}] Investigating: {stock_name}")
+            page_html = fetch_with_retry(session, url, referer_url=SCREENER_URL)
             
             sector, industry, exchange_class = "Unknown", "Unknown", ""
             if page_html:
@@ -174,7 +268,6 @@ def run_daily_scraper():
             else:
                 exchange_class = "BSE" if code.isdigit() else "NSE"
                 
-            # Appending to Sector Master with the EXACT original column headers from the DB
             try:
                 original_col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
                 original_col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
@@ -191,17 +284,13 @@ def run_daily_scraper():
                 })
             except Exception:
                 pass
-            
             random_sleep(800, 1500)
             
         if new_records:
             new_static_df = pd.DataFrame(new_records)
-            print("☁️ Appending new companies permanently to 'sector_master'...")
+            print(f"   ☁️ Saving {len(new_records)} new companies permanently to database...")
             try:
                 new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
-                print("✅ 'sector_master' updated with new companies.")
-                
-                # Update memory cache dynamically
                 new_static_mapped = pd.DataFrame({
                     'Name': [r.get(original_col_n) for r in new_records],
                     'Ticker': [r.get(original_col_t) for r in new_records],
@@ -211,16 +300,16 @@ def run_daily_scraper():
                     'Static_ATH': [np.nan for _ in new_records]
                 })
                 static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
+                print("   ✅ New companies saved successfully.")
             except Exception as e:
-                print(f"❌ Failed to append to sector_master: {e}")
+                print(f"   ❌ Failed to save new companies: {e}")
     else:
-        print("\n✅ No new companies found. Database is perfectly synced.")
+        print("   ✅ No new companies today. Existing database is perfectly up to date.")
 
     # ==========================================
     # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
     # ==========================================
-    print("🥞 Merging live data with full sector cache...")
-    
+    print("\n🧮 STEP 4: Calculating cross-sectional momentum scores...")
     ret_1m = next((c for c in live_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
     ret_3m = next((c for c in live_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
     ret_6m = next((c for c in live_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
@@ -237,23 +326,20 @@ def run_daily_scraper():
         momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
         valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
         live_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
+        print("   ✅ Momentum calculated and assigned to all stocks.")
     else:
+        print("   ⚠️ WARNING: 1M/3M/6M return columns are missing. Cannot calculate momentum.")
         live_df['Relative score'] = np.nan
 
-    # Throw away the raw URL slug 
     live_df = live_df.drop(columns=['live_ticker_slug'])
-    
-    # Merge on the 'Name' column precisely
     merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
     merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
 
     # ==========================================
-    # STEP 5: SECTOR & INDUSTRY ATH (Excluding SMEs)
+    # STEP 5.1: SECTOR & INDUSTRY ATH (Excluding SMEs only)
     # ==========================================
-    print("📊 Calculating Sector and Industry ATH Rankings (Filtering out SMEs)...")
-    
+    print("\n📊 STEP 5: Generating Sector Breakout Rankings & Market Breadth...")
     col_cmp = next((c for c in merged_df.columns if 'cmp' in c.lower()), None)
-    
     sector_summary_df = pd.DataFrame()
     industry_summary_df = pd.DataFrame()
     
@@ -262,14 +348,13 @@ def run_daily_scraper():
         merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
         
         merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df['Static_ATH'])
+        
         analysis_df = merged_df[~merged_df['Exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
 
         def build_summary_table(df, group_col):
             valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
             if valid_df.empty: return pd.DataFrame()
-            summary = valid_df.groupby(group_col).agg(
-                Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')
-            ).reset_index()
+            summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
             summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
             summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
             summary['Rank'] = summary.index + 1
@@ -277,35 +362,185 @@ def run_daily_scraper():
 
         sector_summary_df = build_summary_table(analysis_df, 'Sector')
         industry_summary_df = build_summary_table(analysis_df, 'Broad Industry')
-        
-        # Drop temporary ATH variables so they don't clutter the main table
         merged_df = merged_df.drop(columns=['Static_ATH', 'is_ath'])
+        print("   ✅ Sector and Industry ATH rankings generated successfully.")
 
     # ==========================================
-    # STEP 6: PUSH TO SUPABASE
+    # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
     # ==========================================
-    print("☁️ Pushing final tables to Supabase with exact Google Sheets Formatting...")
+    now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
+    
+    # DATE ALIGNMENT: If the VPS runs this after midnight IST (e.g., late UTC schedule),
+    # the script must log the data against the previous trading day.
+    if now_ist.hour < 9:
+        trading_date = now_ist - pd.Timedelta(days=1)
+    else:
+        trading_date = now_ist
+
+    today_date_str = trading_date.strftime('%Y-%m-%d')
+    is_weekday = trading_date.weekday() < 5  
+    
+    historical_mood_df = pd.DataFrame()
+    already_logged = False
+    is_nse_holiday = False
+    
+    if is_weekday:
+        print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
+        try:
+            # 1. Check if today's date was already written to prevent duplicate log attempts
+            query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
+            with engine.connect() as conn:
+                existing_mood = pd.read_sql(query_dup, conn)
+            already_logged = not existing_mood.empty
+        except Exception:
+            already_logged = False
+            
+        if not already_logged:
+            mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
+            
+            col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
+            if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
+
+            if col_chg:
+                mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
+                valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
+                total_stocks = int(len(valid_returns))
+                positive_stocks = int((valid_returns[col_chg] > 0).sum())
+                
+                if total_stocks > 0:
+                    ratio = positive_stocks / total_stocks
+                    score = ratio * 100
+                    pct_str = f"{score:.2f}%"  
+                    
+                    # --- NEW CODE: THE ADVANCED HOLIDAY DETECTION SYSTEM ---
+                    print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
+                    try:
+                        query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
+                        with engine.connect() as conn:
+                            last_entry_df = pd.read_sql(query_last, conn)
+                        
+                        if not last_entry_df.empty:
+                            last_text = str(last_entry_df['Market Breadth'].iloc[0])
+                            match_pct = re.search(r'([0-9.]+)%', last_text)
+                            if match_pct:
+                                last_logged_pct = float(match_pct.group(1))
+                                today_rounded_pct = round(score, 2)
+                                
+                                # Lock 1: Do the percentages match up to 2 decimal places?
+                                if today_rounded_pct == last_logged_pct:
+                                    # Lock 2: Stagnancy Guard (Did price returns freeze across the broad index?)
+                                    return_variance = float(valid_returns[col_chg].var())
+                                    
+                                    if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
+                                        is_nse_holiday = True
+                                        print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
+                                        print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
+                    except Exception as e:
+                        print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
+                    # ----------------------------------------------------------------------
+                    
+                    if not is_nse_holiday:
+                        if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
+                        elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
+                        elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
+                        elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
+                        else: mood_label = f"Super Positive 🚀 {pct_str}"
+                            
+                        historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
+                        
+                        print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
+                        print(f"      🚦 Today's Mood: {mood_label}")
+                        
+                        try:
+                            historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
+                            print("      ✅ Market Mood successfully logged to history.")
+                        except Exception as e:
+                            print(f"      ❌ Failed to save market mood: {e}")
+        else:
+            print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
+    else:
+        print(f"\n   ⏸️ Skipping Market Mood: {today_date_str} is not a valid weekday.")
+
+    # ==========================================
+    # STEP 5.3: COMPOSITE SMOOTHED TREND ENGINE
+    # ==========================================
+    if is_weekday and not already_logged and not is_nse_holiday:
+        print("\n   📈 Calculating 7-Day, 14-Day, and 21-Day Composite Trend...")
+        try:
+            query_all = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30')
+            with engine.connect() as conn:
+                hist_df = pd.read_sql(query_all, conn)
+            
+            if not historical_mood_df.empty:
+                hist_df = pd.concat([historical_mood_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
+            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
+            
+            if len(hist_df) >= 7:
+                def extract_percentage(text_val):
+                    match = re.search(r'([0-9.]+)%', str(text_val))
+                    return float(match.group(1)) if match else np.nan
+
+                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
+                
+                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
+                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
+                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
+                
+                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
+                pct_str = f"{final_score:.2f}%"
+                
+                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
+                elif final_score <= 40: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 60: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 80: trend_label = f"Positive 💚 {pct_str}"
+                else: trend_label = f"Super Positive 🚀 {pct_str}"
+                
+                print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                print(f"      🏆 Final Market Regime: {trend_label}")
+                
+                trend_summary_df = pd.DataFrame([{
+                    "last_updated": today_date_str,
+                    "avg_7d": round(val_7d, 2),
+                    "avg_14d": round(val_14d, 2),
+                    "avg_21d": round(val_21d, 2),
+                    "composite_score": round(final_score, 2),
+                    "trend_regime": trend_label
+                }])
+                trend_summary_df.to_sql("market_trend_summary", engine, if_exists="replace", index=False)
+            else:
+                print("      ⚠️ Not enough history to calculate rolling averages yet.")
+        except Exception as e:
+            print(f"      ❌ Trend Engine Error: {e}")
+    elif is_nse_holiday:
+        print("\n   ⏸️ Trend Engine Paused: Rolling calculations skipped due to NSE Trading Holiday.")
+
+    # ==========================================
+    # STEP 6: PUSH DATA BACK TO CLOUD TABLES
+    # ==========================================
+    print("\n📦 STEP 6: Delivering all final data to Supabase (Chunked Upload)...")
     try:
-        # Pushing stock_master with exact Capital Letters and Spaces preserved!
-        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False)
-        print("✅ 'stock_master' overwritten successfully.")
+        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
         
         if not sector_summary_df.empty:
-            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False)
+            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'sector_analysis' overwritten successfully.")
             
         if not industry_summary_df.empty:
-            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False)
+            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'industry_analysis' overwritten successfully.")
             
-        # --- NEW CODE: Stamp the exact completion time in IST ---
-        sync_df = pd.DataFrame([{"last_sync": pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')}])
+        timestamp_string = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')
+        sync_df = pd.DataFrame([{"last_sync": timestamp_string}])
         sync_df.to_sql("sync_log", engine, if_exists="replace", index=False)
-        print("✅ Timestamp successfully logged in sync_log.")
-        # --------------------------------------------------------
+        print(f"   🕒 Data timestamp set to IST: {timestamp_string}")
             
     except Exception as e:
-        print(f"❌ Database push failed: {e}")
+        print(f"   ❌ FATAL ERROR during database upload: {e}")
 
-    print("🎉 ALL DONE! Daily run complete.")
+    print("\n" + "="*60)
+    print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
+    print("="*60 + "\n")
 
 if __name__ == "__main__":
     run_daily_scraper()
