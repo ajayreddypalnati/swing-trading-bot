@@ -2,10 +2,10 @@ name: Daily Stock Scraper
 
 on:
   schedule:
-    # 8:12 PM IST (Avoids the 8:00 / 8:30 rush hour)
-    - cron: '42 14 * * *'   
-    # 6:17 AM IST (Avoids the 6:00 / 6:30 rush hour)
-    - cron: '47 0 * * *'    
+    # 10:12 PM IST (Delayed by 2 hours from 8:12 PM)
+    - cron: '42 16 * * *'   
+    # 8:17 AM IST (Delayed by 2 hours from 6:17 AM)
+    - cron: '47 2 * * *'    
   workflow_dispatch:
 
 jobs:
@@ -25,6 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          playwright install chromium
 
       - name: Run scraper
         env:
