@@ -267,7 +267,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "sec_rank": "Sector Rank", 
             "broad_industry": "Industry", 
             "ind_rank": "Ind. Rank", 
-            "relative_score": "Momentum Score"
+            "relative_score": "Momentum Rank"
         })
         
         if not raw_sec.empty and not raw_ind.empty:
