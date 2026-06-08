@@ -14,7 +14,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS INJECTION (Dark-Themed Sleek UI) ---
+# --- CSS INJECTION (Dark-Themed Sleek UI & Mobile Responsiveness) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
@@ -25,6 +25,30 @@ st.markdown("""
         [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
         [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
+        
+        /* MOBILE COMPATIBILITY OVERRIDES (Zero Desktop Changes) */
+        @media (max-width: 768px) {
+            /* Force the parent container of the table to allow horizontal scrolling */
+            [data-testid="stTable"] {
+                overflow-x: auto !important;
+                display: block !important;
+                width: 100% !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            /* Prevent columns from squishing and breaking text alignment on small screens */
+            [data-testid="stTable"] table {
+                min-width: 800px !important; 
+            }
+            /* Shrink padding and text slightly for better mobile screen usage */
+            [data-testid="stTable"] th {
+                padding: 10px 8px !important;
+                font-size: 0.75rem !important;
+            }
+            [data-testid="stTable"] td {
+                padding: 8px 6px !important;
+                font-size: 0.75rem !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -251,6 +275,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
             p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
             p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+
+            df.loc[p1, 'Priority'] = 1
+            df.loc[p2, 'Priority'] = 2
+            df.loc[p3, 'Priority'] = 3
+            df.loc[p4, 'Priority'] = 4
 
             df.loc[p1, 'Priority'] = 1
             df.loc[p2, 'Priority'] = 2
