@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import text
 from playwright.sync_api import sync_playwright
 
-# Force unbuffered output
+# Force unbuffered output so execution logs write instantly to Windows command prompt
 sys.stdout.reconfigure(line_buffering=True)
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -25,39 +25,44 @@ SCREENER_PASSWORD = "sunnyreddi999@AA"
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
-    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing.")
+    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing on this machine.")
     sys.exit(1)
 
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 if "?pgbouncer=true" in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("?pgbouncer=true", "")
 
 try:
     print("\n🔌 SYSTEM: Connecting to Supabase Cloud Database...")
     engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
-    print("✅ SYSTEM: Database connection established.")
+    print("✅ SYSTEM: Database connection established successfully.")
 except Exception as e:
     print(f"❌ FATAL ERROR: Could not connect to database: {e}")
     sys.exit(1)
 
+SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # ==========================================
-# HELPER FUNCTIONS (Auth & Fetch)
+# 1. AUTO-LOGIN FUNCTION (PLAYWRIGHT)
 # ==========================================
 def get_fresh_screener_cookies(email, password):
-    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate...")
+    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate with Screener...")
     cookie_string = ""
+    
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(user_agent=USER_AGENT)
             page = context.new_page()
+
             page.goto("https://www.screener.in/login/")
             page.fill("input[name='username']", email)
             page.fill("input[name='password']", password)
             page.click("button[type='submit']")
+
             page.wait_for_timeout(8000)
             
             cookies = context.cookies()
@@ -65,171 +70,536 @@ def get_fresh_screener_cookies(email, password):
             csrf = cookie_dict.get('csrftoken', '')
             session = cookie_dict.get('sessionid', '')
             
-            if session: print("   ✅ Login successful!")
-            else: 
-                print("   ❌ WARNING: Login failed.")
+            if session:
+                print("   ✅ Login successful! Extracted fresh session tokens.")
+            else:
+                print("   ❌ WARNING: Could not find 'sessionid'. Login likely failed.")
                 sys.exit(1)
             
             cookie_string = f"csrftoken={csrf}; sessionid={session}"
             browser.close()
+            
     except Exception as e:
         print(f"   ❌ Auto-login script crashed: {e}")
         sys.exit(1)
+        
     return cookie_string
 
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
 def random_sleep(min_ms=800, max_ms=2000):
     time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
 
-def fetch_with_retry(session, url, retries=3):
+def fetch_with_retry(session, url, referer_url=None, retries=3):
     headers = {
         "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
         "Cookie": session.screener_cookies
     }
-    for _ in range(retries):
+    if referer_url: headers["Referer"] = referer_url
+        
+    for attempt in range(1, retries + 1):
         try:
             resp = session.get(url, headers=headers, timeout=15)
             if resp.status_code == 200: return resp.text
-            elif resp.status_code == 429: time.sleep(15)
-        except Exception: pass
+            elif resp.status_code == 429:
+                print(f"   ⚠️ WARNING: Rate limited by Screener (429). Pausing for 15 seconds...")
+                time.sleep(15)
+        except Exception:
+            pass
         random_sleep(1500, 3500)
     return None
 
-def build_summary_table(df, group_col):
-    valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
-    if valid_df.empty: return pd.DataFrame()
-    summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
-    summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
-    summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
-    summary['Rank'] = summary.index + 1
-    return summary
-
-# ==========================================
-# MAIN TEST LOGIC
-# ==========================================
-def run_test_script():
+def run_daily_scraper():
     print("\n" + "="*60)
-    print("🚀 STARTING: Standalone ATH & Sector Logic Test")
+    print("🚀 STARTING: Cloud-Native Market Scraper & Trend Engine")
     print("="*60)
     
     fresh_cookies = get_fresh_screener_cookies(SCREENER_EMAIL, SCREENER_PASSWORD)
     session = requests.Session()
     session.screener_cookies = fresh_cookies
-
-    # ---------------------------------------------------------
-    # STEP 1: SCRAPE ATH SCREENER (ALL COLUMNS)
-    # ---------------------------------------------------------
-    print("\n📥 STEP 1: Scraping full data from ATH Screener...")
-    ath_url = "https://www.screener.in/screens/3315507/ath-sector-analysis/"
-    first_page = fetch_with_retry(session, ath_url)
     
-    if not first_page:
-        print("   ❌ Failed to reach ATH Screener.")
-        return
+    # ==========================================
+    # STEP 1: FETCH STATIC DB MAP & CACHE
+    # ==========================================
+    print("\n📚 STEP 1: Checking database for companies we already know...")
+    try:
+        static_df = pd.read_sql("SELECT * FROM sector_master", engine)
+        
+        col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
+        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
+        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
+        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
+        col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
+        
+        unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
+        if unknown_mask.any():
+            print(f"   🧹 Found {unknown_mask.sum()} incomplete profiles. Forcing a re-scrape for them...")
+            with engine.begin() as conn:
+                conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
+            static_df = static_df[~unknown_mask]
+        
+        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
+        static_subset = static_df[cols_to_keep].copy()
+        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
+        static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
+        
+        known_names = set(static_subset['Name'].tolist())
+        print(f"   ✅ Cache Loaded: We currently have {len(known_names)} companies saved in Supabase.")
+    except Exception as e:
+        print(f"   ⚠️ Could not load database cache. Starting fresh. ({e})")
+        known_names = set()
+        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
 
+    if 'Exchange' not in static_subset.columns:
+        static_subset['Exchange'] = "NSE"
+
+    # ==========================================
+    # STEP 2: FAST LIVE SCRAPE (MAIN TABLES)
+    # ==========================================
+    print("\n📡 STEP 2: Scanning Screener.in for live market prices...")
+    first_page = fetch_with_retry(session, SCREENER_URL)
+    if not first_page: 
+        print("   ❌ FATAL ERROR: Cannot reach Screener.in. Check internet connection.")
+        return
+        
     page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
     total_pages = int(page_match.group(1)) if page_match else 1
-    print(f"   📋 Found {total_pages} pages of ATH stocks. Downloading...")
+    print(f"   📋 Found {total_pages} pages of live market data. Downloading now...")
     
-    ath_dataframes = []
+    all_dataframes = []
     
     for page in range(1, total_pages + 1):
-        p_url = ath_url if page == 1 else f"{ath_url}?page={page}"
-        html_content = first_page if page == 1 else fetch_with_retry(session, p_url)
+        page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
+        referer_url = None if page == 1 else (SCREENER_URL if page == 2 else f"{SCREENER_URL}?page={page-1}")
         
-        if html_content:
-            try:
-                tables = pd.read_html(io.StringIO(html_content), thousands=',')
-                if tables:
-                    df = tables[0]
-                    # Drop recurring header rows
-                    df = df[df['Name'] != 'Name'].copy() 
-                    df['Name'] = df['Name'].astype(str).str.strip()
-                    ath_dataframes.append(df)
-            except Exception as e:
-                print(f"      ⚠️ ERROR parsing page {page}: {e}")
+        html_content = first_page if page == 1 else fetch_with_retry(session, page_url, referer_url=referer_url)
+        if not html_content: continue
+        
+        try:
+            tables = pd.read_html(io.StringIO(html_content), thousands=',')
+            if tables:
+                df = tables[0]
+                df = df[df['Name'] != 'Name'].copy()
+                df['Name'] = df['Name'].astype(str).str.strip()
                 
-        if page % 2 == 0 or page == total_pages:
+                soup = BeautifulSoup(html_content, 'html.parser')
+                table = soup.find('table')
+                codes = []
+                if table and table.find('tbody'):
+                    for tr in table.find('tbody').find_all('tr'):
+                        if tr.find('th'): continue
+                        a_tag = tr.find('a', href=re.compile(r'/company/([A-Za-z0-9_\-&]+)/'))
+                        if a_tag:
+                            code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
+                            codes.append(code.upper())
+                
+                if len(codes) == len(df):
+                    df['live_ticker_slug'] = codes 
+                    all_dataframes.append(df)
+                else:
+                    print(f"      ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                    
+        except Exception as e:
+            print(f"      ⚠️ ERROR parsing page {page}: {e}")
+            
+        if page % 10 == 0 or page == total_pages:
             print(f"      -> Processed {page}/{total_pages} pages...")
-        if page < total_pages: random_sleep(1000, 2000)
+            
+        if page < total_pages: random_sleep(800, 1500)
 
-    ath_df = pd.concat(ath_dataframes, ignore_index=True)
-    
-    # Drop the redundant 'Is not SME' column as requested
-    if 'Is not SME' in ath_df.columns:
-        ath_df = ath_df.drop(columns=['Is not SME'])
-        
-    print(f"   ✅ Collected detailed data for {len(ath_df)} ATH companies.")
-
-    # ---------------------------------------------------------
-    # STEP 2: LOAD MAIN TABLE & APPLY NEW SME LOGIC
-    # ---------------------------------------------------------
-    print("\n📚 STEP 2: Loading 'stock_master' & Filtering SMEs...")
-    try:
-        stock_master_df = pd.read_sql("SELECT * FROM stock_master", engine)
-        print(f"   ✅ Loaded {len(stock_master_df)} rows from stock_master.")
-    except Exception as e:
-        print(f"   ❌ Failed to load stock_master: {e}")
+    if not all_dataframes: 
+        print("   ❌ FATAL ERROR: No data scraped. Exiting.")
         return
+        
+    live_df = pd.concat(all_dataframes, ignore_index=True)
+    print(f"   ✅ Done! Collected live data for {len(live_df)} active companies.")
+    
+    # ==========================================
+    # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
+    # ==========================================
+    print("\n🕵️‍♂️ STEP 3: Checking for brand new companies (IPOs, name changes)...")
+    live_names = set(live_df['Name'].tolist())
+    missing_names = [n for n in live_names if n not in known_names]
+    
+    if missing_names:
+        missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
+        total_missing = len(missing_df)
+        print(f"   🚨 Found {total_missing} NEW companies! Fetching their sector details...")
+        new_records = []
+        
+        current_count = 0
+        for idx, row in missing_df.iterrows():
+            current_count += 1
+            stock_name = row['Name']
+            code = row['live_ticker_slug']
+            url = f"https://www.screener.in/company/{code}/"
+            
+            if current_count > 1 and current_count % 25 == 0:
+                cooldown = random.randint(6, 12)
+                print(f"      💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
+                time.sleep(cooldown)
 
-    # NEW LOGIC: Look specifically at the "Is SME" column to filter out SMEs (Value '1' = SME)
-    sme_col = next((c for c in stock_master_df.columns if str(c).strip().lower() == 'is sme'), None)
+            print(f"      -> [{current_count}/{total_missing}] Investigating: {stock_name}")
+            page_html = fetch_with_retry(session, url, referer_url=SCREENER_URL)
+            
+            sector, industry, exchange_class = "Unknown", "Unknown", ""
+            if page_html:
+                soup = BeautifulSoup(page_html, 'html.parser')
+                sec_tag = soup.find('a', title='Sector')
+                ind_tag = soup.find('a', title='Broad Industry')
+                if sec_tag: sector = sec_tag.text.strip()
+                if ind_tag: industry = ind_tag.text.strip()
+
+                nse_link = soup.find('a', href=re.compile(r'nseindia\.com/get-quotes/equity\?symbol='))
+                bse_link = soup.find('a', href=re.compile(r'bseindia\.com/stock-share-price/'))
+
+                if nse_link:
+                    span_tag = nse_link.find('span')
+                    exchange_class = "NSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "NSE"
+                elif bse_link:
+                    span_tag = bse_link.find('span')
+                    exchange_class = "BSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "BSE"
+                else:
+                    exchange_class = "BSE" if code.isdigit() else "NSE"
+            else:
+                exchange_class = "BSE" if code.isdigit() else "NSE"
+                
+            try:
+                original_col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
+                original_col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
+                original_col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
+                original_col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+                original_col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
+                
+                new_records.append({
+                    original_col_n: stock_name,
+                    original_col_t: code, 
+                    original_col_s: sector, 
+                    original_col_i: industry, 
+                    original_col_e: exchange_class
+                })
+            except Exception:
+                pass
+            random_sleep(800, 1500)
+            
+        if new_records:
+            new_static_df = pd.DataFrame(new_records)
+            print(f"   ☁️ Saving {len(new_records)} new companies permanently to database...")
+            try:
+                new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
+                new_static_mapped = pd.DataFrame({
+                    'Name': [r.get(original_col_n) for r in new_records],
+                    'Ticker': [r.get(original_col_t) for r in new_records],
+                    'Sector': [r.get(original_col_s) for r in new_records],
+                    'Broad Industry': [r.get(original_col_i) for r in new_records],
+                    'Exchange': [r.get(original_col_e) for r in new_records],
+                    'Static_ATH': [np.nan for _ in new_records]
+                })
+                static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
+                print("   ✅ New companies saved successfully.")
+            except Exception as e:
+                print(f"   ❌ Failed to save new companies: {e}")
+    else:
+        print("   ✅ No new companies today. Existing database is perfectly up to date.")
+
+    # ==========================================
+    # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
+    # ==========================================
+    print("\n🧮 STEP 4: Calculating cross-sectional momentum scores...")
+    ret_1m = next((c for c in live_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
+    ret_3m = next((c for c in live_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
+    ret_6m = next((c for c in live_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
+
+    if ret_1m and ret_3m and ret_6m:
+        live_df[ret_1m] = pd.to_numeric(live_df[ret_1m], errors='coerce')
+        live_df[ret_3m] = pd.to_numeric(live_df[ret_3m], errors='coerce')
+        live_df[ret_6m] = pd.to_numeric(live_df[ret_6m], errors='coerce')
+
+        rank_1m = live_df[ret_1m].rank(ascending=False, method='min')
+        rank_3m = live_df[ret_3m].rank(ascending=False, method='min')
+        rank_6m = live_df[ret_6m].rank(ascending=False, method='min')
+        
+        momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
+        valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
+        
+        final_rank = momentum_score.rank(ascending=True, method='min')
+        
+        live_df['Relative score'] = final_rank.where(valid_mask, np.nan)
+        print("   ✅ Momentum rank calculated (1 = Highest Momentum) and assigned.")
+    else:
+        print("   ⚠️ WARNING: 1M/3M/6M return columns are missing. Cannot calculate momentum.")
+        live_df['Relative score'] = np.nan
+
+    live_df = live_df.drop(columns=['live_ticker_slug'])
+    merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
+
+    # ==========================================
+    # STEP 5.1: SCRAPE ATH DATA & RANK SECTORS
+    # ==========================================
+    print("\n📊 STEP 5.1: Scraping true ATH data & Generating Sector Rankings...")
+    sector_summary_df = pd.DataFrame()
+    industry_summary_df = pd.DataFrame()
+    ath_df = pd.DataFrame()
+    ath_names = set()
+    
+    ath_screener_url = "https://www.screener.in/screens/3315507/ath-sector-analysis/"
+    first_ath_page = fetch_with_retry(session, ath_screener_url)
+    
+    if first_ath_page:
+        page_match = re.search(r'Showing page \d+ of (\d+)', first_ath_page)
+        ath_total_pages = int(page_match.group(1)) if page_match else 1
+        print(f"   📋 Found {ath_total_pages} pages of live ATH stocks. Downloading...")
+        
+        ath_dataframes = []
+        
+        for p in range(1, ath_total_pages + 1):
+            p_url = ath_screener_url if p == 1 else f"{ath_screener_url}?page={p}"
+            p_html = first_ath_page if p == 1 else fetch_with_retry(session, p_url)
+            
+            if p_html:
+                try:
+                    tables = pd.read_html(io.StringIO(p_html), thousands=',')
+                    if tables:
+                        df = tables[0]
+                        df = df[df['Name'] != 'Name'].copy() 
+                        df['Name'] = df['Name'].astype(str).str.strip()
+                        ath_dataframes.append(df)
+                except Exception as e:
+                    print(f"      ⚠️ ERROR parsing page {p}: {e}")
+                    
+            if p % 5 == 0 or p == ath_total_pages:
+                print(f"      -> Scraped {p}/{ath_total_pages} ATH pages...")
+                
+            if p < ath_total_pages:
+                random_sleep(800, 1500)
+                
+        if ath_dataframes:
+            ath_df = pd.concat(ath_dataframes, ignore_index=True)
+            
+            # Drop the redundant 'Is not SME' column
+            if 'Is not SME' in ath_df.columns:
+                ath_df = ath_df.drop(columns=['Is not SME'])
+                
+            print(f"   ✅ Collected detailed data for {len(ath_df)} ATH companies.")
+            
+            # VLOOKUP LOGIC: Pull mapping details from merged_df into the new ath_df
+            cols_to_pull = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
+            existing_cols = [c for c in cols_to_pull if c in merged_df.columns]
+            
+            ath_df = pd.merge(ath_df, merged_df[existing_cols], on='Name', how='left')
+            print("   ✅ Performed VLOOKUP to add Sector, Industry, Ticker, and Exchange to ATH_Analysis.")
+            
+            ath_names = set(ath_df['Name'].tolist())
+    else:
+        print("   ❌ Failed to fetch ATH Screener. Sector analysis will be empty.")
+
+    # Apply NEW SME LOGIC: Look strictly at the "Is SME" column to filter out SMEs (1 = SME)
+    sme_col = next((c for c in merged_df.columns if str(c).strip().lower() == 'is sme'), None)
     
     if sme_col:
-        analysis_df = stock_master_df[stock_master_df[sme_col].astype(str).str.strip() != '1'].copy()
-        print(f"   🧹 Filtered out SMEs using '{sme_col}' column. {len(analysis_df)} Mainboard stocks remain.")
+        analysis_df = merged_df[merged_df[sme_col].astype(str).str.strip() != '1'].copy()
+        print(f"   🧹 Filtered out SMEs using '{sme_col}' column.")
     else:
-        print("   ⚠️ WARNING: 'Is SME' column not found in stock_master! Proceeding without SME filtering.")
-        analysis_df = stock_master_df.copy()
-
-    # ---------------------------------------------------------
-    # STEP 3: ACCURATE CROSS-REFERENCE & SECTOR/INDUSTRY CALC
-    # ---------------------------------------------------------
-    print("\n🧮 STEP 3: Cross-referencing stocks & calculating sector breadth...")
+        print("   ⚠️ WARNING: 'Is SME' column not found! Proceeding without SME filtering.")
+        analysis_df = merged_df.copy()
     
-    # --- NEW VLOOKUP LOGIC ---
-    # Merge (VLOOKUP) Ticker, Sector, Broad Industry, and Exchange from stock_master to ath_df
-    cols_to_pull = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
-    existing_cols = [c for c in cols_to_pull if c in stock_master_df.columns]
-    
-    # Perform a left join so every scraped ATH stock gets its matching sector data attached
-    ath_df = pd.merge(ath_df, stock_master_df[existing_cols], on='Name', how='left')
-    print("   ✅ Performed VLOOKUP to add Sector, Industry, Ticker, and Exchange to ATH_Analysis.")
-    # -------------------------
-
-    # Flag the mainboard stocks if their name appears in the ATH list
-    ath_names = set(ath_df['Name'].tolist())
+    # Assign True/False based directly on the scraped list
     analysis_df['is_ath'] = analysis_df['Name'].astype(str).str.strip().isin(ath_names)
+
+    def build_summary_table(df, group_col):
+        valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
+        if valid_df.empty: return pd.DataFrame()
+        summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
+        summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
+        summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
+        summary['Rank'] = summary.index + 1
+        return summary
 
     col_sector = next((c for c in analysis_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
     col_industry = next((c for c in analysis_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
 
     sector_summary_df = build_summary_table(analysis_df, col_sector)
     industry_summary_df = build_summary_table(analysis_df, col_industry)
+    print("   ✅ Sector and Industry ATH rankings generated successfully.")
+
+    # ==========================================
+    # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
+    # ==========================================
+    now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
     
-    print("   ✅ Accurate Sector and Industry rankings generated.")
+    if now_ist.hour < 9:
+        trading_date = now_ist - pd.Timedelta(days=1)
+    else:
+        trading_date = now_ist
 
-    # ---------------------------------------------------------
-    # STEP 4: UPLOAD EVERYTHING TO SUPABASE
-    # ---------------------------------------------------------
-    print("\n📦 STEP 4: Uploading test data to Supabase...")
+    today_date_str = trading_date.strftime('%Y-%m-%d')
+    is_weekday = trading_date.weekday() < 5  
+    
+    historical_mood_df = pd.DataFrame()
+    already_logged = False
+    is_nse_holiday = False
+    
+    if is_weekday:
+        print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
+        try:
+            query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
+            with engine.connect() as conn:
+                existing_mood = pd.read_sql(query_dup, conn)
+            already_logged = not existing_mood.empty
+        except Exception:
+            already_logged = False
+            
+        if not already_logged:
+            mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
+            
+            col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
+            if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
+
+            if col_chg:
+                mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
+                valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
+                total_stocks = int(len(valid_returns))
+                positive_stocks = int((valid_returns[col_chg] > 0).sum())
+                
+                if total_stocks > 0:
+                    ratio = positive_stocks / total_stocks
+                    score = ratio * 100
+                    pct_str = f"{score:.2f}%"  
+                    
+                    print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
+                    try:
+                        query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
+                        with engine.connect() as conn:
+                            last_entry_df = pd.read_sql(query_last, conn)
+                        
+                        if not last_entry_df.empty:
+                            last_text = str(last_entry_df['Market Breadth'].iloc[0])
+                            match_pct = re.search(r'([0-9.]+)%', last_text)
+                            if match_pct:
+                                last_logged_pct = float(match_pct.group(1))
+                                today_rounded_pct = round(score, 2)
+                                
+                                if today_rounded_pct == last_logged_pct:
+                                    return_variance = float(valid_returns[col_chg].var())
+                                    
+                                    if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
+                                        is_nse_holiday = True
+                                        print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
+                                        print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
+                    except Exception as e:
+                        print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
+                    
+                    if not is_nse_holiday:
+                        if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
+                        elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
+                        elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
+                        elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
+                        else: mood_label = f"Super Positive 🚀 {pct_str}"
+                            
+                        historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
+                        
+                        print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
+                        print(f"      🚦 Today's Mood: {mood_label}")
+                        
+                        try:
+                            historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
+                            print("      ✅ Market Mood successfully logged to history.")
+                        except Exception as e:
+                            print(f"      ❌ Failed to save market mood: {e}")
+        else:
+            print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
+    else:
+        print(f"\n   ⏸️ Skipping Market Mood: {today_date_str} is not a valid weekday.")
+
+    # ==========================================
+    # STEP 5.3: COMPOSITE SMOOTHED TREND ENGINE
+    # ==========================================
+    if is_weekday and not already_logged and not is_nse_holiday:
+        print("\n   📈 Calculating 7-Day, 14-Day, and 21-Day Composite Trend...")
+        try:
+            query_all = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30')
+            with engine.connect() as conn:
+                hist_df = pd.read_sql(query_all, conn)
+            
+            if not historical_mood_df.empty:
+                hist_df = pd.concat([historical_mood_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
+            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
+            
+            if len(hist_df) >= 7:
+                def extract_percentage(text_val):
+                    match = re.search(r'([0-9.]+)%', str(text_val))
+                    return float(match.group(1)) if match else np.nan
+
+                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
+                
+                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
+                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
+                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
+                
+                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
+                pct_str = f"{final_score:.2f}%"
+                
+                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
+                elif final_score <= 40: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 60: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 80: trend_label = f"Positive 💚 {pct_str}"
+                else: trend_label = f"Super Positive 🚀 {pct_str}"
+                
+                print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                print(f"      🏆 Final Market Regime: {trend_label}")
+                
+                trend_summary_df = pd.DataFrame([{
+                    "last_updated": today_date_str,
+                    "avg_7d": round(val_7d, 2),
+                    "avg_14d": round(val_14d, 2),
+                    "avg_21d": round(val_21d, 2),
+                    "composite_score": round(final_score, 2),
+                    "trend_regime": trend_label
+                }])
+                trend_summary_df.to_sql("market_trend_summary", engine, if_exists="replace", index=False)
+            else:
+                print("      ⚠️ Not enough history to calculate rolling averages yet.")
+        except Exception as e:
+            print(f"      ❌ Trend Engine Error: {e}")
+    elif is_nse_holiday:
+        print("\n   ⏸️ Trend Engine Paused: Rolling calculations skipped due to NSE Trading Holiday.")
+
+    # ==========================================
+    # STEP 6: PUSH DATA BACK TO CLOUD TABLES
+    # ==========================================
+    print("\n📦 STEP 6: Delivering all final data to Supabase (Chunked Upload)...")
     try:
-        # 1. Upload the raw scraped ATH data with all columns + the new mapped Sector/Industry columns
-        ath_df.to_sql("ATH_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-        print(f"   ✅ 'ATH_Analysis' created/overwritten successfully with new columns.")
-
-        # 2. Upload the recalculated Sector/Industry tables
+        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
+        
+        if not ath_df.empty:
+            ath_df.to_sql("ATH_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'ATH_Analysis' overwritten successfully with new columns.")
+            
         if not sector_summary_df.empty:
-            sector_summary_df.to_sql("ATH_Sector_Analysis", engine, if_exists="replace", index=False)
-            print("   ✅ 'ATH_Sector_Analysis' updated.")
+            sector_summary_df.to_sql("ATH_Sector_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'ATH_Sector_Analysis' overwritten successfully.")
             
         if not industry_summary_df.empty:
-            industry_summary_df.to_sql("ATH_Industry_Analysis", engine, if_exists="replace", index=False)
-            print("   ✅ 'ATH_Industry_Analysis' updated.")
-
+            industry_summary_df.to_sql("ATH_Industry_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
+            
+        timestamp_string = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')
+        sync_df = pd.DataFrame([{"last_sync": timestamp_string}])
+        sync_df.to_sql("sync_log", engine, if_exists="replace", index=False)
+        print(f"   🕒 Data timestamp set to IST: {timestamp_string}")
+            
     except Exception as e:
-        print(f"   ❌ Failed to upload data to Supabase: {e}")
+        print(f"   ❌ FATAL ERROR during database upload: {e}")
 
-    print("\n🎉 TEST COMPLETE! Check your Supabase database to verify the tables.")
+    print("\n" + "="*60)
+    print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
+    print("="*60 + "\n")
 
 if __name__ == "__main__":
-    run_test_script()
+    run_daily_scraper()
