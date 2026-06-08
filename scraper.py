@@ -325,8 +325,12 @@ def run_daily_scraper():
         
         momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
         valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
-        live_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
-        print("   ✅ Momentum calculated and assigned to all stocks.")
+        
+        # Rank the raw scores: lowest score becomes Rank 1.0, next is 2.0, etc.
+        final_rank = momentum_score.rank(ascending=True, method='min')
+        
+        live_df['Relative score'] = final_rank.where(valid_mask, np.nan)
+        print("   ✅ Momentum rank calculated (1 = Highest Momentum) and assigned.")
     else:
         print("   ⚠️ WARNING: 1M/3M/6M return columns are missing. Cannot calculate momentum.")
         live_df['Relative score'] = np.nan
