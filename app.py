@@ -304,7 +304,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "% Change": "{:.2f}%", 
             "Turnover (Cr)": "₹{:.2f} Cr",
             "Volume": "{:,.0f}",
-            "Momentum Score": lambda x: safe_int(x),
+            "Momentum Rank": lambda x: safe_int(x),
             "Priority": lambda x: safe_int(x, "Tier "),
             "Sector Rank": lambda x: safe_int(x, "#"),
             "Ind. Rank": lambda x: safe_int(x, "#"),
