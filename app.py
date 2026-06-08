@@ -14,40 +14,42 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS INJECTION (Dark-Themed Sleek UI & Mobile Responsiveness) ---
+# --- CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling) ---
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
-        [data-testid="stTable"] table { width: 100%; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        [data-testid="stTable"] th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; font-size: 0.85rem; padding: 15px !important; }
-        [data-testid="stTable"] td { text-align: center !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; }
+        
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* MOBILE COMPATIBILITY OVERRIDES (Zero Desktop Changes) */
-        @media (max-width: 768px) {
-            /* Force the parent container of the table to allow horizontal scrolling */
-            [data-testid="stTable"] {
-                overflow-x: auto !important;
-                display: block !important;
-                width: 100% !important;
-                -webkit-overflow-scrolling: touch;
-            }
-            /* Prevent columns from squishing and breaking text alignment on small screens */
-            [data-testid="stTable"] table {
-                min-width: 800px !important; 
-            }
-            /* Shrink padding and text slightly for better mobile screen usage */
-            [data-testid="stTable"] th {
-                padding: 10px 8px !important;
-                font-size: 0.75rem !important;
-            }
-            [data-testid="stTable"] td {
-                padding: 8px 6px !important;
-                font-size: 0.75rem !important;
-            }
+        /* CUSTOM HTML TABLE SCROLLING WRAPPER */
+        .scrollable-table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            margin-bottom: 1rem;
+        }
+        .scrollable-table-container table {
+            width: 100%;
+            min-width: 900px; /* Forces table to stay wide, triggering horizontal scroll on mobile */
+            border-collapse: collapse;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .scrollable-table-container th {
+            background-color: rgba(128, 128, 128, 0.08) !important;
+            text-align: center !important;
+            font-size: 0.85rem;
+            padding: 15px !important;
+            white-space: nowrap; /* Prevents header text from wrapping */
+        }
+        .scrollable-table-container td {
+            text-align: center !important;
+            padding: 12px !important;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
+            white-space: nowrap; /* Prevents data text from wrapping */
         }
     </style>
 """, unsafe_allow_html=True)
@@ -84,7 +86,6 @@ def fetch_database_reference():
 
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
         
-        # UPDATED: Pulling directly from the newly created ATH analysis tables
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
         raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
 
@@ -191,7 +192,6 @@ def get_breadth_color(breadth_str):
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
 def create_metric_card(title, value, bg_color):
-    # Pure black text (#000000) mapping to standard Streamlit native metric sizing
     return f"""
     <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); height: 100%;">
         <span style="font-size: 0.875rem; color: #4B5563; font-weight: 500; font-family: 'Inter', sans-serif;">{title}</span><br>
@@ -231,12 +231,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
-    # Calculate the active background colors
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
     default_bg = "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
-    # --- 3-COLUMN METRICS GRID ---
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     with metric_col1:
         st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
@@ -245,7 +243,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     with metric_col3:
         st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    # -----------------------------
 
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
@@ -258,11 +255,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
 
-        # Convert to numeric to prepare for Turnover calculation
         df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
         df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
-        
-        # Calculate Turnover in Crores (Volume * Close / 10,000,000)
         df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
 
         for col in ['sec_rank', 'ind_rank', 'relative_score']:
@@ -281,16 +275,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-            df.loc[p1, 'Priority'] = 1
-            df.loc[p2, 'Priority'] = 2
-            df.loc[p3, 'Priority'] = 3
-            df.loc[p4, 'Priority'] = 4
-
-        # Added 'Turnover (Cr)' right before 'Volume'
         display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
-        # Sort by Priority (Tier 1 first) then relative_score ascending (Lowest score / Rank 1 first)
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
         display_df = display_df.rename(columns={
@@ -318,7 +305,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
-        # Highlight applied to Priority column instead of % Change
         def highlight_priority(val):
             try: 
                 return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else ''
@@ -330,6 +316,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
+        # Format the dataframe using pandas Styler
         styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
@@ -340,7 +327,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "Sector Rank": lambda x: safe_int(x, "#"),
             "Ind. Rank": lambda x: safe_int(x, "#"),
         })
-        st.table(styled_df)
+        
+        # --- THE FIX: Outputting the styled table as raw HTML inside our scrollable container ---
+        html_table = styled_df.to_html()
+        st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
+
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
@@ -349,7 +340,6 @@ st.rerun()
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
-    # UPDATED: Changed the tab titles to match the new ATH tables being pulled
     tab1, tab2 = st.tabs(["ATH Sector Analysis", "ATH Industry Analysis"])
     if not raw_sec.empty:
         with tab1:
