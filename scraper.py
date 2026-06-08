@@ -326,7 +326,6 @@ def run_daily_scraper():
         momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
         valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
         
-        # Rank the raw scores: lowest score becomes Rank 1.0, next is 2.0, etc.
         final_rank = momentum_score.rank(ascending=True, method='min')
         
         live_df['Relative score'] = final_rank.where(valid_mask, np.nan)
@@ -340,42 +339,68 @@ def run_daily_scraper():
     merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
 
     # ==========================================
-    # STEP 5.1: SECTOR & INDUSTRY ATH (Excluding SMEs only)
+    # STEP 5.1: SCRAPE ATH DATA & RANK SECTORS
     # ==========================================
-    print("\n📊 STEP 5: Generating Sector Breakout Rankings & Market Breadth...")
-    col_cmp = next((c for c in merged_df.columns if 'cmp' in c.lower()), None)
+    print("\n📊 STEP 5.1: Scraping true ATH data & Generating Sector Rankings...")
     sector_summary_df = pd.DataFrame()
     industry_summary_df = pd.DataFrame()
     
-    if col_cmp and 'Static_ATH' in merged_df.columns:
-        merged_df['Static_ATH'] = pd.to_numeric(merged_df['Static_ATH'], errors='coerce')
-        merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
+    ath_screener_url = "https://www.screener.in/screens/3315507/ath-sector-analysis/"
+    ath_html = fetch_with_retry(session, ath_screener_url)
+    
+    ath_tickers = set()
+    
+    if ath_html:
+        page_match = re.search(r'Showing page \d+ of (\d+)', ath_html)
+        ath_total_pages = int(page_match.group(1)) if page_match else 1
+        print(f"   📋 Found {ath_total_pages} pages of live ATH stocks. Downloading...")
         
-        merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df['Static_ATH'])
-        
-        analysis_df = merged_df[~merged_df['Exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
+        for p in range(1, ath_total_pages + 1):
+            p_url = ath_screener_url if p == 1 else f"{ath_screener_url}?page={p}"
+            p_html = ath_html if p == 1 else fetch_with_retry(session, p_url)
+            
+            if p_html:
+                soup = BeautifulSoup(p_html, 'html.parser')
+                company_links = soup.select('a[href^="/company/"]')
+                for link in company_links:
+                    match = re.search(r'^/company/([A-Za-z0-9_\-]+)/', link['href'])
+                    if match:
+                        ath_tickers.add(match.group(1).upper())
+                        
+            if p % 5 == 0 or p == ath_total_pages:
+                print(f"      -> Scraped {p}/{ath_total_pages} ATH pages...")
+                
+            if p < ath_total_pages:
+                random_sleep(800, 1500)
+                
+        print(f"   ✅ Successfully identified {len(ath_tickers)} true ATH stocks from custom URL.")
+    else:
+        print("   ❌ Failed to fetch ATH Screener. Sector analysis will be empty.")
 
-        def build_summary_table(df, group_col):
-            valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
-            if valid_df.empty: return pd.DataFrame()
-            summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
-            summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
-            summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
-            summary['Rank'] = summary.index + 1
-            return summary
+    # Exclude SMEs for analysis mapping
+    analysis_df = merged_df[~merged_df['Exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
+    
+    # Assign True/False based directly on the scraped list (instead of CMP vs ATH math)
+    analysis_df['is_ath'] = analysis_df['Ticker'].astype(str).str.upper().isin(ath_tickers)
 
-        sector_summary_df = build_summary_table(analysis_df, 'Sector')
-        industry_summary_df = build_summary_table(analysis_df, 'Broad Industry')
-        merged_df = merged_df.drop(columns=['Static_ATH', 'is_ath'])
-        print("   ✅ Sector and Industry ATH rankings generated successfully.")
+    def build_summary_table(df, group_col):
+        valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
+        if valid_df.empty: return pd.DataFrame()
+        summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
+        summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
+        summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
+        summary['Rank'] = summary.index + 1
+        return summary
+
+    sector_summary_df = build_summary_table(analysis_df, 'Sector')
+    industry_summary_df = build_summary_table(analysis_df, 'Broad Industry')
+    print("   ✅ Sector and Industry ATH rankings generated successfully.")
 
     # ==========================================
     # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
     # ==========================================
     now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
     
-    # DATE ALIGNMENT: If the VPS runs this after midnight IST (e.g., late UTC schedule),
-    # the script must log the data against the previous trading day.
     if now_ist.hour < 9:
         trading_date = now_ist - pd.Timedelta(days=1)
     else:
@@ -391,7 +416,6 @@ def run_daily_scraper():
     if is_weekday:
         print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
         try:
-            # 1. Check if today's date was already written to prevent duplicate log attempts
             query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
             with engine.connect() as conn:
                 existing_mood = pd.read_sql(query_dup, conn)
@@ -416,7 +440,6 @@ def run_daily_scraper():
                     score = ratio * 100
                     pct_str = f"{score:.2f}%"  
                     
-                    # --- NEW CODE: THE ADVANCED HOLIDAY DETECTION SYSTEM ---
                     print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
                     try:
                         query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
@@ -430,9 +453,7 @@ def run_daily_scraper():
                                 last_logged_pct = float(match_pct.group(1))
                                 today_rounded_pct = round(score, 2)
                                 
-                                # Lock 1: Do the percentages match up to 2 decimal places?
                                 if today_rounded_pct == last_logged_pct:
-                                    # Lock 2: Stagnancy Guard (Did price returns freeze across the broad index?)
                                     return_variance = float(valid_returns[col_chg].var())
                                     
                                     if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
@@ -441,7 +462,6 @@ def run_daily_scraper():
                                         print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
                     except Exception as e:
                         print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
-                    # ----------------------------------------------------------------------
                     
                     if not is_nse_holiday:
                         if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
@@ -526,13 +546,14 @@ def run_daily_scraper():
         merged_df.to_sql("stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
         print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
         
+        # PUSHING TO THE NEWLY NAMED TABLES
         if not sector_summary_df.empty:
-            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-            print(f"   ✅ 'sector_analysis' overwritten successfully.")
+            sector_summary_df.to_sql("ATH_Sector_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'ATH_Sector_Analysis' overwritten successfully.")
             
         if not industry_summary_df.empty:
-            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-            print(f"   ✅ 'industry_analysis' overwritten successfully.")
+            industry_summary_df.to_sql("ATH_Industry_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
             
         timestamp_string = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')
         sync_df = pd.DataFrame([{"last_sync": timestamp_string}])
