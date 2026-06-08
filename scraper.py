@@ -186,10 +186,18 @@ def run_test_script():
     # ---------------------------------------------------------
     print("\n🧮 STEP 3: Cross-referencing stocks & calculating sector breadth...")
     
-    # Create a clean set of ATH names from our newly scraped DataFrame
-    ath_names = set(ath_df['Name'].tolist())
+    # --- NEW VLOOKUP LOGIC ---
+    # Merge (VLOOKUP) Ticker, Sector, Broad Industry, and Exchange from stock_master to ath_df
+    cols_to_pull = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
+    existing_cols = [c for c in cols_to_pull if c in stock_master_df.columns]
     
+    # Perform a left join so every scraped ATH stock gets its matching sector data attached
+    ath_df = pd.merge(ath_df, stock_master_df[existing_cols], on='Name', how='left')
+    print("   ✅ Performed VLOOKUP to add Sector, Industry, Ticker, and Exchange to ATH_Analysis.")
+    # -------------------------
+
     # Flag the mainboard stocks if their name appears in the ATH list
+    ath_names = set(ath_df['Name'].tolist())
     analysis_df['is_ath'] = analysis_df['Name'].astype(str).str.strip().isin(ath_names)
 
     col_sector = next((c for c in analysis_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
@@ -205,9 +213,9 @@ def run_test_script():
     # ---------------------------------------------------------
     print("\n📦 STEP 4: Uploading test data to Supabase...")
     try:
-        # 1. Upload the raw scraped ATH data with all columns
+        # 1. Upload the raw scraped ATH data with all columns + the new mapped Sector/Industry columns
         ath_df.to_sql("ATH_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-        print(f"   ✅ 'ATH_Analysis' created/overwritten successfully.")
+        print(f"   ✅ 'ATH_Analysis' created/overwritten successfully with new columns.")
 
         # 2. Upload the recalculated Sector/Industry tables
         if not sector_summary_df.empty:
