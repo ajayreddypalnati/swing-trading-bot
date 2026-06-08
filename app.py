@@ -59,8 +59,10 @@ def fetch_database_reference():
         engine = create_engine(db_url)
 
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
-        raw_sec = pd.read_sql('SELECT * FROM sector_analysis', engine)
-        raw_ind = pd.read_sql('SELECT * FROM industry_analysis', engine)
+        
+        # UPDATED: Pulling directly from the newly created ATH analysis tables
+        raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
+        raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
 
         sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
         ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
@@ -179,7 +181,7 @@ def create_metric_card(title, value, bg_color):
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
     st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Refreshed every 1 minute paired with Sector,Indutry & Momentum rank .</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</p>", unsafe_allow_html=True)
 
 with header_col2:
     ist = timezone(timedelta(hours=5, minutes=30))
@@ -318,7 +320,8 @@ st.rerun()
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
-    tab1, tab2 = st.tabs(["Sector Analysis", "Industry Analysis"])
+    # UPDATED: Changed the tab titles to match the new ATH tables being pulled
+    tab1, tab2 = st.tabs(["ATH Sector Analysis", "ATH Industry Analysis"])
     if not raw_sec.empty:
         with tab1:
             st.dataframe(raw_sec, use_container_width=True)
