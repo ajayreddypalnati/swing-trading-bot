@@ -179,7 +179,7 @@ def create_metric_card(title, value, bg_color):
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
     st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Real-time momentum paired with Supabase ATH Sector Rankings.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Refreshed every 1 minute paired with Sector,Indutry & Momentum rank .</p>", unsafe_allow_html=True)
 
 with header_col2:
     ist = timezone(timedelta(hours=5, minutes=30))
