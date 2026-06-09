@@ -61,12 +61,12 @@ st.markdown("""
             font-size: 0.85rem; /* Matches Streamlit native size */
         }
         .sleek-table th {
+            background-color: rgba(128, 128, 128, 0.08) !important; /* Grey background matching main table */
             text-align: center;
             vertical-align: middle;
-            padding: 8px;
+            padding: 10px 8px;
             border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-            color: gray;
-            font-weight: 600;
+            font-weight: bold !important; /* Bold headers */
         }
         .sleek-table td {
             text-align: center;
@@ -311,8 +311,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
-        # --- THE FIX: Custom Lightweight HTML for Top 5 / Top 15 Tables ---
-        # This guarantees perfect center alignment while keeping the font size and padding small.
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
