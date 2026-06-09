@@ -288,20 +288,37 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        # --- MODIFIED: Added ATH_Stocks and Avg 1D Return % to Top Tables ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
                 
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
-                    top_sec = raw_sec.nsmallest(5, 'Rank')[['Rank', 'Sector', 'ATH %']]
-                    top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                    sec_cols = ['Rank', 'Sector', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
+                    sec_cols = [c for c in sec_cols if c in raw_sec.columns]
+                    top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
+                    
+                    if 'ATH %' in top_sec.columns: 
+                        top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_sec.columns: 
+                        top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     st.dataframe(top_sec.set_index('Rank'), use_container_width=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
-                    top_ind = raw_ind.nsmallest(15, 'Rank')[['Rank', 'Broad Industry', 'ATH %']]
-                    top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                    ind_cols = ['Rank', 'Broad Industry', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
+                    ind_cols = [c for c in ind_cols if c in raw_ind.columns]
+                    top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
+                    
+                    if 'ATH %' in top_ind.columns: 
+                        top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_ind.columns: 
+                        top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
