@@ -38,6 +38,9 @@ st.markdown("""
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
+        .scrollable-table-container.mini table {
+            min-width: 100% !important; /* Prevents small top tables from scrolling unnecessarily on desktop */
+        }
         .scrollable-table-container th {
             background-color: rgba(128, 128, 128, 0.08) !important;
             text-align: center !important;
@@ -235,7 +238,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
-    # MODIFIED: Visually distinct Light Purple for the Last DB Update box
     default_bg = "rgba(216, 180, 254, 0.3)"
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
@@ -291,7 +293,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
-        # --- MODIFIED: Reverted back to native st.dataframe but explicitly centered via Styler ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
@@ -309,8 +310,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Apply center alignment styling directly to the native dataframe
-                    styled_sec = top_sec.set_index('Rank').style.set_properties(**{'text-align': 'center'})
+                    # Apply strict center alignment styling to native dataframe (Cells and Headers)
+                    styled_sec = top_sec.set_index('Rank').style.set_properties(
+                        **{'text-align': 'center', 'vertical-align': 'middle'}
+                    ).set_table_styles([
+                        {'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]},
+                        {'selector': 'td', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]}
+                    ])
                     st.dataframe(styled_sec, use_container_width=True)
                     
                 with lead_col2:
@@ -326,8 +332,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Apply center alignment styling directly to the native dataframe
-                    styled_ind = top_ind.set_index('Rank').style.set_properties(**{'text-align': 'center'})
+                    # Apply strict center alignment styling to native dataframe (Cells and Headers)
+                    styled_ind = top_ind.set_index('Rank').style.set_properties(
+                        **{'text-align': 'center', 'vertical-align': 'middle'}
+                    ).set_table_styles([
+                        {'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]},
+                        {'selector': 'td', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]}
+                    ])
                     st.dataframe(styled_ind, use_container_width=True)
                     
             st.markdown("<br>", unsafe_allow_html=True)
