@@ -24,22 +24,19 @@ st.markdown("""
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* CUSTOM HTML TABLE SCROLLING WRAPPER (Main Table Only) */
+        /* CUSTOM HTML TABLE SCROLLING WRAPPER (Main Table) */
         .scrollable-table-container {
             width: 100%;
             overflow-x: auto;
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+            -webkit-overflow-scrolling: touch; 
             margin-bottom: 1rem;
         }
         .scrollable-table-container table {
             width: 100%;
-            min-width: 900px; /* Forces main table to stay wide, triggering horizontal scroll on mobile */
+            min-width: 900px; 
             border-collapse: collapse;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        .scrollable-table-container.mini table {
-            min-width: 100% !important; /* Prevents small top tables from scrolling unnecessarily on desktop */
         }
         .scrollable-table-container th {
             background-color: rgba(128, 128, 128, 0.08) !important;
@@ -47,14 +44,35 @@ st.markdown("""
             vertical-align: middle !important;
             font-size: 0.85rem;
             padding: 15px !important;
-            white-space: nowrap; /* Prevents header text from wrapping */
+            white-space: nowrap; 
         }
         .scrollable-table-container td {
             text-align: center !important;
             vertical-align: middle !important;
             padding: 12px !important;
             border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
-            white-space: nowrap; /* Prevents data text from wrapping */
+            white-space: nowrap; 
+        }
+        
+        /* SLEEK HTML TABLE (For Top Sectors / Industries) */
+        .sleek-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem; /* Matches Streamlit native size */
+        }
+        .sleek-table th {
+            text-align: center;
+            vertical-align: middle;
+            padding: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+            color: gray;
+            font-weight: 600;
+        }
+        .sleek-table td {
+            text-align: center;
+            vertical-align: middle;
+            padding: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.1);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -183,15 +201,15 @@ def get_breadth_color(breadth_str):
         if match:
             val = float(match.group(1))
             if val <= 30.0:
-                return "rgba(252, 165, 165, 0.4)"  # Little more red
+                return "rgba(252, 165, 165, 0.4)"  
             elif val <= 40.0:
-                return "rgba(254, 202, 202, 0.4)"  # Little less red
+                return "rgba(254, 202, 202, 0.4)"  
             elif val <= 50.0:
-                return "rgba(253, 230, 138, 0.4)"  # Light yellow
+                return "rgba(253, 230, 138, 0.4)"  
             elif val <= 60.0:
-                return "rgba(187, 247, 208, 0.4)"  # Light green
+                return "rgba(187, 247, 208, 0.4)"  
             else:
-                return "rgba(134, 239, 172, 0.4)"  # More light green
+                return "rgba(134, 239, 172, 0.4)"  
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
@@ -293,6 +311,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        # --- THE FIX: Custom Lightweight HTML for Top 5 / Top 15 Tables ---
+        # This guarantees perfect center alignment while keeping the font size and padding small.
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
@@ -310,14 +330,16 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Apply strict center alignment styling to native dataframe (Cells and Headers)
-                    styled_sec = top_sec.set_index('Rank').style.set_properties(
-                        **{'text-align': 'center', 'vertical-align': 'middle'}
-                    ).set_table_styles([
-                        {'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]},
-                        {'selector': 'td', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]}
-                    ])
-                    st.dataframe(styled_sec, use_container_width=True)
+                    # Generate sleek HTML
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_sec.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for _, row in top_sec.iterrows():
+                        html += "<tr>"
+                        for val in row: html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
@@ -332,14 +354,16 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Apply strict center alignment styling to native dataframe (Cells and Headers)
-                    styled_ind = top_ind.set_index('Rank').style.set_properties(
-                        **{'text-align': 'center', 'vertical-align': 'middle'}
-                    ).set_table_styles([
-                        {'selector': 'th', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]},
-                        {'selector': 'td', 'props': [('text-align', 'center'), ('vertical-align', 'middle')]}
-                    ])
-                    st.dataframe(styled_ind, use_container_width=True)
+                    # Generate sleek HTML
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_ind.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for _, row in top_ind.iterrows():
+                        html += "<tr>"
+                        for val in row: html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
                     
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -354,7 +378,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
-        # Format the main dataframe using pandas Styler
         styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
