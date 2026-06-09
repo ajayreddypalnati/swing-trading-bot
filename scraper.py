@@ -425,7 +425,34 @@ def run_daily_scraper():
 
     sector_summary_df = build_summary_table(analysis_df, col_sector)
     industry_summary_df = build_summary_table(analysis_df, col_industry)
-    print("   ✅ Sector and Industry ATH rankings generated successfully.")
+    
+    # -------------------------------------------------------------
+    # NEW LOGIC: Calculate Average 1-Day Return of ATH Stocks
+    # -------------------------------------------------------------
+    if not ath_df.empty:
+        ath_1d_col = next((c for c in ath_df.columns if '1day return' in c.lower() or '1d' in c.lower()), None)
+        if ath_1d_col:
+            ath_df[ath_1d_col] = pd.to_numeric(ath_df[ath_1d_col], errors='coerce')
+            
+            # Merge Avg 1D Return for Sectors
+            if col_sector in ath_df.columns and not sector_summary_df.empty:
+                sec_avg = ath_df.groupby(col_sector)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
+                sector_summary_df = pd.merge(sector_summary_df, sec_avg, on=col_sector, how='left')
+                sector_summary_df['Avg 1D Return %'] = sector_summary_df['Avg 1D Return %'].round(2)
+                
+            # Merge Avg 1D Return for Industries
+            if col_industry in ath_df.columns and not industry_summary_df.empty:
+                ind_avg = ath_df.groupby(col_industry)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
+                industry_summary_df = pd.merge(industry_summary_df, ind_avg, on=col_industry, how='left')
+                industry_summary_df['Avg 1D Return %'] = industry_summary_df['Avg 1D Return %'].round(2)
+
+    # STRICT REQUIREMENT: Sort explicitly by Rank (Lowest to Highest)
+    if not sector_summary_df.empty:
+        sector_summary_df = sector_summary_df.sort_values(by='Rank', ascending=True).reset_index(drop=True)
+    if not industry_summary_df.empty:
+        industry_summary_df = industry_summary_df.sort_values(by='Rank', ascending=True).reset_index(drop=True)
+
+    print("   ✅ Sector and Industry ATH rankings generated successfully (with 1D Averages & Sorted).")
 
     # ==========================================
     # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
