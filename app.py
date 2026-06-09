@@ -24,7 +24,7 @@ st.markdown("""
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* CUSTOM HTML TABLE SCROLLING WRAPPER */
+        /* CUSTOM HTML TABLE SCROLLING WRAPPER (Main Table Only) */
         .scrollable-table-container {
             width: 100%;
             overflow-x: auto;
@@ -37,9 +37,6 @@ st.markdown("""
             border-collapse: collapse;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        .scrollable-table-container.mini table {
-            min-width: 100% !important; /* Prevents small top tables from scrolling unnecessarily on desktop */
         }
         .scrollable-table-container th {
             background-color: rgba(128, 128, 128, 0.08) !important;
@@ -238,8 +235,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
-    # MODIFIED: Changed default background to soft pastel purple
-    default_bg = "rgba(233, 213, 255, 0.5)"
+    # MODIFIED: Visually distinct Light Purple for the Last DB Update box
+    default_bg = "rgba(216, 180, 254, 0.3)"
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     with metric_col1:
@@ -294,11 +291,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        # --- MODIFIED: Reverted back to native st.dataframe but explicitly centered via Styler ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
                 
-                # MODIFIED: Converted Top 5 / Top 15 into perfectly centered HTML tables to match main table
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
                     sec_cols = ['Rank', 'Sector', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
@@ -312,8 +309,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    html_sec = top_sec.set_index('Rank').style.to_html()
-                    st.markdown(f'<div class="scrollable-table-container mini">{html_sec}</div>', unsafe_allow_html=True)
+                    # Apply center alignment styling directly to the native dataframe
+                    styled_sec = top_sec.set_index('Rank').style.set_properties(**{'text-align': 'center'})
+                    st.dataframe(styled_sec, use_container_width=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
@@ -328,8 +326,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    html_ind = top_ind.set_index('Rank').style.to_html()
-                    st.markdown(f'<div class="scrollable-table-container mini">{html_ind}</div>', unsafe_allow_html=True)
+                    # Apply center alignment styling directly to the native dataframe
+                    styled_ind = top_ind.set_index('Rank').style.set_properties(**{'text-align': 'center'})
+                    st.dataframe(styled_ind, use_container_width=True)
                     
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -344,6 +343,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
+        # Format the main dataframe using pandas Styler
         styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
