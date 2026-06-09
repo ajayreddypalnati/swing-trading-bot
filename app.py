@@ -33,20 +33,25 @@ st.markdown("""
         }
         .scrollable-table-container table {
             width: 100%;
-            min-width: 900px; /* Forces table to stay wide, triggering horizontal scroll on mobile */
+            min-width: 900px; /* Forces main table to stay wide, triggering horizontal scroll on mobile */
             border-collapse: collapse;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
+        .scrollable-table-container.mini table {
+            min-width: 100% !important; /* Prevents small top tables from scrolling unnecessarily on desktop */
+        }
         .scrollable-table-container th {
             background-color: rgba(128, 128, 128, 0.08) !important;
             text-align: center !important;
+            vertical-align: middle !important;
             font-size: 0.85rem;
             padding: 15px !important;
             white-space: nowrap; /* Prevents header text from wrapping */
         }
         .scrollable-table-container td {
             text-align: center !important;
+            vertical-align: middle !important;
             padding: 12px !important;
             border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
             white-space: nowrap; /* Prevents data text from wrapping */
@@ -233,7 +238,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
-    default_bg = "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+    # MODIFIED: Changed default background to soft pastel purple
+    default_bg = "rgba(233, 213, 255, 0.5)"
 
     metric_col1, metric_col2, metric_col3 = st.columns(3)
     with metric_col1:
@@ -288,11 +294,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
-        # --- MODIFIED: Added ATH_Stocks and Avg 1D Return % to Top Tables ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
                 
+                # MODIFIED: Converted Top 5 / Top 15 into perfectly centered HTML tables to match main table
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
                     sec_cols = ['Rank', 'Sector', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
@@ -305,7 +311,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
                     
                     top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    st.dataframe(top_sec.set_index('Rank'), use_container_width=True)
+                    
+                    html_sec = top_sec.set_index('Rank').style.to_html()
+                    st.markdown(f'<div class="scrollable-table-container mini">{html_sec}</div>', unsafe_allow_html=True)
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
@@ -319,7 +327,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
                     
                     top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    st.dataframe(top_ind.set_index('Rank'), use_container_width=True)
+                    
+                    html_ind = top_ind.set_index('Rank').style.to_html()
+                    st.markdown(f'<div class="scrollable-table-container mini">{html_ind}</div>', unsafe_allow_html=True)
+                    
             st.markdown("<br>", unsafe_allow_html=True)
 
         def highlight_priority(val):
@@ -333,7 +344,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             try: return f"{prefix}{int(float(val))}{suffix}"
             except: return ""
 
-        # Format the dataframe using pandas Styler
         styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
             "Close": "₹{:.2f}", 
             "% Change": "{:.2f}%", 
@@ -345,7 +355,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "Ind. Rank": lambda x: safe_int(x, "#"),
         })
         
-        # --- THE FIX: Outputting the styled table as raw HTML inside our scrollable container ---
         html_table = styled_df.to_html()
         st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
 
