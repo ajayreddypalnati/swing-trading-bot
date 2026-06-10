@@ -136,8 +136,8 @@ def fetch_database_reference():
                 
                 if len(vals) >= 2:
                     latest_val = vals[0]
-                    oldest_val = vals[-1] # Represents roughly 7 days ago
-                    diff = latest_val - oldest_val
+                    avg_5d = sum(vals[1:]) / len(vals[1:])
+                    diff = latest_val - avg_5d
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
