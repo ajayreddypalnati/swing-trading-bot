@@ -121,6 +121,12 @@ def fetch_database_reference():
         except Exception:
             last_sync = "Pending Run..."
 
+        # Fetch historical data for plotting (Last 30 days)
+        try:
+            full_mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30', engine)
+        except Exception:
+            full_mood_df = pd.DataFrame()
+
         try:
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
@@ -129,8 +135,7 @@ def fetch_database_reference():
             market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
             
             # --- 5-DAY TREND LOGIC ---
-            # 2. Pull the last 5 trading days from historical_market_mood for the historical baseline average
-            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
+            mood_df = full_mood_df.head(5) if not full_mood_df.empty else pd.DataFrame()
             
             if not mood_df.empty and market_trend_summary_val is not None:
                 def extract_pct(s):
@@ -140,10 +145,7 @@ def fetch_database_reference():
                 vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
                 
                 if len(vals) > 0:
-                    # 3. Calculate average of all 5 trailing days
                     avg_5d = sum(vals) / len(vals)
-                    
-                    # 4. Difference logic: Summary metric vs historical mood baseline
                     diff = float(market_trend_summary_val) - avg_5d
                     
                     if diff >= 2.0:
@@ -158,11 +160,11 @@ def fetch_database_reference():
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -328,7 +330,7 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
@@ -391,6 +393,22 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        # --- NEW HISTORICAL CHART EXPANDER ---
+        if not full_mood_df.empty:
+            with st.expander("📈 Historical Market Breadth Trend (Last 30 Days)", expanded=False):
+                chart_df = full_mood_df.copy()
+                # Clean the data: extract the numbers and convert dates
+                chart_df['Breadth %'] = chart_df['Market Breadth'].str.extract(r'(\d+\.?\d*)').astype(float)
+                chart_df['Date'] = pd.to_datetime(chart_df['Date'])
+                
+                # Sort from oldest to newest for plotting
+                chart_df = chart_df.sort_values('Date')
+                chart_df.set_index('Date', inplace=True)
+                
+                # Plot natively with Streamlit
+                st.area_chart(chart_df['Breadth %'], color="#8b5cf6") # Uses a sleek purple color
+        
+        # --- EXISTING SECTOR/INDUSTRY EXPANDER ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
