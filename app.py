@@ -107,7 +107,8 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
+        # Added "Exchange" as exchange to the query
+        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as exchange FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
         raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
@@ -348,15 +349,21 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     st.markdown("<br>", unsafe_allow_html=True)
 
     if data:
-        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
+        # Load API data, renaming the API's exchange column temporarily to avoid clash with DB
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "API_Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
         if not main_df.empty:
+            # Merge main_df, which now includes 'exchange'
             df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
+            
+            # Fallback: if the stock isn't in stock_master yet, use the exchange from the API
+            df['exchange'] = df['exchange'].fillna(df['API_Exchange'])
+            
             df = df.merge(sec_rank_df, on="sector", how="left")
             df = df.merge(ind_rank_df, on="broad_industry", how="left")
         else:
-            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['exchange'] = "", "", np.nan, np.nan, np.nan, df['API_Exchange']
 
         df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
         df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
@@ -378,12 +385,15 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-        display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        # Reordered columns to place 'exchange' directly after 'Symbol'
+        display_cols = ["Priority", "Symbol", "exchange", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
+        # Formatting titles
         display_df = display_df.rename(columns={
+            "exchange": "Exchange",
             "sector": "Sector", 
             "sec_rank": "Sector Rank", 
             "broad_industry": "Industry", 
