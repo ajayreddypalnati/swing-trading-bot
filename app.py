@@ -8,7 +8,7 @@ import streamlit as st
 import re
 import warnings
 from sqlalchemy import create_engine
-import yfinance as yf  # <-- ADDED FOR CNXSMALLCAP
+import yfinance as yf
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -59,15 +59,15 @@ st.markdown("""
         .sleek-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.85rem; /* Matches Streamlit native size */
+            font-size: 0.85rem; 
         }
         .sleek-table th {
-            background-color: rgba(128, 128, 128, 0.08) !important; /* Grey background matching main table */
+            background-color: rgba(128, 128, 128, 0.08) !important; 
             text-align: center;
             vertical-align: middle;
             padding: 10px 8px;
             border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-            font-weight: bold !important; /* Bold headers */
+            font-weight: bold !important; 
         }
         .sleek-table td {
             text-align: center;
@@ -199,7 +199,7 @@ def get_combined_data():
 def fetch_smallcap_20m_return():
     """Fetches 20-month historical return for CNXSMALLCAP via Yahoo Finance."""
     try:
-        ticker = "^CNXSC"
+        ticker = "^CNXSMALLCAP"
         end_date = datetime.now()
         start_date = end_date - pd.DateOffset(months=20)
         
@@ -315,7 +315,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     smallcap_val, smallcap_bg = fetch_smallcap_20m_return()
     default_bg = "rgba(216, 180, 254, 0.3)"
 
-    # --- MODIFIED: Adjusted layout to 5 columns ---
     metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
     with metric_col1:
         st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
