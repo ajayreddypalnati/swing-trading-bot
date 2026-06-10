@@ -8,7 +8,6 @@ import streamlit as st
 import re
 import warnings
 from sqlalchemy import create_engine
-import yfinance as yf
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -59,15 +58,15 @@ st.markdown("""
         .sleek-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.85rem; 
+            font-size: 0.85rem; /* Matches Streamlit native size */
         }
         .sleek-table th {
-            background-color: rgba(128, 128, 128, 0.08) !important; 
+            background-color: rgba(128, 128, 128, 0.08) !important; /* Grey background matching main table */
             text-align: center;
             vertical-align: middle;
             padding: 10px 8px;
             border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-            font-weight: bold !important; 
+            font-weight: bold !important; /* Bold headers */
         }
         .sleek-table td {
             text-align: center;
@@ -195,39 +194,6 @@ def get_combined_data():
             seen_symbols.add(symbol)
     return combined_data
 
-@st.cache_data(ttl=3600) # Cache for 1 hour to prevent API rate limits
-def fetch_smallcap_20m_return():
-    """Fetches 20-month historical return for CNXSMALLCAP via Yahoo Finance."""
-    try:
-        end_date = datetime.now()
-        start_date = end_date - pd.DateOffset(months=20)
-        
-        # Smart fallback: Try multiple known Yahoo Finance tickers for the index
-        tickers_to_try = ["^CNXSMALLCAP", "^CNXSC", "NIFTYSMLCAP100.NS"]
-        df = pd.DataFrame()
-        
-        for ticker in tickers_to_try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
-            if not df.empty and 'Close' in df.columns:
-                break # Stop searching once valid data is found
-        
-        if not df.empty and 'Close' in df.columns:
-            start_price = float(df['Close'].iloc[0])
-            end_price = float(df['Close'].iloc[-1])
-            
-            return_pct = ((end_price - start_price) / start_price) * 100
-            
-            # Formatting and color coding
-            color = "rgba(187, 247, 208, 0.4)" if return_pct > 0 else "rgba(252, 165, 165, 0.4)"
-            sign = "+" if return_pct > 0 else ""
-            
-            return f"{sign}{return_pct:.2f}%", color
-            
-        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
-    except Exception:
-        return "Error", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
-
 # --- HELPER: Dynamic Background Colors & Portfolio Allocation ---
 def get_breadth_color(breadth_str):
     try:
@@ -317,10 +283,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime)
-    smallcap_val, smallcap_bg = fetch_smallcap_20m_return()
     default_bg = "rgba(216, 180, 254, 0.3)"
 
-    metric_col1, metric_col2, metric_col3, metric_col4, metric_col5 = st.columns(5)
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     with metric_col1:
         st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
     with metric_col2:
@@ -328,8 +293,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     with metric_col3:
         st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
     with metric_col4:
-        st.markdown(create_metric_card("📈 CNX Smallcap (20M)", smallcap_val, smallcap_bg), unsafe_allow_html=True)
-    with metric_col5:
         st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -383,10 +346,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
+                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
                     sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     sec_cols = [c for c in sec_cols if c in raw_sec.columns]
                     top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
                     
+                    # HIGHLIGHT LOGIC: Find indices of top 2 highest 1D Avg Returns
                     top_2_sec_idx = []
                     if 'Avg 1D Return %' in top_sec.columns:
                         top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
@@ -402,6 +367,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     for col in top_sec.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
                     for idx, row in top_sec.iterrows():
+                        # Inject light green background for Top 2 1D Averages
                         bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_2_sec_idx else ""
                         html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
@@ -411,10 +377,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
+                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
                     ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     ind_cols = [c for c in ind_cols if c in raw_ind.columns]
                     top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
                     
+                    # HIGHLIGHT LOGIC: Find indices of top 4 highest 1D Avg Returns
                     top_4_ind_idx = []
                     if 'Avg 1D Return %' in top_ind.columns:
                         top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
@@ -430,6 +398,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     for col in top_ind.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
                     for idx, row in top_ind.iterrows():
+                        # Inject light green background for Top 4 1D Averages
                         bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_4_ind_idx else ""
                         html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
