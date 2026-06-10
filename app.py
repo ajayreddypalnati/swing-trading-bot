@@ -125,19 +125,26 @@ def fetch_database_reference():
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
             
-            # --- 7-DAY TREND LOGIC ---
+            # 1. Grab the latest composite score from market_trend_summary
+            market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
+            
+            # --- 5-DAY TREND LOGIC ---
+            # 2. Pull the last 5 trading days from historical_market_mood for the historical baseline average
             mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
-            if len(mood_df) >= 2:
+            
+            if not mood_df.empty and market_trend_summary_val is not None:
                 def extract_pct(s):
-                    match = re.search(r'(\d+\.?\d*)%', str(s))
+                    match = re.search(r'(\d+\.?\d*)', str(s))
                     return float(match.group(1)) if match else None
                 
                 vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
                 
-                if len(vals) >= 2:
-                    latest_val = vals[0]
-                    avg_5d = sum(vals[1:]) / len(vals[1:])
-                    diff = latest_val - avg_5d
+                if len(vals) > 0:
+                    # 3. Calculate average of all 5 trailing days
+                    avg_5d = sum(vals) / len(vals)
+                    
+                    # 4. Difference logic: Summary metric vs historical mood baseline
+                    diff = float(market_trend_summary_val) - avg_5d
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
@@ -370,12 +377,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
-                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
                     sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     sec_cols = [c for c in sec_cols if c in raw_sec.columns]
                     top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
                     
-                    # HIGHLIGHT LOGIC: Find indices of top 2 highest 1D Avg Returns
                     top_2_sec_idx = []
                     if 'Avg 1D Return %' in top_sec.columns:
                         top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
@@ -391,7 +396,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     for col in top_sec.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
                     for idx, row in top_sec.iterrows():
-                        # Inject light green background for Top 2 1D Averages
                         bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_2_sec_idx else ""
                         html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
@@ -401,12 +405,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
-                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
                     ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     ind_cols = [c for c in ind_cols if c in raw_ind.columns]
                     top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
                     
-                    # HIGHLIGHT LOGIC: Find indices of top 4 highest 1D Avg Returns
                     top_4_ind_idx = []
                     if 'Avg 1D Return %' in top_ind.columns:
                         top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
@@ -422,7 +424,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     for col in top_ind.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
                     for idx, row in top_ind.iterrows():
-                        # Inject light green background for Top 4 1D Averages
                         bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_4_ind_idx else ""
                         html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
@@ -460,9 +461,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
-time.sleep(60)
-st.rerun()
-
 st.markdown("<br><br>", unsafe_allow_html=True)
 with st.expander("🗄️ View Full Raw Supabase Tables"):
     tab1, tab2 = st.tabs(["ATH Sector Analysis", "ATH Industry Analysis"])
@@ -472,3 +470,6 @@ with st.expander("🗄️ View Full Raw Supabase Tables"):
     if not raw_ind.empty:
         with tab2:
             st.dataframe(raw_ind, use_container_width=True)
+
+time.sleep(60)
+st.rerun()
