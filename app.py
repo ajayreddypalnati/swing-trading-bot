@@ -461,15 +461,5 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     else:
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
-st.markdown("<br><br>", unsafe_allow_html=True)
-with st.expander("🗄️ View Full Raw Supabase Tables"):
-    tab1, tab2 = st.tabs(["ATH Sector Analysis", "ATH Industry Analysis"])
-    if not raw_sec.empty:
-        with tab1:
-            st.dataframe(raw_sec, use_container_width=True)
-    if not raw_ind.empty:
-        with tab2:
-            st.dataframe(raw_ind, use_container_width=True)
-
 time.sleep(60)
 st.rerun()
