@@ -248,25 +248,41 @@ def get_breadth_color(breadth_str):
 def get_portfolio_allocation(breadth_str):
     """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
     try:
+        # Extract the percentage value
         match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
         if match:
             val = float(match.group(1))
-            if val <= 20.0:
-                return "0% Equity", "rgba(252, 165, 165, 0.4)"      # 0 - 20
-            elif val <= 25.0:
-                return "10% Equity", "rgba(254, 202, 202, 0.4)"     # 21 - 25
-            elif val <= 30.0:
-                return "20% Equity", "rgba(254, 202, 202, 0.4)"     # 26 - 30
-            elif val <= 35.0:
-                return "35% Equity", "rgba(253, 230, 138, 0.4)"     # 31 - 35
-            elif val <= 40.0:
-                return "50% Equity", "rgba(253, 230, 138, 0.4)"     # 36 - 40
-            elif val <= 45.0:
-                return "65% Equity", "rgba(187, 247, 208, 0.4)"     # 41 - 45
-            elif val <= 50.0:
-                return "80% Equity", "rgba(187, 247, 208, 0.4)"     # 46 - 50
+            
+            # --- NEW LOGIC: Determine the Trading Action Suffix ---
+            if val <= 50.0:
+                if "📈" in str(breadth_str):
+                    action_suffix = " - Trade"
+                elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
+                    action_suffix = " - Stop Trading"
+                else:
+                    action_suffix = "" # Default if no emoji is found yet
             else:
-                return "100% Equity", "rgba(134, 239, 172, 0.4)"    # 51+ (No MTF, maxed at 100%)
+                # If market breadth is > 50, ignore emojis and always trade
+                action_suffix = " - Trade"
+
+            # --- Apply Suffix to the Allocation Tiers ---
+            if val <= 20.0:
+                return f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"      # 0 - 20
+            elif val <= 25.0:
+                return f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     # 21 - 25
+            elif val <= 30.0:
+                return f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     # 26 - 30
+            elif val <= 35.0:
+                return f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     # 31 - 35
+            elif val <= 40.0:
+                return f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     # 36 - 40
+            elif val <= 45.0:
+                return f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     # 41 - 45
+            elif val <= 50.0:
+                return f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     # 46 - 50
+            else:
+                return f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    # 51+ 
+                
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
