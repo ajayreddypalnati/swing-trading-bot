@@ -346,9 +346,15 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
                 with lead_col1:
                     st.markdown("##### 🔥 Top 5 Sectors")
-                    sec_cols = ['Rank', 'Sector', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
+                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
+                    sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     sec_cols = [c for c in sec_cols if c in raw_sec.columns]
                     top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
+                    
+                    # HIGHLIGHT LOGIC: Find indices of top 2 highest 1D Avg Returns
+                    top_2_sec_idx = []
+                    if 'Avg 1D Return %' in top_sec.columns:
+                        top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
                     
                     if 'ATH %' in top_sec.columns: 
                         top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
@@ -360,8 +366,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     html = "<table class='sleek-table'><thead><tr>"
                     for col in top_sec.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
-                    for _, row in top_sec.iterrows():
-                        html += "<tr>"
+                    for idx, row in top_sec.iterrows():
+                        # Inject light green background for Top 2 1D Averages
+                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_2_sec_idx else ""
+                        html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
                         html += "</tr>"
                     html += "</tbody></table>"
@@ -369,9 +377,15 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                 with lead_col2:
                     st.markdown("##### 🚀 Top 15 Industries")
-                    ind_cols = ['Rank', 'Broad Industry', 'ATH_Stocks', 'ATH %', 'Avg 1D Return %']
+                    # REORDERED: Avg 1D Return % comes BEFORE ATH_Stocks
+                    ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
                     ind_cols = [c for c in ind_cols if c in raw_ind.columns]
                     top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
+                    
+                    # HIGHLIGHT LOGIC: Find indices of top 4 highest 1D Avg Returns
+                    top_4_ind_idx = []
+                    if 'Avg 1D Return %' in top_ind.columns:
+                        top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
                     
                     if 'ATH %' in top_ind.columns: 
                         top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
@@ -383,8 +397,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     html = "<table class='sleek-table'><thead><tr>"
                     for col in top_ind.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
-                    for _, row in top_ind.iterrows():
-                        html += "<tr>"
+                    for idx, row in top_ind.iterrows():
+                        # Inject light green background for Top 4 1D Averages
+                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_4_ind_idx else ""
+                        html += f"<tr{bg_style}>"
                         for val in row: html += f"<td>{val}</td>"
                         html += "</tr>"
                     html += "</tbody></table>"
