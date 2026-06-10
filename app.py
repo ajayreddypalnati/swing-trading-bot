@@ -258,17 +258,14 @@ def get_portfolio_allocation(breadth_str):
             if val <= 20.0:
                 # Hard override: If market breadth is 20% or lower, completely halt trading.
                 action_suffix = " - No new Trades"
-            elif val <= 50.0:
-                # If breadth is between 20.1% and 50.0%, check short-term momentum
+            else:
+                # For all breadth > 20%, strictly follow the short-term momentum trend
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
                     action_suffix = " - No new Trades"
                 else:
                     action_suffix = "" # Default if no emoji is found yet
-            else:
-                # If market breadth is > 50, ignore emojis and always trade
-                action_suffix = " - Trade"
 
             # --- Apply Suffix to the Allocation Tiers ---
             if val <= 20.0:
