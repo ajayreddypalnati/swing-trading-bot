@@ -199,13 +199,18 @@ def get_combined_data():
 def fetch_smallcap_20m_return():
     """Fetches 20-month historical return for CNXSMALLCAP via Yahoo Finance."""
     try:
-        ticker = "^CNXSMALLCAP"
         end_date = datetime.now()
         start_date = end_date - pd.DateOffset(months=20)
         
-        # Pull daily historical data
-        stock = yf.Ticker(ticker)
-        df = stock.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+        # Smart fallback: Try multiple known Yahoo Finance tickers for the index
+        tickers_to_try = ["^CNXSMALLCAP", "^CNXSC", "NIFTYSMLCAP100.NS"]
+        df = pd.DataFrame()
+        
+        for ticker in tickers_to_try:
+            stock = yf.Ticker(ticker)
+            df = stock.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+            if not df.empty and 'Close' in df.columns:
+                break # Stop searching once valid data is found
         
         if not df.empty and 'Close' in df.columns:
             start_price = float(df['Close'].iloc[0])
