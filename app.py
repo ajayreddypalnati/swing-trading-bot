@@ -126,7 +126,7 @@ def fetch_database_reference():
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
             
             # --- 7-DAY TREND LOGIC ---
-            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 7', engine)
+            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
             if len(mood_df) >= 2:
                 def extract_pct(s):
                     match = re.search(r'(\d+\.?\d*)%', str(s))
