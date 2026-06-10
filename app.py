@@ -194,7 +194,7 @@ def get_combined_data():
             seen_symbols.add(symbol)
     return combined_data
 
-# --- HELPER: Dynamic Background Colors (Soft Pastels) ---
+# --- HELPER: Dynamic Background Colors & Portfolio Allocation ---
 def get_breadth_color(breadth_str):
     try:
         match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
@@ -214,11 +214,37 @@ def get_breadth_color(breadth_str):
     except:
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
+def get_portfolio_allocation(breadth_str):
+    """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
+    try:
+        match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
+        if match:
+            val = float(match.group(1))
+            if val <= 20.0:
+                return "0% Equity", "rgba(252, 165, 165, 0.4)"      # 0 - 20
+            elif val <= 25.0:
+                return "10% Equity", "rgba(254, 202, 202, 0.4)"     # 21 - 25
+            elif val <= 30.0:
+                return "20% Equity", "rgba(254, 202, 202, 0.4)"     # 26 - 30
+            elif val <= 35.0:
+                return "35% Equity", "rgba(253, 230, 138, 0.4)"     # 31 - 35
+            elif val <= 40.0:
+                return "50% Equity", "rgba(253, 230, 138, 0.4)"     # 36 - 40
+            elif val <= 45.0:
+                return "65% Equity", "rgba(187, 247, 208, 0.4)"     # 41 - 45
+            elif val <= 50.0:
+                return "80% Equity", "rgba(187, 247, 208, 0.4)"     # 46 - 50
+            else:
+                return "100% Equity", "rgba(134, 239, 172, 0.4)"    # 51+ (No MTF, maxed at 100%)
+        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+    except:
+        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+
 def create_metric_card(title, value, bg_color):
     return f"""
     <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); height: 100%;">
         <span style="font-size: 0.875rem; color: #4B5563; font-weight: 500; font-family: 'Inter', sans-serif;">{title}</span><br>
-        <span style="color: #000000; font-size: 1.875rem; font-weight: 600; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif;">{value}</span>
+        <span style="color: #000000; font-size: 1.7rem; font-weight: 600; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif;">{value}</span>
     </div>
     """
 
@@ -256,14 +282,17 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
+    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime)
     default_bg = "rgba(216, 180, 254, 0.3)"
 
-    metric_col1, metric_col2, metric_col3 = st.columns(3)
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     with metric_col1:
         st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
     with metric_col2:
         st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_bg), unsafe_allow_html=True)
     with metric_col3:
+        st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
+    with metric_col4:
         st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -328,7 +357,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Generate sleek HTML
                     html = "<table class='sleek-table'><thead><tr>"
                     for col in top_sec.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
@@ -352,7 +380,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
                     
-                    # Generate sleek HTML
                     html = "<table class='sleek-table'><thead><tr>"
                     for col in top_ind.columns: html += f"<th>{col}</th>"
                     html += "</tr></thead><tbody>"
