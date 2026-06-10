@@ -254,7 +254,11 @@ def get_portfolio_allocation(breadth_str):
             val = float(match.group(1))
             
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
-            if val <= 50.0:
+            if val <= 20.0:
+                # Hard override: If market breadth is 20% or lower, completely halt trading.
+                action_suffix = " - Stop Trading"
+            elif val <= 50.0:
+                # If breadth is between 20.1% and 50.0%, check short-term momentum
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
