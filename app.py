@@ -124,8 +124,32 @@ def fetch_database_reference():
         try:
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
+            
+            # --- 7-DAY TREND LOGIC ---
+            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 7', engine)
+            if len(mood_df) >= 2:
+                def extract_pct(s):
+                    match = re.search(r'(\d+\.?\d*)%', str(s))
+                    return float(match.group(1)) if match else None
+                
+                vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
+                
+                if len(vals) >= 2:
+                    latest_val = vals[0]
+                    oldest_val = vals[-1] # Represents roughly 7 days ago
+                    diff = latest_val - oldest_val
+                    
+                    if diff >= 2.0:
+                        trend_sym = "📈"
+                    elif diff <= -2.0:
+                        trend_sym = "📉"
+                    else:
+                        trend_sym = "➖"
+                        
+                    trend_regime = f"{trend_regime} {trend_sym}"
         except Exception:
-            trend_regime = "N/A"
+            if 'trend_regime' not in locals():
+                trend_regime = "N/A"
 
         return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
 
