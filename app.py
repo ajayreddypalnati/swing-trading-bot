@@ -5,6 +5,7 @@ import numpy as np
 import time
 from datetime import datetime, timezone, timedelta
 import streamlit as st
+import streamlit.components.v1 as components
 import re
 import warnings
 from sqlalchemy import create_engine
@@ -77,6 +78,22 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- DISABLE STREAMLIT 'C' SHORTCUT ---
+components.html(
+    """
+    <script>
+    const doc = window.parent.document;
+    doc.addEventListener('keydown', function(e) {
+        if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
+            e.stopPropagation();
+        }
+    }, true);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
 # --- APIs & ENDPOINTS ---
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
@@ -107,7 +124,6 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        # UPDATED: Pulling the true "Exchange" column directly from stock_master
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
@@ -255,7 +271,11 @@ def get_portfolio_allocation(breadth_str):
             val = float(match.group(1))
             
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
-            if val <= 50.0:
+            if val <= 20.0:
+                # Hard override: If market breadth is 20% or lower, completely halt trading.
+                action_suffix = " - Stop Trading"
+            elif val <= 50.0:
+                # If breadth is between 20.1% and 50.0%, check short-term momentum
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
