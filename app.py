@@ -107,7 +107,8 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
+        # UPDATED: Pulling the true "Exchange" column directly from stock_master
+        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
         raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
@@ -344,15 +345,21 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     st.markdown("<br>", unsafe_allow_html=True)
 
     if data:
-        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
+        # Load initially with a temporary scraped exchange column
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
         if not main_df.empty:
             df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
             df = df.merge(sec_rank_df, on="sector", how="left")
             df = df.merge(ind_rank_df, on="broad_industry", how="left")
+            
+            # --- OVERWRITE EXCHANGE LOGIC ---
+            # Use Supabase 'db_exchange' if it exists and isn't empty, otherwise fallback to scraped
+            df['Exchange'] = np.where(df['db_exchange'].notna() & (df['db_exchange'] != ""), df['db_exchange'], df['Temp_Exchange'])
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+            df['Exchange'] = df['Temp_Exchange']
 
         df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
         df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
