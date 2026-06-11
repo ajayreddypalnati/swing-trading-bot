@@ -8,6 +8,7 @@ import streamlit as st
 import re
 import warnings
 from sqlalchemy import create_engine
+import plotly.graph_objects as go
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -159,11 +160,17 @@ def fetch_database_reference():
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
+        try:
+            roc_df = pd.read_sql('SELECT "ROC_20M_Percent" FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
+            roc_vals = roc_df["ROC_20M_Percent"].tolist()
+        except Exception:
+            roc_vals = []
+
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", []
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -325,7 +332,7 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
@@ -397,6 +404,79 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         })
         
         if not raw_sec.empty and not raw_ind.empty:
+            with st.expander("Market breadth", expanded=False):
+                if roc_vals:
+                    roc_val = float(roc_vals[0])
+                    trend_dir = "up"
+                    # Compare latest ROC against previous to determine direction of the curve
+                    if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
+                        trend_dir = "down"
+
+                    # Map ROC specific values to stages & dot coordinates based on user instructions
+                    if trend_dir == "up":
+                        if roc_val <= 0:
+                            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 10
+                        elif roc_val <= 40:
+                            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 20
+                        elif roc_val <= 60:
+                            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 35
+                        elif roc_val <= 80:
+                            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 55
+                        elif roc_val <= 100:
+                            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 80
+                        else:
+                            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 110
+                    else:
+                        if roc_val >= 80:
+                            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 90
+                        elif roc_val >= 60:
+                            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 70
+                        elif roc_val >= 40:
+                            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 50
+                        elif roc_val >= 20:
+                            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 30
+                        elif roc_val >= 0:
+                            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 110, 15
+                        else:
+                            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
+
+                    # Draw the curve mirroring the psychology chart
+                    curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
+                    curve_y = [10, 20, 35, 55, 80, 110, 90, 70, 50, 30, 15, 5, 20]
+                    stage_names = ["Disbelief", "Hope", "Optimism", "Belief", "Thrill", "Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression", "Disbelief"]
+
+                    fig = go.Figure()
+                    
+                    # Cycle Line
+                    fig.add_trace(go.Scatter(
+                        x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
+                        textposition="bottom center", textfont=dict(color='#6B7280', size=10),
+                        line=dict(shape='spline', smoothing=1.3, color='#4B5563', width=2), hoverinfo='none', name='Market Cycle'
+                    ))
+                    
+                    # Specific Green Dot Position
+                    fig.add_trace(go.Scatter(
+                        x=[dot_x], y=[dot_y], mode='markers', 
+                        marker=dict(color='#27ae60', size=16, line=dict(color='white', width=2)), name='Current Stage'
+                    ))
+
+                    fig.update_layout(
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(l=0, r=0, t=10, b=10), showlegend=False, height=250
+                    )
+                    
+                    st.markdown(f"""
+                    <div style="background: rgba(39, 174, 96, 0.1); border-left: 4px solid #27ae60; padding: 10px 15px; border-radius: 4px; margin-bottom: 10px;">
+                        <h4 style="margin: 0; color: #27ae60;">Current Stage: {stage} (ROC: {roc_val}%)</h4>
+                        <p style="margin: 5px 0 0 0; font-size: 0.95rem; color: #d1d5db;">"{note}"</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No ROC data available to plot Market Cycle.")
+
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
                 
