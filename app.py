@@ -77,26 +77,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- SVG INJECTION HACK: DESTROY THE 'C' SHORTCUT ---
-st.markdown("""
-    <div style="display:none;">
-        <svg onload="
-            document.addEventListener('keydown', function(e) {
-                // Let the user type 'c' inside actual text boxes if needed
-                const tag = e.target.tagName.toLowerCase();
-                if (tag === 'input' || tag === 'textarea') return;
-                
-                // If they press C without holding Ctrl, kill the event entirely
-                if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
-                    e.stopImmediatePropagation();
-                    e.stopPropagation();
-                    e.preventDefault();
-                }
-            }, true);
-        "></svg>
-    </div>
-""", unsafe_allow_html=True)
-
 # --- APIs & ENDPOINTS ---
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
@@ -127,6 +107,7 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
+        # UPDATED: Pulling the true "Exchange" column directly from stock_master
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
@@ -274,11 +255,7 @@ def get_portfolio_allocation(breadth_str):
             val = float(match.group(1))
             
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
-            if val <= 20.0:
-                # Hard override: If market breadth is 20% or lower, completely halt trading.
-                action_suffix = " - Stop Trading"
-            elif val <= 50.0:
-                # If breadth is between 20.1% and 50.0%, check short-term momentum
+            if val <= 50.0:
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
