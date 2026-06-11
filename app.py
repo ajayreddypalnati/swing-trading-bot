@@ -80,15 +80,13 @@ st.markdown("""
 # --- APIs & ENDPOINTS ---
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
-# UPDATED: Price expansion to < 10
-CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  10 and  daily volume * daily close >=  10000000 ) )"
+CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  5 and  daily volume * daily close >=  10000000 ) )"
 
 TV_URL = 'https://scanner.tradingview.com/india/scan'
 TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
-# UPDATED: Value.Traded to 10000000 and change in_range to [0, 10]
 TV_PAYLOAD = {
     "columns": ["ticker-view", "close", "type", "typespecs", "change", "volume", "sector.tr", "market", "sector"],
-    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 10000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 10]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
+    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 30000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 5]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
     "options": {"lang": "en"}, "range": [0, 100], "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"}, "markets": ["india"]
 }
 
@@ -123,12 +121,6 @@ def fetch_database_reference():
         except Exception:
             last_sync = "Pending Run..."
 
-        # Fetch historical data for plotting (Last 30 days)
-        try:
-            full_mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30', engine)
-        except Exception:
-            full_mood_df = pd.DataFrame()
-
         try:
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
@@ -137,7 +129,8 @@ def fetch_database_reference():
             market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
             
             # --- 5-DAY TREND LOGIC ---
-            mood_df = full_mood_df.head(5) if not full_mood_df.empty else pd.DataFrame()
+            # 2. Pull the last 5 trading days from historical_market_mood for the historical baseline average
+            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
             
             if not mood_df.empty and market_trend_summary_val is not None:
                 def extract_pct(s):
@@ -147,9 +140,11 @@ def fetch_database_reference():
                 vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
                 
                 if len(vals) > 0:
+                    # 3. Calculate average of all 5 trailing days
                     avg_5d = sum(vals) / len(vals)
-                    # UPDATED: Reversed Math (Average - Current = Difference)
-                    diff = avg_5d - float(market_trend_summary_val)
+                    
+                    # 4. Difference logic: Summary metric vs historical mood baseline
+                    diff = float(market_trend_summary_val) - avg_5d
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
@@ -163,11 +158,11 @@ def fetch_database_reference():
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -259,11 +254,7 @@ def get_portfolio_allocation(breadth_str):
             val = float(match.group(1))
             
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
-            if val <= 20.0:
-                # Hard override: If market breadth is 20% or lower, completely halt trading.
-                action_suffix = " - Stop Trading"
-            elif val <= 50.0:
-                # If breadth is between 20.1% and 50.0%, check short-term momentum
+            if val <= 50.0:
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
@@ -333,7 +324,7 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
@@ -396,7 +387,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
-        # --- EXISTING SECTOR/INDUSTRY EXPANDER ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
