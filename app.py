@@ -375,11 +375,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
             p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
             p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+            p5 = (df['ind_rank'] <= 15) & (df['sec_rank'] >= 6) & ~p1 & ~p2 & ~p3 & ~p4
 
             df.loc[p1, 'Priority'] = 1
             df.loc[p2, 'Priority'] = 2
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
+            df.loc[p5, 'Priority'] = 5
 
         display_cols = ["Priority", "Symbol", "Exchange", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
