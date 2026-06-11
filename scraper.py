@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from playwright.sync_api import sync_playwright
+from tvDatafeed import TvDatafeed, Interval
 
 # Force unbuffered output so execution logs write instantly to Windows command prompt
 sys.stdout.reconfigure(line_buffering=True)
@@ -623,6 +624,39 @@ def run_daily_scraper():
             
     except Exception as e:
         print(f"   ❌ FATAL ERROR during database upload: {e}")
+
+    # ==========================================
+    # STEP 7: PULL CNXSMALLCAP ROC & PUSH TO DB
+    # ==========================================
+    print("\n📈 STEP 7: Fetching 20-Month ROC for CNXSMALLCAP from TradingView...")
+    try:
+        tv = TvDatafeed()
+        tv_data = tv.get_hist(symbol='CNXSMALLCAP', exchange='NSE', interval=Interval.in_monthly, n_bars=25)
+
+        if tv_data is not None and not tv_data.empty:
+            current_close = tv_data['close'].iloc[-1]
+            past_close = tv_data['close'].iloc[-21] 
+            roc_20m = round(((current_close - past_close) / past_close) * 100, 2)
+
+            print(f"   📊 Calculated 20-Month ROC: {roc_20m}%")
+
+            # Create dataframe with timestamp for the history log
+            roc_timestamp = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%Y-%m-%d %H:%M:%S')
+            roc_df = pd.DataFrame([{
+                "Date": roc_timestamp,
+                "Symbol": "CNXSMALLCAP",
+                "Current_Price": current_close,
+                "Price_20_Months_Ago": past_close,
+                "ROC_20M_Percent": roc_20m
+            }])
+
+            # Append mode ensures it keeps a running history table each time the script runs
+            roc_df.to_sql("CNXSMALLCAP_ROC", engine, if_exists="append", index=False)
+            print(f"   ✅ 'CNXSMALLCAP_ROC' updated successfully in Supabase.")
+        else:
+            print("   ⚠️ WARNING: Failed to fetch CNXSMALLCAP data from TradingView.")
+    except Exception as e:
+        print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
 
     print("\n" + "="*60)
     print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
