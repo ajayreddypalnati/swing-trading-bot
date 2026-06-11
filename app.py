@@ -396,21 +396,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
-        # --- NEW HISTORICAL CHART EXPANDER ---
-        if not full_mood_df.empty:
-            with st.expander("📈 Historical Market Breadth Trend (Last 30 Days)", expanded=False):
-                chart_df = full_mood_df.copy()
-                # Clean the data: extract the numbers and convert dates
-                chart_df['Breadth %'] = chart_df['Market Breadth'].str.extract(r'(\d+\.?\d*)').astype(float)
-                chart_df['Date'] = pd.to_datetime(chart_df['Date'])
-                
-                # Sort from oldest to newest for plotting
-                chart_df = chart_df.sort_values('Date')
-                chart_df.set_index('Date', inplace=True)
-                
-                # Plot natively with Streamlit
-                st.area_chart(chart_df['Breadth %'], color="#8b5cf6") # Uses a sleek purple color
-        
         # --- EXISTING SECTOR/INDUSTRY EXPANDER ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
