@@ -80,13 +80,15 @@ st.markdown("""
 # --- APIs & ENDPOINTS ---
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
-CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  5 and  daily volume * daily close >=  10000000 ) )"
+# UPDATED: Price expansion to < 10
+CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  10 and  daily volume * daily close >=  10000000 ) )"
 
 TV_URL = 'https://scanner.tradingview.com/india/scan'
 TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
+# UPDATED: Value.Traded to 10000000 and change in_range to [0, 10]
 TV_PAYLOAD = {
     "columns": ["ticker-view", "close", "type", "typespecs", "change", "volume", "sector.tr", "market", "sector"],
-    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 30000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 5]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
+    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 10000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 10]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
     "options": {"lang": "en"}, "range": [0, 100], "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"}, "markets": ["india"]
 }
 
@@ -107,8 +109,7 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        # Added "Exchange" as exchange to the query
-        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as exchange FROM stock_master', engine)
+        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
         raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
@@ -122,6 +123,12 @@ def fetch_database_reference():
         except Exception:
             last_sync = "Pending Run..."
 
+        # Fetch historical data for plotting (Last 30 days)
+        try:
+            full_mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30', engine)
+        except Exception:
+            full_mood_df = pd.DataFrame()
+
         try:
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
@@ -130,8 +137,7 @@ def fetch_database_reference():
             market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
             
             # --- 5-DAY TREND LOGIC ---
-            # 2. Pull the last 5 trading days from historical_market_mood for the historical baseline average
-            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
+            mood_df = full_mood_df.head(5) if not full_mood_df.empty else pd.DataFrame()
             
             if not mood_df.empty and market_trend_summary_val is not None:
                 def extract_pct(s):
@@ -141,10 +147,8 @@ def fetch_database_reference():
                 vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
                 
                 if len(vals) > 0:
-                    # 3. Calculate average of all 5 trailing days
                     avg_5d = sum(vals) / len(vals)
-                    
-                    # 4. Difference logic: Summary metric vs historical mood baseline
+                    # UPDATED: Reversed Math (Average - Current = Difference)
                     diff = avg_5d - float(market_trend_summary_val)
                     
                     if diff >= 2.0:
@@ -159,11 +163,11 @@ def fetch_database_reference():
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error"
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -257,15 +261,18 @@ def get_portfolio_allocation(breadth_str):
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
             if val <= 20.0:
                 # Hard override: If market breadth is 20% or lower, completely halt trading.
-                action_suffix = " - No new Trades"
-            else:
-                # For all breadth > 20%, strictly follow the short-term momentum trend
+                action_suffix = " - Stop Trading"
+            elif val <= 50.0:
+                # If breadth is between 20.1% and 50.0%, check short-term momentum
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
-                    action_suffix = " - No new Trades"
+                    action_suffix = " - Stop Trading"
                 else:
                     action_suffix = "" # Default if no emoji is found yet
+            else:
+                # If market breadth is > 50, ignore emojis and always trade
+                action_suffix = " - Trade"
 
             # --- Apply Suffix to the Allocation Tiers ---
             if val <= 20.0:
@@ -326,7 +333,7 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime = fetch_database_reference()  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, full_mood_df = fetch_database_reference()  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
@@ -346,21 +353,15 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     st.markdown("<br>", unsafe_allow_html=True)
 
     if data:
-        # Load API data, renaming the API's exchange column temporarily to avoid clash with DB
-        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "API_Exchange"])
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
         if not main_df.empty:
-            # Merge main_df, which now includes 'exchange'
             df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
-            
-            # Fallback: if the stock isn't in stock_master yet, use the exchange from the API
-            df['exchange'] = df['exchange'].fillna(df['API_Exchange'])
-            
             df = df.merge(sec_rank_df, on="sector", how="left")
             df = df.merge(ind_rank_df, on="broad_industry", how="left")
         else:
-            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['exchange'] = "", "", np.nan, np.nan, np.nan, df['API_Exchange']
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
 
         df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
         df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
@@ -382,15 +383,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p3, 'Priority'] = 3
             df.loc[p4, 'Priority'] = 4
 
-        # Reordered columns to place 'exchange' directly after 'Symbol'
-        display_cols = ["Priority", "Symbol", "exchange", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_cols = ["Priority", "Symbol", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
-        # Formatting titles
         display_df = display_df.rename(columns={
-            "exchange": "Exchange",
             "sector": "Sector", 
             "sec_rank": "Sector Rank", 
             "broad_industry": "Industry", 
@@ -398,6 +396,22 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        # --- NEW HISTORICAL CHART EXPANDER ---
+        if not full_mood_df.empty:
+            with st.expander("📈 Historical Market Breadth Trend (Last 30 Days)", expanded=False):
+                chart_df = full_mood_df.copy()
+                # Clean the data: extract the numbers and convert dates
+                chart_df['Breadth %'] = chart_df['Market Breadth'].str.extract(r'(\d+\.?\d*)').astype(float)
+                chart_df['Date'] = pd.to_datetime(chart_df['Date'])
+                
+                # Sort from oldest to newest for plotting
+                chart_df = chart_df.sort_values('Date')
+                chart_df.set_index('Date', inplace=True)
+                
+                # Plot natively with Streamlit
+                st.area_chart(chart_df['Breadth %'], color="#8b5cf6") # Uses a sleek purple color
+        
+        # --- EXISTING SECTOR/INDUSTRY EXPANDER ---
         if not raw_sec.empty and not raw_ind.empty:
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
