@@ -145,7 +145,7 @@ def fetch_database_reference():
                     avg_5d = sum(vals) / len(vals)
                     
                     # 4. Difference logic: Summary metric vs historical mood baseline
-                    diff = float(market_trend_summary_val) - avg_5d
+                    diff = avg_5d - float(market_trend_summary_val)
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
