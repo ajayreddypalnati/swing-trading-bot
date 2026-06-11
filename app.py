@@ -78,14 +78,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- DISABLE STREAMLIT 'C' SHORTCUT ---
+# --- DISABLE STREAMLIT 'C' SHORTCUT (Aggressive Override) ---
 components.html(
     """
     <script>
-    const doc = window.parent.document;
-    doc.addEventListener('keydown', function(e) {
+    const parent = window.parent || window;
+    parent.document.addEventListener('keydown', function(e) {
         if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
+            e.stopImmediatePropagation();
             e.stopPropagation();
+            e.preventDefault();
         }
     }, true);
     </script>
@@ -271,11 +273,7 @@ def get_portfolio_allocation(breadth_str):
             val = float(match.group(1))
             
             # --- NEW LOGIC: Determine the Trading Action Suffix ---
-            if val <= 20.0:
-                # Hard override: If market breadth is 20% or lower, completely halt trading.
-                action_suffix = " - Stop Trading"
-            elif val <= 50.0:
-                # If breadth is between 20.1% and 50.0%, check short-term momentum
+            if val <= 50.0:
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
