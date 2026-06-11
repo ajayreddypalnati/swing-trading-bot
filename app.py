@@ -161,6 +161,7 @@ def fetch_database_reference():
                 trend_regime = "N/A"
 
         try:
+            # Fetch the last 2 ROC records to determine if the trend is heading up or down
             roc_df = pd.read_sql('SELECT "ROC_20M_Percent" FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
             roc_vals = roc_df["ROC_20M_Percent"].tolist()
         except Exception:
@@ -404,6 +405,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         })
         
         if not raw_sec.empty and not raw_ind.empty:
+            
+            # --- NEW MARKET BREADTH PLOTLY EXPANDER ---
             with st.expander("Market breadth", expanded=False):
                 if roc_vals:
                     roc_val = float(roc_vals[0])
