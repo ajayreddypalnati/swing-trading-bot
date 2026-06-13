@@ -254,17 +254,22 @@ def get_breadth_color(breadth_str):
     except:
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
-def get_portfolio_allocation(breadth_str):
+def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
     """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
     try:
-        match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
+        match = re.search(r'(\d+\.?\d*)%', str(nse_breadth_str))
+        live_match = re.search(r'(\d+\.?\d*)', str(live_breadth_str))
+
         if match:
             val = float(match.group(1))
-            
-            if val <= 50.0:
-                if "📈" in str(breadth_str):
+            live_val = float(live_match.group(1)) if live_match else 0.0
+
+            if live_val > 50.0:
+                action_suffix = " - Trade"
+            elif val <= 50.0:
+                if "📈" in str(nse_breadth_str):
                     action_suffix = " - Trade"
-                elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
+                elif "📉" in str(nse_breadth_str) or "➖" in str(nse_breadth_str):
                     action_suffix = " - Stop Trading"
                 else:
                     action_suffix = "" 
@@ -287,7 +292,7 @@ def get_portfolio_allocation(breadth_str):
                 return f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             else:
                 return f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    
-                
+
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
@@ -444,7 +449,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
-    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime)
+    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
     default_bg = "rgba(216, 180, 254, 0.3)"
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
