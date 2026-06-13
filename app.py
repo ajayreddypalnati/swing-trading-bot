@@ -408,7 +408,7 @@ def render_market_cycle_graph(roc_vals):
     </div>
     """, unsafe_allow_html=True)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 # ==========================================
 # 5. DASHBOARD MAIN LAYOUT
