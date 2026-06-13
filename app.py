@@ -16,7 +16,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. CSS INJECTION
+# 1. CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling)
 # ==========================================
 st.markdown("""
     <style>
@@ -312,38 +312,44 @@ def render_market_cycle_graph(roc_vals):
     if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
         trend_dir = "down"
 
-    # Map ROC specific values to stages & new BELL CURVE dot coordinates
+    # NEW STEEP TOWER COORDINATES FOR THE GREEN DOT
     if trend_dir == "up":
         if roc_val <= 0:
             stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 5
         elif roc_val <= 40:
             stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 15
         elif roc_val <= 60:
-            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 35
+            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 45
         elif roc_val <= 80:
-            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 65
+            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 100
         elif roc_val <= 100:
-            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 95
+            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 200
         else:
-            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 115
+            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 300
     else:
         if roc_val >= 80:
-            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 115
+            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 300
         elif roc_val >= 60:
-            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 95
+            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 200
         elif roc_val >= 40:
-            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 65
+            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 100
         elif roc_val >= 20:
-            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 35
+            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 45
         elif roc_val >= 0:
             stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 110, 15
         else:
             stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
 
-    # SYMMETRICAL BELL CURVE COORDINATES
+    # STEEP BELL CURVE COORDINATES
     curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
-    curve_y = [5, 15, 35, 65, 95, 115, 115, 95, 65, 35, 15, 5, 2]
-    stage_names = ["Disbelief", "Hope", "Optimism", "Belief", "Thrill", "Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression", "Disbelief"]
+    curve_y = [5, 15, 45, 100, 200, 300, 300, 200, 100, 45, 15, 5, 2]
+    
+    # BOLD, HIGH-VISIBILITY LABELS
+    stage_names = [
+        "<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", 
+        "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", 
+        "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
+    ]
 
     fig = go.Figure()
     
@@ -351,18 +357,18 @@ def render_market_cycle_graph(roc_vals):
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
         textposition="bottom center", 
-        textfont=dict(family="Inter, sans-serif", color='#9CA3AF', size=11),
-        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=3), # Sleek Indigo
-        fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', # Subtle gradient feel
+        textfont=dict(family="Inter, sans-serif", color='#374151', size=13), # Larger, darker text
+        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), # Thicker line
+        fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
         hoverinfo='none', name='Market Cycle'
     ))
     
-    # 2. Prominent Green Dot (Bigger, bolder border to stand out)
+    # 2. Prominent Green Dot
     fig.add_trace(go.Scatter(
         x=[dot_x], y=[dot_y], mode='markers', 
         marker=dict(
-            color='#10B981', # Emerald green
-            size=20, 
+            color='#10B981', 
+            size=22, # Slightly larger dot
             line=dict(color='#FFFFFF', width=4)
         ), 
         hoverinfo='none', name='Current Stage'
@@ -370,22 +376,23 @@ def render_market_cycle_graph(roc_vals):
 
     # 3. Floating Annotation pointing to the dot
     fig.add_annotation(
-        x=dot_x, y=dot_y + 18, # Float slightly above the dot
+        x=dot_x, y=dot_y + 45, # Float higher above the steeper line
         text=f"<b>{stage}</b>",
         showarrow=True,
         arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor='#10B981',
-        font=dict(family="Inter, sans-serif", size=13, color='#10B981'),
+        font=dict(family="Inter, sans-serif", size=14, color='#10B981'),
         bgcolor="rgba(255, 255, 255, 0.95)",
-        bordercolor="#10B981", borderwidth=1, borderpad=5,
+        bordercolor="#10B981", borderwidth=2, borderpad=6,
         opacity=1.0
     )
 
-    # 4. Clean Layout
+    # 4. Clean Layout (Increased Height for the "Tower" look)
     fig.update_layout(
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 140]),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-10, 150]),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-20, 380]), # Expanded Y-axis
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=10, r=10, t=30, b=30), showlegend=False, height=320
+        margin=dict(l=20, r=20, t=30, b=40), showlegend=False, 
+        height=500 # Increased height for steepness
     )
     
     # 5. CSS Wrapper for the surrounding info box
@@ -402,7 +409,6 @@ def render_market_cycle_graph(roc_vals):
     """, unsafe_allow_html=True)
     
     st.plotly_chart(fig, use_container_width=True)
-
 
 # ==========================================
 # 5. DASHBOARD MAIN LAYOUT
