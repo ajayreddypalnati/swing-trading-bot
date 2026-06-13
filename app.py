@@ -324,33 +324,33 @@ def render_market_cycle_graph(roc_vals):
     if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
         trend_dir = "down"
 
-    # NEW STEEP TOWER COORDINATES FOR THE GREEN DOT
+    # NEW SCALED COORDINATES (X spans 0 to 24 Months, Y scales to max 100 Price)
     if trend_dir == "up":
         if roc_val <= 20:
-            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 5
+            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 1.6
         elif roc_val <= 40:
-            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 15
+            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 2, 5
         elif roc_val <= 60:
-            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 45
+            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 4, 15
         elif roc_val <= 80:
-            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 100
+            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 6, 33
         elif roc_val <= 100:
-            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 200
+            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 8, 66
         else:
-            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 300
+            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 10, 100
     else:
         if roc_val >= 80:
-            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 300
+            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 12, 100
         elif roc_val >= 60:
-            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 200
+            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 14, 66
         elif roc_val >= 40:
-            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 100
+            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 16, 33
         elif roc_val >= 20:
-            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 45
+            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 18, 15
         elif roc_val >= 0:
-            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 110, 15
+            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 20, 5
         else:
-            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
+            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 22, 1.6
 
     # Determine Color Theme based on current stage
     red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
@@ -363,9 +363,9 @@ def render_market_cycle_graph(roc_vals):
         bg_theme_start = 'rgba(39, 174, 96, 0.1)'
         bg_theme_end = 'rgba(39, 174, 96, 0.02)'
 
-    # STEEP BELL CURVE COORDINATES
-    curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
-    curve_y = [5, 15, 45, 100, 200, 300, 300, 200, 100, 45, 15, 5, 2]
+    # BELL CURVE COORDINATES SCALED FOR 24 MONTHS & 100 PRICE Y-AXIS
+    curve_x = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
+    curve_y = [1.6, 5, 15, 33, 66, 100, 100, 66, 33, 15, 5, 1.6, 0.6]
     
     # BOLD, HIGH-VISIBILITY LABELS
     stage_names = [
@@ -380,9 +380,8 @@ def render_market_cycle_graph(roc_vals):
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
         textposition="bottom center", 
-        # Increased font size to 18 and made the color almost black for visibility
         textfont=dict(family="Inter, sans-serif", color='#111827', size=18), 
-        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), # Thicker line
+        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
         hoverinfo='none', name='Market Cycle'
     ))
@@ -392,15 +391,15 @@ def render_market_cycle_graph(roc_vals):
         x=[dot_x], y=[dot_y], mode='markers', 
         marker=dict(
             color=theme_color, 
-            size=22, # Slightly larger dot
+            size=22, 
             line=dict(color='#FFFFFF', width=4)
         ), 
         hoverinfo='none', name='Current Stage'
     ))
 
-    # 3. Floating Annotation pointing to the dot (Dynamic Color)
+    # 3. Floating Annotation pointing to the dot (Scaled offset for Y=100)
     fig.add_annotation(
-        x=dot_x, y=dot_y + 45, # Float higher above the steeper line
+        x=dot_x, y=dot_y + 15, # Adjusted offset since scale is now 100 instead of 300
         text=f"<b>{stage}</b>",
         showarrow=True,
         arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
@@ -410,13 +409,28 @@ def render_market_cycle_graph(roc_vals):
         opacity=1.0
     )
 
-    # 4. Clean Layout (Increased Height for the "Tower" look)
+    # 4. Clean Layout with Explicit X/Y Axes Visible (24 Months / 100 Price)
     fig.update_layout(
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 140]),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-20, 380]), # Expanded Y-axis
+        xaxis=dict(
+            title=dict(text="<b>Time (Months over 2 Years)</b>", font=dict(family="Inter", size=14, color="black")),
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
+            zeroline=False,
+            showticklabels=True,
+            showline=True, linewidth=3, linecolor='black', # Bold Black Line
+            tickmode='linear', dtick=1, # Ticks split by each month
+            range=[0, 24] # 2 Years
+        ),
+        yaxis=dict(
+            title=dict(text="<b>Price</b>", font=dict(family="Inter", size=14, color="black")),
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
+            zeroline=False,
+            showticklabels=True,
+            showline=True, linewidth=3, linecolor='black', # Bold Black Line
+            range=[0, 100] # Price until 100
+        ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=30, b=40), showlegend=False, 
-        height=500 # Increased height for steepness
+        margin=dict(l=60, r=40, t=30, b=60), showlegend=False, 
+        height=500 
     )
     
     # 5. CSS Wrapper for the surrounding info box (Dynamic Color)
