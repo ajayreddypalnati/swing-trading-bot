@@ -626,35 +626,81 @@ def run_daily_scraper():
         print(f"   ❌ FATAL ERROR during database upload: {e}")
 
     # ==========================================
-    # STEP 7: PULL CNXSMALLCAP ROC & PUSH TO DB
+    # STEP 7: PULL EXACT 20-MONTH CNXSMALLCAP ROC
     # ==========================================
-    print("\n📈 STEP 7: Fetching 20-Month ROC for CNXSMALLCAP from TradingView...")
+    print("\n📈 STEP 7: Fetching Exact-Date 20-Month ROC for CNXSMALLCAP...")
+
     try:
         tv = TvDatafeed()
-        tv_data = tv.get_hist(symbol='CNXSMALLCAP', exchange='NSE', interval=Interval.in_monthly, n_bars=25)
+
+        # Pull daily history
+        tv_data = tv.get_hist(
+            symbol='CNXSMALLCAP',
+            exchange='NSE',
+            interval=Interval.in_daily,
+            n_bars=1000
+        )
 
         if tv_data is not None and not tv_data.empty:
-            current_close = tv_data['close'].iloc[-1]
-            past_close = tv_data['close'].iloc[-21] 
-            roc_20m = round(((current_close - past_close) / past_close) * 100, 2)
 
-            print(f"   📊 Calculated 20-Month ROC: {roc_20m}%")
+            tv_data = tv_data.sort_index()
 
-            # Create dataframe with timestamp for the history log
-            roc_timestamp = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%Y-%m-%d %H:%M:%S')
-            roc_df = pd.DataFrame([{
-                "Date": roc_timestamp,
-                "Symbol": "CNXSMALLCAP",
-                "Current_Price": current_close,
-                "Price_20_Months_Ago": past_close,
-                "ROC_20M_Percent": roc_20m
-            }])
+            # Latest available trading day
+            current_date = tv_data.index[-1]
+            current_close = float(tv_data['close'].iloc[-1])
 
-            # Append mode ensures it keeps a running history table each time the script runs
-            roc_df.to_sql("CNXSMALLCAP_ROC", engine, if_exists="append", index=False)
-            print(f"   ✅ 'CNXSMALLCAP_ROC' updated successfully in Supabase.")
+            # Exact calendar date 20 months ago
+            target_date = current_date - pd.DateOffset(months=20)
+
+            # Nearest trading day on or before target date
+            historical_data = tv_data[tv_data.index <= target_date]
+
+            if not historical_data.empty:
+
+                past_date = historical_data.index[-1]
+                past_close = float(historical_data['close'].iloc[-1])
+
+                roc_20m = round(
+                    ((current_close - past_close) / past_close) * 100,
+                    2
+                )
+
+                print(f"   Current Date: {current_date.date()}")
+                print(f"   Current Close: {current_close}")
+                print(f"   Target Date (20M Ago): {target_date.date()}")
+                print(f"   Actual Trading Date: {past_date.date()}")
+                print(f"   Past Close: {past_close}")
+                print(f"   Exact 20M ROC: {roc_20m}%")
+
+                roc_timestamp = pd.Timestamp.now(
+                    tz='Asia/Kolkata'
+                ).strftime('%Y-%m-%d %H:%M:%S')
+
+                roc_df = pd.DataFrame([{
+                    "Date": roc_timestamp,
+                    "Symbol": "CNXSMALLCAP",
+                    "Current_Date": str(current_date.date()),
+                    "Past_Date": str(past_date.date()),
+                    "Current_Price": current_close,
+                    "Price_20_Months_Ago": past_close,
+                    "ROC_20M_Percent": roc_20m
+                }])
+
+                roc_df.to_sql(
+                    "CNXSMALLCAP_ROC",
+                    engine,
+                    if_exists="append",
+                    index=False
+                )
+
+                print("   ✅ 'CNXSMALLCAP_ROC' updated successfully.")
+
+            else:
+                print("   ⚠️ Not enough history to calculate 20M ROC.")
+
         else:
-            print("   ⚠️ WARNING: Failed to fetch CNXSMALLCAP data from TradingView.")
+            print("   ⚠️ Failed to fetch CNXSMALLCAP data.")
+
     except Exception as e:
         print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
 
