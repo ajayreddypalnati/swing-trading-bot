@@ -314,7 +314,7 @@ def render_market_cycle_graph(roc_vals):
 
     # NEW STEEP TOWER COORDINATES FOR THE GREEN DOT
     if trend_dir == "up":
-        if roc_val <= 0:
+        if roc_val <= 20:
             stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 5
         elif roc_val <= 40:
             stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 15
