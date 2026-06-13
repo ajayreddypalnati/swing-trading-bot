@@ -276,22 +276,29 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             else:
                 action_suffix = " - Trade"
 
+            # Base assignment logic
             if val <= 20.0:
-                return f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"      
+                alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
             elif val <= 25.0:
-                return f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+                alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
             elif val <= 30.0:
-                return f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+                alloc_str, color = f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
             elif val <= 35.0:
-                return f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+                alloc_str, color = f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
             elif val <= 40.0:
-                return f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+                alloc_str, color = f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
             elif val <= 45.0:
-                return f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+                alloc_str, color = f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             elif val <= 50.0:
-                return f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+                alloc_str, color = f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             else:
-                return f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    
+                alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    
+
+            # Check if action is NOT pure "Trade", force light red background
+            if action_suffix != " - Trade":
+                color = "rgba(252, 165, 165, 0.4)" # Light Red
+
+            return alloc_str, color
 
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
@@ -345,6 +352,17 @@ def render_market_cycle_graph(roc_vals):
         else:
             stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
 
+    # Determine Color Theme based on current stage
+    red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
+    if stage in red_stages:
+        theme_color = '#EF4444' # Red
+        bg_theme_start = 'rgba(239, 68, 68, 0.1)'
+        bg_theme_end = 'rgba(239, 68, 68, 0.02)'
+    else:
+        theme_color = '#10B981' # Green
+        bg_theme_start = 'rgba(39, 174, 96, 0.1)'
+        bg_theme_end = 'rgba(39, 174, 96, 0.02)'
+
     # STEEP BELL CURVE COORDINATES
     curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
     curve_y = [5, 15, 45, 100, 200, 300, 300, 200, 100, 45, 15, 5, 2]
@@ -362,32 +380,33 @@ def render_market_cycle_graph(roc_vals):
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
         textposition="bottom center", 
-        textfont=dict(family="Inter, sans-serif", color='#374151', size=13), # Larger, darker text
+        # Increased font size to 18 and made the color almost black for visibility
+        textfont=dict(family="Inter, sans-serif", color='#111827', size=18), 
         line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), # Thicker line
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
         hoverinfo='none', name='Market Cycle'
     ))
     
-    # 2. Prominent Green Dot
+    # 2. Prominent Colored Dot (Green or Red)
     fig.add_trace(go.Scatter(
         x=[dot_x], y=[dot_y], mode='markers', 
         marker=dict(
-            color='#10B981', 
+            color=theme_color, 
             size=22, # Slightly larger dot
             line=dict(color='#FFFFFF', width=4)
         ), 
         hoverinfo='none', name='Current Stage'
     ))
 
-    # 3. Floating Annotation pointing to the dot
+    # 3. Floating Annotation pointing to the dot (Dynamic Color)
     fig.add_annotation(
         x=dot_x, y=dot_y + 45, # Float higher above the steeper line
         text=f"<b>{stage}</b>",
         showarrow=True,
-        arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor='#10B981',
-        font=dict(family="Inter, sans-serif", size=14, color='#10B981'),
+        arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
+        font=dict(family="Inter, sans-serif", size=14, color=theme_color),
         bgcolor="rgba(255, 255, 255, 0.95)",
-        bordercolor="#10B981", borderwidth=2, borderpad=6,
+        bordercolor=theme_color, borderwidth=2, borderpad=6,
         opacity=1.0
     )
 
@@ -400,15 +419,15 @@ def render_market_cycle_graph(roc_vals):
         height=500 # Increased height for steepness
     )
     
-    # 5. CSS Wrapper for the surrounding info box
+    # 5. CSS Wrapper for the surrounding info box (Dynamic Color)
     st.markdown(f"""
-    <div style="background: linear-gradient(145deg, rgba(39, 174, 96, 0.1) 0%, rgba(39, 174, 96, 0.02) 100%); 
-                border-left: 4px solid #10B981; 
+    <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
+                border-left: 4px solid {theme_color}; 
                 padding: 12px 18px; 
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: #10B981; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(ROC: {roc_val}%)</span></h4>
+        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(ROC: {roc_val}%)</span></h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
