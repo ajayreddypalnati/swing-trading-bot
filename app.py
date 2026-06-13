@@ -443,7 +443,7 @@ def render_market_cycle_graph(roc_vals):
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(ROC: {roc_val}%)</span></h4>
+        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: {roc_val}%)</span></h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
