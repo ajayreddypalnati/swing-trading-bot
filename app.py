@@ -324,33 +324,23 @@ def render_market_cycle_graph(roc_vals):
     if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
         trend_dir = "down"
 
-    # SCALED COORDINATES (X spans 0 to 42 Months, Y scales to max 100 Price)
+    # =========================================================================
+    # PERFECT EQUAL SPACING (Every stage is separated by EXACTLY 4 months)
+    # =========================================================================
     if trend_dir == "up":
-        if roc_val <= 20:
-            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
-        elif roc_val <= 40:
-            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
-        elif roc_val <= 60:
-            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
-        elif roc_val <= 80:
-            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
-        elif roc_val <= 100:
-            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 16, 66
-        else:
-            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
+        if roc_val <= 20: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
+        elif roc_val <= 40: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
+        elif roc_val <= 60: stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
+        elif roc_val <= 80: stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
+        elif roc_val <= 100: stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 16, 66
+        else: stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
     else:
-        if roc_val >= 80:
-            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 23.5, 90
-        elif roc_val >= 60:
-            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 27, 66
-        elif roc_val >= 40:
-            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 30.5, 33
-        elif roc_val >= 20:
-            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 34, 15
-        elif roc_val >= 0:
-            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 37.5, 5
-        else:
-            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 40, 2
+        if roc_val >= 80: stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 24, 90
+        elif roc_val >= 60: stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 28, 66
+        elif roc_val >= 40: stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 32, 33
+        elif roc_val >= 20: stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 36, 15
+        elif roc_val >= 0: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
+        else: stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 44, 2
 
     # Determine Color Theme based on current stage
     red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
@@ -363,8 +353,8 @@ def render_market_cycle_graph(roc_vals):
         bg_theme_start = 'rgba(39, 174, 96, 0.1)'
         bg_theme_end = 'rgba(39, 174, 96, 0.02)'
 
-    # BELL CURVE COORDINATES SCALED FOR 42 MONTHS (Spread out the tail end)
-    curve_x = [0, 4, 8, 12, 16, 20, 23.5, 27, 30.5, 34, 37.5, 40, 42]
+    # CURVE ARRAYS (Aligned strictly to 4-month increments up to 48 months)
+    curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
     
     # BOLD, HIGH-VISIBILITY LABELS
@@ -374,19 +364,16 @@ def render_market_cycle_graph(roc_vals):
         "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
     ]
 
-    # Individual Text Positioning and Coloring
-    text_positions = ['top center'] * 13
-    text_positions[5] = 'middle right' # Shift Euphoria to the right so it doesn't intersect the vertical line
-
+    # Individual Text Coloring (Make Euphoria bold red)
     text_colors = ['#111827'] * 13 # Dark Gray/Black for normal labels
     text_colors[5] = '#EF4444' # Bold Red exclusively for Euphoria
 
     fig = go.Figure()
     
-    # 1. Enhanced Cycle Line
+    # 1. Enhanced Cycle Line (Forcing ALL labels to standard top-center)
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
-        textposition=text_positions, 
+        textposition="top center", 
         textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
         line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
@@ -404,7 +391,7 @@ def render_market_cycle_graph(roc_vals):
         hoverinfo='none', name='Current Stage'
     ))
 
-    # 3. Vertical Line at 20 Months (Peak)
+    # 3. Vertical Line exactly at 20 Months (Peak)
     fig.add_shape(
         type="line",
         x0=20, y0=0, x1=20, y1=100,
@@ -423,7 +410,7 @@ def render_market_cycle_graph(roc_vals):
         opacity=1.0
     )
 
-    # 5. Clean Layout with Explicit X/Y Axes Visible
+    # 5. Clean Layout with Explicit X/Y Axes Visible (Scaled perfectly to 50 for balance)
     fig.update_layout(
         xaxis=dict(
             title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="black")),
@@ -433,7 +420,7 @@ def render_market_cycle_graph(roc_vals):
             tickfont=dict(size=14, color="black", family="Inter"),
             showline=True, linewidth=3, linecolor='black',
             dtick=2, 
-            range=[-2, 44] # Pushed to 44 to accommodate the final Disbelief properly
+            range=[-2, 50] # Pushed to 50 to accommodate the perfectly spaced timeline
         ),
         yaxis=dict(
             title=dict(text="<b>Price</b>", font=dict(family="Inter", size=18, color="black")),
