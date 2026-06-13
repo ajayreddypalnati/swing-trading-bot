@@ -689,7 +689,7 @@ def run_daily_scraper():
                 roc_df.to_sql(
                     "CNXSMALLCAP_ROC",
                     engine,
-                    if_exists="append",
+                    if_exists="replace",
                     index=False
                 )
 
