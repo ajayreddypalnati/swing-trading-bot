@@ -389,7 +389,7 @@ def render_market_cycle_graph(roc_vals):
     # 4. Clean Layout (Increased Height for the "Tower" look)
     fig.update_layout(
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-15, 155], fixedrange=True),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-30, 600], fixedrange=True)
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-30, 600], fixedrange=True),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=20, r=20, t=30, b=40), showlegend=False, 
         height=500 # Increased height for steepness
