@@ -98,7 +98,7 @@ TV_PAYLOAD = {
 # ==========================================
 # 3. DATA FETCHING 
 # ==========================================
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def fetch_database_reference():
     try:
         db_url = st.secrets["DATABASE_URL"]
@@ -159,10 +159,21 @@ def fetch_database_reference():
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
+        # === UPDATED ROC LOGIC ===
         try:
-            roc_df = pd.read_sql('SELECT "ROC_20M_Percent" FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
-            roc_vals = roc_df["ROC_20M_Percent"].tolist()
-        except Exception:
+            # Use SELECT * to avoid explicit column quoting issues in PostgreSQL
+            roc_df = pd.read_sql('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
+            
+            # Dynamically find the column to prevent exact-case matching errors
+            roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
+            
+            if roc_col is not None and not roc_df.empty:
+                roc_vals = roc_df[roc_col].tolist()
+            else:
+                roc_vals = []
+        except Exception as e:
+            # Display a warning in Streamlit so it doesn't fail silently
+            st.warning(f"⚠️ SQL Error fetching Market Cycle ROC: {e}")
             roc_vals = []
 
         return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals
@@ -292,7 +303,7 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             elif val <= 50.0:
                 alloc_str, color = f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             else:
-                alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    
+                alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"   
 
             # Check if action is NOT pure "Trade", force light red background
             if action_suffix != " - Trade":
@@ -377,7 +388,7 @@ def render_market_cycle_graph(roc_vals):
         textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
         line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
-        hoverinfo='none', name='🎢Market Cycle'
+        hoverinfo='none', name='Market Cycle'
     ))
     
     # 2. Prominent Colored Dot (Green or Red)
@@ -436,7 +447,7 @@ def render_market_cycle_graph(roc_vals):
         height=550 
     )
     
-    # 6. CSS Wrapper for the surrounding info box (Updated to make ROC value bold)
+    # 6. CSS Wrapper for the surrounding info box (Updated for multi-color heading)
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
                 border-left: 4px solid {theme_color}; 
@@ -444,7 +455,10 @@ def render_market_cycle_graph(roc_vals):
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span></h4>
+        <h4 style="margin: 0; color: #000000; font-family: 'Inter', sans-serif;">
+            Current Stage: <span style="color: {theme_color};">{stage}</span> 
+            <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
+        </h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
@@ -554,7 +568,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         if not raw_sec.empty and not raw_ind.empty:
             
             # --- MODULAR GRAPH RENDERING ---
-            with st.expander("🎢Market Cycle", expanded=True):
+            with st.expander("📈 Market Cycle", expanded=True):
                 render_market_cycle_graph(roc_vals)
 
             # --- TOP SECTORS & INDUSTRIES ---
