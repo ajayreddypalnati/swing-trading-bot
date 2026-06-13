@@ -436,7 +436,7 @@ def render_market_cycle_graph(roc_vals):
         height=550 
     )
     
-    # 6. CSS Wrapper for the surrounding info box
+    # 6. CSS Wrapper for the surrounding info box (Updated to make ROC value bold)
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
                 border-left: 4px solid {theme_color}; 
@@ -444,7 +444,7 @@ def render_market_cycle_graph(roc_vals):
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span></h4>
+        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span></h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
