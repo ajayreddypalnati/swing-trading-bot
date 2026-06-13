@@ -324,7 +324,7 @@ def render_market_cycle_graph(roc_vals):
     if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
         trend_dir = "down"
 
-    # NEW SCALED COORDINATES (X spans 0 to 40 Months, Y scales to max 100 Price)
+    # SCALED COORDINATES (X spans 0 to 42 Months, Y scales to max 100 Price)
     if trend_dir == "up":
         if roc_val <= 20:
             stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
@@ -340,17 +340,17 @@ def render_market_cycle_graph(roc_vals):
             stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
     else:
         if roc_val >= 80:
-            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 23.3, 90
+            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 23.5, 90
         elif roc_val >= 60:
-            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 26.6, 66
+            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 27, 66
         elif roc_val >= 40:
-            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 30, 33
+            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 30.5, 33
         elif roc_val >= 20:
-            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 33.3, 15
+            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 34, 15
         elif roc_val >= 0:
-            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 36.6, 5
+            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 37.5, 5
         else:
-            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 38.5, 2
+            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 40, 2
 
     # Determine Color Theme based on current stage
     red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
@@ -363,24 +363,31 @@ def render_market_cycle_graph(roc_vals):
         bg_theme_start = 'rgba(39, 174, 96, 0.1)'
         bg_theme_end = 'rgba(39, 174, 96, 0.02)'
 
-    # BELL CURVE COORDINATES SCALED FOR 40 MONTHS & 100 PRICE Y-AXIS
-    curve_x = [0, 4, 8, 12, 16, 20, 23.3, 26.6, 30, 33.3, 36.6, 38.5, 40]
+    # BELL CURVE COORDINATES SCALED FOR 42 MONTHS (Spread out the tail end)
+    curve_x = [0, 4, 8, 12, 16, 20, 23.5, 27, 30.5, 34, 37.5, 40, 42]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
     
-    # BOLD, HIGH-VISIBILITY LABELS (Now correctly mapped to 13 stages)
+    # BOLD, HIGH-VISIBILITY LABELS
     stage_names = [
         "<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", 
         "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", 
         "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
     ]
 
+    # Individual Text Positioning and Coloring
+    text_positions = ['top center'] * 13
+    text_positions[5] = 'middle right' # Shift Euphoria to the right so it doesn't intersect the vertical line
+
+    text_colors = ['#111827'] * 13 # Dark Gray/Black for normal labels
+    text_colors[5] = '#EF4444' # Bold Red exclusively for Euphoria
+
     fig = go.Figure()
     
-    # 1. Enhanced Cycle Line (Thicker, Indigo color, with a subtle area fill)
+    # 1. Enhanced Cycle Line
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
-        textposition="top center", # Forced strictly above the line so they never clip at the bottom
-        textfont=dict(family="Inter, sans-serif", color='#111827', size=20), # Increased Font Size
+        textposition=text_positions, 
+        textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
         line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
         hoverinfo='none', name='Market Cycle'
@@ -397,7 +404,14 @@ def render_market_cycle_graph(roc_vals):
         hoverinfo='none', name='Current Stage'
     ))
 
-    # 3. Floating Annotation pointing to the dot
+    # 3. Vertical Line at 20 Months (Peak)
+    fig.add_shape(
+        type="line",
+        x0=20, y0=0, x1=20, y1=100,
+        line=dict(color="black", width=3)
+    )
+
+    # 4. Floating Annotation pointing to the dot
     fig.add_annotation(
         x=dot_x, y=dot_y + 15, 
         text=f"<b>{stage}</b>",
@@ -409,7 +423,7 @@ def render_market_cycle_graph(roc_vals):
         opacity=1.0
     )
 
-    # 4. Clean Layout with Explicit X/Y Axes Visible (40 Months / 100 Price with padding)
+    # 5. Clean Layout with Explicit X/Y Axes Visible
     fig.update_layout(
         xaxis=dict(
             title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="black")),
@@ -417,9 +431,9 @@ def render_market_cycle_graph(roc_vals):
             zeroline=False,
             showticklabels=True,
             tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black', # Bold Black Line
-            dtick=2, # Split ticks smoothly across 40
-            range=[-2, 42] # Added padding left/right so extreme text labels don't clip
+            showline=True, linewidth=3, linecolor='black',
+            dtick=2, 
+            range=[-2, 44] # Pushed to 44 to accommodate the final Disbelief properly
         ),
         yaxis=dict(
             title=dict(text="<b>Price</b>", font=dict(family="Inter", size=18, color="black")),
@@ -427,15 +441,15 @@ def render_market_cycle_graph(roc_vals):
             zeroline=False,
             showticklabels=True,
             tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black', # Bold Black Line
-            range=[-5, 125] # Added top/bottom padding so Euphoria/Disbelief never clips
+            showline=True, linewidth=3, linecolor='black',
+            range=[-5, 125]
         ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
         margin=dict(l=60, r=40, t=30, b=60), showlegend=False, 
-        height=550 # Slightly increased height for breathing room
+        height=550 
     )
     
-    # 5. CSS Wrapper for the surrounding info box (Dynamic Color)
+    # 6. CSS Wrapper for the surrounding info box
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
                 border-left: 4px solid {theme_color}; 
@@ -443,7 +457,7 @@ def render_market_cycle_graph(roc_vals):
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: {roc_val}%)</span></h4>
+        <h4 style="margin: 0; color: {theme_color}; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(ROC: {roc_val}%)</span></h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
@@ -553,7 +567,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         if not raw_sec.empty and not raw_ind.empty:
             
             # --- MODULAR GRAPH RENDERING ---
-            with st.expander("Market Cycle", expanded=False):
+            with st.expander("Market Cycle", expanded=True):
                 render_market_cycle_graph(roc_vals)
 
             # --- TOP SECTORS & INDUSTRIES ---
