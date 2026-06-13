@@ -513,7 +513,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         if not raw_sec.empty and not raw_ind.empty:
             
             # --- MODULAR GRAPH RENDERING ---
-            with st.expander("Market breadth", expanded=False):
+            with st.expander("Market Cycle", expanded=False):
                 render_market_cycle_graph(roc_vals)
 
             # --- TOP SECTORS & INDUSTRIES ---
