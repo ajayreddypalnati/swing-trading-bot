@@ -377,7 +377,7 @@ def render_market_cycle_graph(roc_vals):
         textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
         line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
         fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
-        hoverinfo='none', name='Market Cycle'
+        hoverinfo='none', name='🎢Market Cycle'
     ))
     
     # 2. Prominent Colored Dot (Green or Red)
