@@ -15,7 +15,9 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling) ---
+# ==========================================
+# 1. CSS INJECTION
+# ==========================================
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
@@ -78,7 +80,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- APIs & ENDPOINTS ---
+# ==========================================
+# 2. APIs & ENDPOINTS
+# ==========================================
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
 CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
 CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  10 and  daily volume * daily close >=  10000000 ) )"
@@ -92,7 +96,7 @@ TV_PAYLOAD = {
 }
 
 # ==========================================
-# 2. DATA FETCHING 
+# 3. DATA FETCHING 
 # ==========================================
 @st.cache_data(ttl=600)
 def fetch_database_reference():
@@ -108,7 +112,6 @@ def fetch_database_reference():
 
         engine = create_engine(db_url)
 
-        # UPDATED: Pulling the true "Exchange" column directly from stock_master
         main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
@@ -127,11 +130,9 @@ def fetch_database_reference():
             trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
             trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
             
-            # 1. Grab the latest composite score from market_trend_summary
             market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
             
-            # --- 5-DAY TREND LOGIC ---
-            # 2. Pull the last 5 trading days from historical_market_mood for the historical baseline average
+            # --- 5-DAY TREND LOGIC (Fixed for % strings) ---
             mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
             
             if not mood_df.empty and market_trend_summary_val is not None:
@@ -140,13 +141,11 @@ def fetch_database_reference():
                     return float(match.group(1)) if match else None
                 
                 vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
+                current_val = extract_pct(market_trend_summary_val)
                 
-                if len(vals) > 0:
-                    # 3. Calculate average of all 5 trailing days
+                if len(vals) > 0 and current_val is not None:
                     avg_5d = sum(vals) / len(vals)
-                    
-                    # 4. Difference logic: Summary metric vs historical mood baseline
-                    diff = avg_5d - float(market_trend_summary_val)
+                    diff = current_val - avg_5d
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
@@ -233,7 +232,9 @@ def get_combined_data():
             seen_symbols.add(symbol)
     return combined_data
 
-# --- HELPER: Dynamic Background Colors & Portfolio Allocation ---
+# ==========================================
+# 4. UI COMPONENTS & GRAPHS 
+# ==========================================
 def get_breadth_color(breadth_str):
     try:
         match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
@@ -256,40 +257,36 @@ def get_breadth_color(breadth_str):
 def get_portfolio_allocation(breadth_str):
     """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
     try:
-        # Extract the percentage value
         match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
         if match:
             val = float(match.group(1))
             
-            # --- NEW LOGIC: Determine the Trading Action Suffix ---
             if val <= 50.0:
                 if "📈" in str(breadth_str):
                     action_suffix = " - Trade"
                 elif "📉" in str(breadth_str) or "➖" in str(breadth_str):
                     action_suffix = " - Stop Trading"
                 else:
-                    action_suffix = "" # Default if no emoji is found yet
+                    action_suffix = "" 
             else:
-                # If market breadth is > 50, ignore emojis and always trade
                 action_suffix = " - Trade"
 
-            # --- Apply Suffix to the Allocation Tiers ---
             if val <= 20.0:
-                return f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"      # 0 - 20
+                return f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"      
             elif val <= 25.0:
-                return f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     # 21 - 25
+                return f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
             elif val <= 30.0:
-                return f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     # 26 - 30
+                return f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
             elif val <= 35.0:
-                return f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     # 31 - 35
+                return f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
             elif val <= 40.0:
-                return f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     # 36 - 40
+                return f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
             elif val <= 45.0:
-                return f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     # 41 - 45
+                return f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             elif val <= 50.0:
-                return f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     # 46 - 50
+                return f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
             else:
-                return f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    # 51+ 
+                return f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"    
                 
         return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
     except:
@@ -303,8 +300,112 @@ def create_metric_card(title, value, bg_color):
     </div>
     """
 
+def render_market_cycle_graph(roc_vals):
+    """Encapsulates the Symmetrical Bell Curve logic and renders it to Streamlit"""
+    if not roc_vals:
+        st.info("No ROC data available to plot Market Cycle.")
+        return
+
+    roc_val = float(roc_vals[0])
+    trend_dir = "up"
+    # Compare latest ROC against previous to determine direction of the curve
+    if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
+        trend_dir = "down"
+
+    # Map ROC specific values to stages & new BELL CURVE dot coordinates
+    if trend_dir == "up":
+        if roc_val <= 0:
+            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 5
+        elif roc_val <= 40:
+            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 15
+        elif roc_val <= 60:
+            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 35
+        elif roc_val <= 80:
+            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 65
+        elif roc_val <= 100:
+            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 95
+        else:
+            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 115
+    else:
+        if roc_val >= 80:
+            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 115
+        elif roc_val >= 60:
+            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 95
+        elif roc_val >= 40:
+            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 65
+        elif roc_val >= 20:
+            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 35
+        elif roc_val >= 0:
+            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 110, 15
+        else:
+            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
+
+    # SYMMETRICAL BELL CURVE COORDINATES
+    curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
+    curve_y = [5, 15, 35, 65, 95, 115, 115, 95, 65, 35, 15, 5, 2]
+    stage_names = ["Disbelief", "Hope", "Optimism", "Belief", "Thrill", "Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression", "Disbelief"]
+
+    fig = go.Figure()
+    
+    # 1. Enhanced Cycle Line (Thicker, Indigo color, with a subtle area fill)
+    fig.add_trace(go.Scatter(
+        x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
+        textposition="bottom center", 
+        textfont=dict(family="Inter, sans-serif", color='#9CA3AF', size=11),
+        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=3), # Sleek Indigo
+        fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', # Subtle gradient feel
+        hoverinfo='none', name='Market Cycle'
+    ))
+    
+    # 2. Prominent Green Dot (Bigger, bolder border to stand out)
+    fig.add_trace(go.Scatter(
+        x=[dot_x], y=[dot_y], mode='markers', 
+        marker=dict(
+            color='#10B981', # Emerald green
+            size=20, 
+            line=dict(color='#FFFFFF', width=4)
+        ), 
+        hoverinfo='none', name='Current Stage'
+    ))
+
+    # 3. Floating Annotation pointing to the dot
+    fig.add_annotation(
+        x=dot_x, y=dot_y + 18, # Float slightly above the dot
+        text=f"<b>{stage}</b>",
+        showarrow=True,
+        arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor='#10B981',
+        font=dict(family="Inter, sans-serif", size=13, color='#10B981'),
+        bgcolor="rgba(255, 255, 255, 0.95)",
+        bordercolor="#10B981", borderwidth=1, borderpad=5,
+        opacity=1.0
+    )
+
+    # 4. Clean Layout
+    fig.update_layout(
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 140]),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-10, 150]),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=10, r=10, t=30, b=30), showlegend=False, height=320
+    )
+    
+    # 5. CSS Wrapper for the surrounding info box
+    st.markdown(f"""
+    <div style="background: linear-gradient(145deg, rgba(39, 174, 96, 0.1) 0%, rgba(39, 174, 96, 0.02) 100%); 
+                border-left: 4px solid #10B981; 
+                padding: 12px 18px; 
+                border-radius: 6px; 
+                margin-bottom: 15px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <h4 style="margin: 0; color: #10B981; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(ROC: {roc_val}%)</span></h4>
+        <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
 # ==========================================
-# 3. DASHBOARD UI LAYOUT
+# 5. DASHBOARD MAIN LAYOUT
 # ==========================================
 header_col1, header_col2 = st.columns([2, 1])
 with header_col1:
@@ -404,79 +505,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         })
         
         if not raw_sec.empty and not raw_ind.empty:
+            
+            # --- MODULAR GRAPH RENDERING ---
             with st.expander("Market breadth", expanded=False):
-                if roc_vals:
-                    roc_val = float(roc_vals[0])
-                    trend_dir = "up"
-                    # Compare latest ROC against previous to determine direction of the curve
-                    if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
-                        trend_dir = "down"
+                render_market_cycle_graph(roc_vals)
 
-                    # Map ROC specific values to stages & dot coordinates based on user instructions
-                    if trend_dir == "up":
-                        if roc_val <= 0:
-                            stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 10, 10
-                        elif roc_val <= 40:
-                            stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 20, 20
-                        elif roc_val <= 60:
-                            stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 30, 35
-                        elif roc_val <= 80:
-                            stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 40, 55
-                        elif roc_val <= 100:
-                            stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 50, 80
-                        else:
-                            stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 60, 110
-                    else:
-                        if roc_val >= 80:
-                            stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 70, 90
-                        elif roc_val >= 60:
-                            stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 80, 70
-                        elif roc_val >= 40:
-                            stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 90, 50
-                        elif roc_val >= 20:
-                            stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 100, 30
-                        elif roc_val >= 0:
-                            stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 110, 15
-                        else:
-                            stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 120, 5
-
-                    # Draw the curve mirroring the psychology chart
-                    curve_x = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130]
-                    curve_y = [10, 20, 35, 55, 80, 110, 90, 70, 50, 30, 15, 5, 20]
-                    stage_names = ["Disbelief", "Hope", "Optimism", "Belief", "Thrill", "Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression", "Disbelief"]
-
-                    fig = go.Figure()
-                    
-                    # Cycle Line
-                    fig.add_trace(go.Scatter(
-                        x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
-                        textposition="bottom center", textfont=dict(color='#6B7280', size=10),
-                        line=dict(shape='spline', smoothing=1.3, color='#4B5563', width=2), hoverinfo='none', name='Market Cycle'
-                    ))
-                    
-                    # Specific Green Dot Position
-                    fig.add_trace(go.Scatter(
-                        x=[dot_x], y=[dot_y], mode='markers', 
-                        marker=dict(color='#27ae60', size=16, line=dict(color='white', width=2)), name='Current Stage'
-                    ))
-
-                    fig.update_layout(
-                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                        margin=dict(l=0, r=0, t=10, b=10), showlegend=False, height=250
-                    )
-                    
-                    st.markdown(f"""
-                    <div style="background: rgba(39, 174, 96, 0.1); border-left: 4px solid #27ae60; padding: 10px 15px; border-radius: 4px; margin-bottom: 10px;">
-                        <h4 style="margin: 0; color: #27ae60;">Current Stage: {stage} (ROC: {roc_val}%)</h4>
-                        <p style="margin: 5px 0 0 0; font-size: 0.95rem; color: #d1d5db;">"{note}"</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No ROC data available to plot Market Cycle.")
-
+            # --- TOP SECTORS & INDUSTRIES ---
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
                 lead_col1, lead_col2 = st.columns(2)
                 
