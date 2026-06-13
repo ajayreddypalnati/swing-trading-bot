@@ -386,13 +386,13 @@ def render_market_cycle_graph(roc_vals):
         opacity=1.0
     )
 
-    # 4. Clean Layout (Increased Height for the "Tower" look)
+    # 4. Clean Layout (Mobile Optimized: Stretched and Scaled, Locked Axes)
     fig.update_layout(
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-15, 155], fixedrange=True),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-30, 600], fixedrange=True),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[5, 135], fixedrange=True),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-15, 560], fixedrange=True),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=30, b=40), showlegend=False, 
-        height=500 # Increased height for steepness
+        margin=dict(l=0, r=0, t=10, b=10), showlegend=False, 
+        height=450 
     )
     
     # 5. CSS Wrapper for the surrounding info box
@@ -403,7 +403,7 @@ def render_market_cycle_graph(roc_vals):
                 border-radius: 6px; 
                 margin-bottom: 15px;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: #10B981; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7230; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: {roc_val}%)</span></h4>
+        <h4 style="margin: 0; color: #10B981; font-family: 'Inter', sans-serif;">Current Stage: {stage} <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: {roc_val}%)</span></h4>
         <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
