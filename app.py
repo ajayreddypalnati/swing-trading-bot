@@ -435,7 +435,7 @@ def render_market_cycle_graph(roc_vals):
             range=[-2, 50] # Pushed to 50 to accommodate the perfectly spaced timeline
         ),
         yaxis=dict(
-            title=dict(text="<b>Price</b>", font=dict(family="Inter", size=18, color="black")),
+            title=dict(text="<b>ROC Price</b>", font=dict(family="Inter", size=18, color="black")),
             showgrid=True, gridcolor='rgba(128,128,128,0.2)',
             zeroline=False,
             showticklabels=True,
