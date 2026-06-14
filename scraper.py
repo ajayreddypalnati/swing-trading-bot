@@ -1,712 +1,668 @@
 import requests
-import time
-import random
-import re
+from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
-import io  
-import os
-import sys
+import time
+from datetime import datetime, timezone, timedelta
+import streamlit as st
+import re
 import warnings
-from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
-from sqlalchemy import text
-from playwright.sync_api import sync_playwright
-from tvDatafeed import TvDatafeed, Interval
+import plotly.graph_objects as go
 
-# Force unbuffered output so execution logs write instantly to Windows command prompt
-sys.stdout.reconfigure(line_buffering=True)
+# Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# ==========================================
-# 0. CREDENTIALS & DATABASE CONFIG
-# ==========================================
-SCREENER_EMAIL = "ajayreddypalnati@gmail.com"
-SCREENER_PASSWORD = "sunnyreddi999@AA"
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-if not DATABASE_URL:
-    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing on this machine.")
-    sys.exit(1)
-
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
-
-if "?pgbouncer=true" in DATABASE_URL:
-    DATABASE_URL = DATABASE_URL.replace("?pgbouncer=true", "")
-
-try:
-    print("\n🔌 SYSTEM: Connecting to Supabase Cloud Database...")
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
-    print("✅ SYSTEM: Database connection established successfully.")
-except Exception as e:
-    print(f"❌ FATAL ERROR: Could not connect to database: {e}")
-    sys.exit(1)
-
-SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. AUTO-LOGIN FUNCTION (PLAYWRIGHT)
+# 1. CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling)
 # ==========================================
-def get_fresh_screener_cookies(email, password):
-    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate with Screener...")
-    cookie_string = ""
-    
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
+        html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+        #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+        .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
+        
+        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
+        
+        /* CUSTOM HTML TABLE SCROLLING WRAPPER (Main Table) */
+        .scrollable-table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch; 
+            margin-bottom: 1rem;
+        }
+        .scrollable-table-container table {
+            width: 100%;
+            min-width: 900px; 
+            border-collapse: collapse;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .scrollable-table-container th {
+            background-color: rgba(128, 128, 128, 0.08) !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            font-size: 0.85rem;
+            padding: 15px !important;
+            white-space: nowrap; 
+        }
+        .scrollable-table-container td {
+            text-align: center !important;
+            vertical-align: middle !important;
+            padding: 12px !important;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
+            white-space: nowrap; 
+        }
+        
+        /* SLEEK HTML TABLE (For Top Sectors / Industries) */
+        .sleek-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem; /* Matches Streamlit native size */
+        }
+        .sleek-table th {
+            background-color: rgba(128, 128, 128, 0.08) !important; /* Grey background matching main table */
+            text-align: center;
+            vertical-align: middle;
+            padding: 10px 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+            font-weight: bold !important; /* Bold headers */
+        }
+        .sleek-table td {
+            text-align: center;
+            vertical-align: middle;
+            padding: 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 2. APIs & ENDPOINTS
+# ==========================================
+CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
+CHARTINK_PROCESS_URL = 'https://chartink.com/screener/process'
+CHARTINK_SCAN_CLAUSE = "( {cash} (  daily high >  daily ema(  daily close , 9 ) and  daily low <  daily ema(  daily close , 9 ) and  daily close >  daily ema(  daily close , 9 ) and  daily close >  1 month ago close * 1.1 and  daily close >  1 day ago max( 300 ,  daily high ) * 0.9 and  market cap >=  500 and  daily rsi( 14 ) >=  65 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" >  0 and  daily \"close - 1 candle ago close / 1 candle ago close * 100\" <  10 and  daily volume * daily close >=  10000000 ) )"
+
+TV_URL = 'https://scanner.tradingview.com/india/scan'
+TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
+TV_PAYLOAD = {
+    "columns": ["ticker-view", "close", "type", "typespecs", "change", "volume", "sector.tr", "market", "sector"],
+    "filter": [{"left": "Value.Traded", "operation": "greater", "right": 10000000}, {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]}, {"left": "RSI", "operation": "greater", "right": 65}, {"left": "Perf.1M", "operation": "greater", "right": 10}, {"left": "high", "operation": "greater", "right": "EMA9"}, {"left": "close", "operation": "egreater", "right": "EMA9"}, {"left": "change", "operation": "in_range", "right": [0, 10]}, {"left": "low", "operation": "less", "right": "EMA9"}, {"left": "is_primary", "operation": "equal", "right": True}],
+    "options": {"lang": "en"}, "range": [0, 100], "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"}, "markets": ["india"]
+}
+
+# ==========================================
+# 3. DATA FETCHING 
+# ==========================================
+# --- OPTION 1 FIX: Cache Supabase data for 5 minutes (300 seconds) ---
+@st.cache_data(ttl=300)
+def fetch_database_reference():
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(user_agent=USER_AGENT)
-            page = context.new_page()
+        db_url = st.secrets["DATABASE_URL"]
 
-            page.goto("https://www.screener.in/login/")
-            page.fill("input[name='username']", email)
-            page.fill("input[name='password']", password)
-            page.click("button[type='submit']")
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace(
+                "postgresql://",
+                "postgresql+psycopg2://",
+                1
+            )
 
-            page.wait_for_timeout(8000)
-            
-            cookies = context.cookies()
-            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
-            csrf = cookie_dict.get('csrftoken', '')
-            session = cookie_dict.get('sessionid', '')
-            
-            if session:
-                print("   ✅ Login successful! Extracted fresh session tokens.")
-            else:
-                print("   ❌ WARNING: Could not find 'sessionid'. Login likely failed.")
-                sys.exit(1)
-            
-            cookie_string = f"csrftoken={csrf}; sessionid={session}"
-            browser.close()
-            
-    except Exception as e:
-        print(f"   ❌ Auto-login script crashed: {e}")
-        sys.exit(1)
+        engine = create_engine(db_url)
+
+        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
         
-    return cookie_string
+        raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
+        raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
 
-# ==========================================
-# HELPER FUNCTIONS
-# ==========================================
-def random_sleep(min_ms=800, max_ms=2000):
-    time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
+        sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
+        ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
 
-def fetch_with_retry(session, url, referer_url=None, retries=3):
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Cookie": session.screener_cookies
-    }
-    if referer_url: headers["Referer"] = referer_url
-        
-    for attempt in range(1, retries + 1):
         try:
-            resp = session.get(url, headers=headers, timeout=15)
-            if resp.status_code == 200: return resp.text
-            elif resp.status_code == 429:
-                print(f"   ⚠️ WARNING: Rate limited by Screener (429). Pausing for 15 seconds...")
-                time.sleep(15)
+            sync_df = pd.read_sql('SELECT * FROM sync_log', engine)
+            last_sync = sync_df['last_sync'].iloc[0]
         except Exception:
-            pass
-        random_sleep(1500, 3500)
-    return None
+            last_sync = "Pending Run..."
 
-def run_daily_scraper():
-    print("\n" + "="*60)
-    print("🚀 STARTING: Cloud-Native Market Scraper & Trend Engine")
-    print("="*60)
-    
-    fresh_cookies = get_fresh_screener_cookies(SCREENER_EMAIL, SCREENER_PASSWORD)
-    session = requests.Session()
-    session.screener_cookies = fresh_cookies
-    
-    # ==========================================
-    # STEP 1: FETCH STATIC DB MAP & CACHE
-    # ==========================================
-    print("\n📚 STEP 1: Checking database for companies we already know...")
-    try:
-        static_df = pd.read_sql("SELECT * FROM sector_master", engine)
-        
-        col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
-        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
-        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
-        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
-        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
-        col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
-        
-        unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
-        if unknown_mask.any():
-            print(f"   🧹 Found {unknown_mask.sum()} incomplete profiles. Forcing a re-scrape for them...")
-            with engine.begin() as conn:
-                conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
-            static_df = static_df[~unknown_mask]
-        
-        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
-        static_subset = static_df[cols_to_keep].copy()
-        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
-        static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
-        
-        known_names = set(static_subset['Name'].tolist())
-        print(f"   ✅ Cache Loaded: We currently have {len(known_names)} companies saved in Supabase.")
-    except Exception as e:
-        print(f"   ⚠️ Could not load database cache. Starting fresh. ({e})")
-        known_names = set()
-        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
-
-    if 'Exchange' not in static_subset.columns:
-        static_subset['Exchange'] = "NSE"
-
-    # ==========================================
-    # STEP 2: FAST LIVE SCRAPE (MAIN TABLES)
-    # ==========================================
-    print("\n📡 STEP 2: Scanning Screener.in for live market prices...")
-    first_page = fetch_with_retry(session, SCREENER_URL)
-    if not first_page: 
-        print("   ❌ FATAL ERROR: Cannot reach Screener.in. Check internet connection.")
-        return
-        
-    page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
-    total_pages = int(page_match.group(1)) if page_match else 1
-    print(f"   📋 Found {total_pages} pages of live market data. Downloading now...")
-    
-    all_dataframes = []
-    
-    for page in range(1, total_pages + 1):
-        page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
-        referer_url = None if page == 1 else (SCREENER_URL if page == 2 else f"{SCREENER_URL}?page={page-1}")
-        
-        html_content = first_page if page == 1 else fetch_with_retry(session, page_url, referer_url=referer_url)
-        if not html_content: continue
-        
         try:
-            tables = pd.read_html(io.StringIO(html_content), thousands=',')
-            if tables:
-                df = tables[0]
-                df = df[df['Name'] != 'Name'].copy()
-                df['Name'] = df['Name'].astype(str).str.strip()
+            trend_df = pd.read_sql('SELECT * FROM market_trend_summary LIMIT 1', engine)
+            trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
+            
+            market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
+            
+            # --- 5-DAY TREND LOGIC (Fixed for % strings) ---
+            mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
+            
+            if not mood_df.empty and market_trend_summary_val is not None:
+                def extract_pct(s):
+                    match = re.search(r'(\d+\.?\d*)', str(s))
+                    return float(match.group(1)) if match else None
                 
-                soup = BeautifulSoup(html_content, 'html.parser')
-                table = soup.find('table')
-                codes = []
-                if table and table.find('tbody'):
-                    for tr in table.find('tbody').find_all('tr'):
-                        if tr.find('th'): continue
-                        a_tag = tr.find('a', href=re.compile(r'/company/([A-Za-z0-9_\-&]+)/'))
-                        if a_tag:
-                            code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
-                            codes.append(code.upper())
+                vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
+                current_val = extract_pct(market_trend_summary_val)
                 
-                if len(codes) == len(df):
-                    df['live_ticker_slug'] = codes 
-                    all_dataframes.append(df)
-                else:
-                    print(f"      ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                if len(vals) > 0 and current_val is not None:
+                    avg_5d = sum(vals) / len(vals)
+                    diff = current_val - avg_5d
                     
-        except Exception as e:
-            print(f"      ⚠️ ERROR parsing page {page}: {e}")
-            
-        if page % 10 == 0 or page == total_pages:
-            print(f"      -> Processed {page}/{total_pages} pages...")
-            
-        if page < total_pages: random_sleep(800, 1500)
-
-    if not all_dataframes: 
-        print("   ❌ FATAL ERROR: No data scraped. Exiting.")
-        return
-        
-    live_df = pd.concat(all_dataframes, ignore_index=True)
-    print(f"   ✅ Done! Collected live data for {len(live_df)} active companies.")
-    
-    # ==========================================
-    # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
-    # ==========================================
-    print("\n🕵️‍♂️ STEP 3: Checking for brand new companies (IPOs, name changes)...")
-    live_names = set(live_df['Name'].tolist())
-    missing_names = [n for n in live_names if n not in known_names]
-    
-    if missing_names:
-        missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
-        total_missing = len(missing_df)
-        print(f"   🚨 Found {total_missing} NEW companies! Fetching their sector details...")
-        new_records = []
-        
-        current_count = 0
-        for idx, row in missing_df.iterrows():
-            current_count += 1
-            stock_name = row['Name']
-            code = row['live_ticker_slug']
-            url = f"https://www.screener.in/company/{code}/"
-            
-            if current_count > 1 and current_count % 25 == 0:
-                cooldown = random.randint(6, 12)
-                print(f"      💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
-                time.sleep(cooldown)
-
-            print(f"      -> [{current_count}/{total_missing}] Investigating: {stock_name}")
-            page_html = fetch_with_retry(session, url, referer_url=SCREENER_URL)
-            
-            sector, industry, exchange_class = "Unknown", "Unknown", ""
-            if page_html:
-                soup = BeautifulSoup(page_html, 'html.parser')
-                sec_tag = soup.find('a', title='Sector')
-                ind_tag = soup.find('a', title='Broad Industry')
-                if sec_tag: sector = sec_tag.text.strip()
-                if ind_tag: industry = ind_tag.text.strip()
-
-                nse_link = soup.find('a', href=re.compile(r'nseindia\.com/get-quotes/equity\?symbol='))
-                bse_link = soup.find('a', href=re.compile(r'bseindia\.com/stock-share-price/'))
-
-                if nse_link:
-                    span_tag = nse_link.find('span')
-                    exchange_class = "NSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "NSE"
-                elif bse_link:
-                    span_tag = bse_link.find('span')
-                    exchange_class = "BSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "BSE"
-                else:
-                    exchange_class = "BSE" if code.isdigit() else "NSE"
-            else:
-                exchange_class = "BSE" if code.isdigit() else "NSE"
-                
-            try:
-                original_col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
-                original_col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
-                original_col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
-                original_col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
-                original_col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
-                
-                new_records.append({
-                    original_col_n: stock_name,
-                    original_col_t: code, 
-                    original_col_s: sector, 
-                    original_col_i: industry, 
-                    original_col_e: exchange_class
-                })
-            except Exception:
-                pass
-            random_sleep(800, 1500)
-            
-        if new_records:
-            new_static_df = pd.DataFrame(new_records)
-            print(f"   ☁️ Saving {len(new_records)} new companies permanently to database...")
-            try:
-                new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
-                new_static_mapped = pd.DataFrame({
-                    'Name': [r.get(original_col_n) for r in new_records],
-                    'Ticker': [r.get(original_col_t) for r in new_records],
-                    'Sector': [r.get(original_col_s) for r in new_records],
-                    'Broad Industry': [r.get(original_col_i) for r in new_records],
-                    'Exchange': [r.get(original_col_e) for r in new_records],
-                    'Static_ATH': [np.nan for _ in new_records]
-                })
-                static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
-                print("   ✅ New companies saved successfully.")
-            except Exception as e:
-                print(f"   ❌ Failed to save new companies: {e}")
-    else:
-        print("   ✅ No new companies today. Existing database is perfectly up to date.")
-
-    # ==========================================
-    # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
-    # ==========================================
-    print("\n🧮 STEP 4: Calculating cross-sectional momentum scores...")
-    ret_1m = next((c for c in live_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
-    ret_3m = next((c for c in live_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
-    ret_6m = next((c for c in live_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
-
-    if ret_1m and ret_3m and ret_6m:
-        live_df[ret_1m] = pd.to_numeric(live_df[ret_1m], errors='coerce')
-        live_df[ret_3m] = pd.to_numeric(live_df[ret_3m], errors='coerce')
-        live_df[ret_6m] = pd.to_numeric(live_df[ret_6m], errors='coerce')
-
-        rank_1m = live_df[ret_1m].rank(ascending=False, method='min')
-        rank_3m = live_df[ret_3m].rank(ascending=False, method='min')
-        rank_6m = live_df[ret_6m].rank(ascending=False, method='min')
-        
-        momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
-        valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
-        
-        final_rank = momentum_score.rank(ascending=True, method='min')
-        
-        live_df['Relative score'] = final_rank.where(valid_mask, np.nan)
-        print("   ✅ Momentum rank calculated (1 = Highest Momentum) and assigned.")
-    else:
-        print("   ⚠️ WARNING: 1M/3M/6M return columns are missing. Cannot calculate momentum.")
-        live_df['Relative score'] = np.nan
-
-    live_df = live_df.drop(columns=['live_ticker_slug'])
-    merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
-    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
-
-    # ==========================================
-    # STEP 5.1: SCRAPE ATH DATA & RANK SECTORS
-    # ==========================================
-    print("\n📊 STEP 5.1: Scraping true ATH data & Generating Sector Rankings...")
-    sector_summary_df = pd.DataFrame()
-    industry_summary_df = pd.DataFrame()
-    ath_df = pd.DataFrame()
-    ath_names = set()
-    
-    ath_screener_url = "https://www.screener.in/screens/3315507/ath-sector-analysis/"
-    first_ath_page = fetch_with_retry(session, ath_screener_url)
-    
-    if first_ath_page:
-        page_match = re.search(r'Showing page \d+ of (\d+)', first_ath_page)
-        ath_total_pages = int(page_match.group(1)) if page_match else 1
-        print(f"   📋 Found {ath_total_pages} pages of live ATH stocks. Downloading...")
-        
-        ath_dataframes = []
-        
-        for p in range(1, ath_total_pages + 1):
-            p_url = ath_screener_url if p == 1 else f"{ath_screener_url}?page={p}"
-            p_html = first_ath_page if p == 1 else fetch_with_retry(session, p_url)
-            
-            if p_html:
-                try:
-                    tables = pd.read_html(io.StringIO(p_html), thousands=',')
-                    if tables:
-                        df = tables[0]
-                        df = df[df['Name'] != 'Name'].copy() 
-                        df['Name'] = df['Name'].astype(str).str.strip()
-                        ath_dataframes.append(df)
-                except Exception as e:
-                    print(f"      ⚠️ ERROR parsing page {p}: {e}")
-                    
-            if p % 5 == 0 or p == ath_total_pages:
-                print(f"      -> Scraped {p}/{ath_total_pages} ATH pages...")
-                
-            if p < ath_total_pages:
-                random_sleep(800, 1500)
-                
-        if ath_dataframes:
-            ath_df = pd.concat(ath_dataframes, ignore_index=True)
-            
-            # Drop the redundant 'Is not SME' column
-            if 'Is not SME' in ath_df.columns:
-                ath_df = ath_df.drop(columns=['Is not SME'])
-                
-            print(f"   ✅ Collected detailed data for {len(ath_df)} ATH companies.")
-            
-            # VLOOKUP LOGIC: Pull mapping details from merged_df into the new ath_df
-            cols_to_pull = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
-            existing_cols = [c for c in cols_to_pull if c in merged_df.columns]
-            
-            ath_df = pd.merge(ath_df, merged_df[existing_cols], on='Name', how='left')
-            print("   ✅ Performed VLOOKUP to add Sector, Industry, Ticker, and Exchange to ATH_Analysis.")
-            
-            ath_names = set(ath_df['Name'].tolist())
-    else:
-        print("   ❌ Failed to fetch ATH Screener. Sector analysis will be empty.")
-
-    # Apply NEW SME LOGIC: Look strictly at the "Is SME" column to filter out SMEs (1 = SME)
-    sme_col = next((c for c in merged_df.columns if str(c).strip().lower() == 'is sme'), None)
-    
-    if sme_col:
-        analysis_df = merged_df[merged_df[sme_col].astype(str).str.strip() != '1'].copy()
-        print(f"   🧹 Filtered out SMEs using '{sme_col}' column.")
-    else:
-        print("   ⚠️ WARNING: 'Is SME' column not found! Proceeding without SME filtering.")
-        analysis_df = merged_df.copy()
-    
-    # Assign True/False based directly on the scraped list
-    analysis_df['is_ath'] = analysis_df['Name'].astype(str).str.strip().isin(ath_names)
-
-    def build_summary_table(df, group_col):
-        valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
-        if valid_df.empty: return pd.DataFrame()
-        summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
-        summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
-        summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
-        summary['Rank'] = summary.index + 1
-        return summary
-
-    col_sector = next((c for c in analysis_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
-    col_industry = next((c for c in analysis_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
-
-    sector_summary_df = build_summary_table(analysis_df, col_sector)
-    industry_summary_df = build_summary_table(analysis_df, col_industry)
-    
-    # -------------------------------------------------------------
-    # NEW LOGIC: Calculate Average 1-Day Return of ATH Stocks
-    # -------------------------------------------------------------
-    if not ath_df.empty:
-        ath_1d_col = next((c for c in ath_df.columns if '1day return' in c.lower() or '1d' in c.lower()), None)
-        if ath_1d_col:
-            ath_df[ath_1d_col] = pd.to_numeric(ath_df[ath_1d_col], errors='coerce')
-            
-            # Merge Avg 1D Return for Sectors
-            if col_sector in ath_df.columns and not sector_summary_df.empty:
-                sec_avg = ath_df.groupby(col_sector)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
-                sector_summary_df = pd.merge(sector_summary_df, sec_avg, on=col_sector, how='left')
-                sector_summary_df['Avg 1D Return %'] = sector_summary_df['Avg 1D Return %'].round(2)
-                
-            # Merge Avg 1D Return for Industries
-            if col_industry in ath_df.columns and not industry_summary_df.empty:
-                ind_avg = ath_df.groupby(col_industry)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
-                industry_summary_df = pd.merge(industry_summary_df, ind_avg, on=col_industry, how='left')
-                industry_summary_df['Avg 1D Return %'] = industry_summary_df['Avg 1D Return %'].round(2)
-
-    # STRICT REQUIREMENT: Sort explicitly by Rank (Lowest to Highest)
-    if not sector_summary_df.empty:
-        sector_summary_df = sector_summary_df.sort_values(by='Rank', ascending=True).reset_index(drop=True)
-    if not industry_summary_df.empty:
-        industry_summary_df = industry_summary_df.sort_values(by='Rank', ascending=True).reset_index(drop=True)
-
-    print("   ✅ Sector and Industry ATH rankings generated successfully (with 1D Averages & Sorted).")
-
-    # ==========================================
-    # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
-    # ==========================================
-    now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
-    
-    if now_ist.hour < 9:
-        trading_date = now_ist - pd.Timedelta(days=1)
-    else:
-        trading_date = now_ist
-
-    today_date_str = trading_date.strftime('%Y-%m-%d')
-    is_weekday = trading_date.weekday() < 5  
-    
-    historical_mood_df = pd.DataFrame()
-    already_logged = False
-    is_nse_holiday = False
-    
-    if is_weekday:
-        print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
-        try:
-            query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
-            with engine.connect() as conn:
-                existing_mood = pd.read_sql(query_dup, conn)
-            already_logged = not existing_mood.empty
+                    if diff >= 2.0:
+                        trend_sym = "📈"
+                    elif diff <= -2.0:
+                        trend_sym = "📉"
+                    else:
+                        trend_sym = "➖"
+                        
+                    trend_regime = f"{trend_regime} {trend_sym}"
         except Exception:
-            already_logged = False
-            
-        if not already_logged:
-            mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
-            
-            col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
-            if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
+            if 'trend_regime' not in locals():
+                trend_regime = "N/A"
 
-            if col_chg:
-                mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
-                valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
-                total_stocks = int(len(valid_returns))
-                positive_stocks = int((valid_returns[col_chg] > 0).sum())
-                
-                if total_stocks > 0:
-                    ratio = positive_stocks / total_stocks
-                    score = ratio * 100
-                    pct_str = f"{score:.2f}%"  
-                    
-                    print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
-                    try:
-                        query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
-                        with engine.connect() as conn:
-                            last_entry_df = pd.read_sql(query_last, conn)
-                        
-                        if not last_entry_df.empty:
-                            last_text = str(last_entry_df['Market Breadth'].iloc[0])
-                            match_pct = re.search(r'([0-9.]+)%', last_text)
-                            if match_pct:
-                                last_logged_pct = float(match_pct.group(1))
-                                today_rounded_pct = round(score, 2)
-                                
-                                if today_rounded_pct == last_logged_pct:
-                                    return_variance = float(valid_returns[col_chg].var())
-                                    
-                                    if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
-                                        is_nse_holiday = True
-                                        print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
-                                        print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
-                    except Exception as e:
-                        print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
-                    
-                    if not is_nse_holiday:
-                        if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
-                        elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
-                        elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
-                        elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
-                        else: mood_label = f"Super Positive 🚀 {pct_str}"
-                            
-                        historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
-                        
-                        print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
-                        print(f"      🚦 Today's Mood: {mood_label}")
-                        
-                        try:
-                            historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
-                            print("      ✅ Market Mood successfully logged to history.")
-                        except Exception as e:
-                            print(f"      ❌ Failed to save market mood: {e}")
-        else:
-            print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
-    else:
-        print(f"\n   ⏸️ Skipping Market Mood: {today_date_str} is not a valid weekday.")
-
-    # ==========================================
-    # STEP 5.3: COMPOSITE SMOOTHED TREND ENGINE
-    # ==========================================
-    if is_weekday and not already_logged and not is_nse_holiday:
-        print("\n   📈 Calculating 7-Day, 14-Day, and 21-Day Composite Trend...")
+        # === UPDATED ROC LOGIC ===
         try:
-            query_all = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30')
-            with engine.connect() as conn:
-                hist_df = pd.read_sql(query_all, conn)
+            # Use SELECT * to avoid explicit column quoting issues in PostgreSQL
+            roc_df = pd.read_sql('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
             
-            if not historical_mood_df.empty:
-                hist_df = pd.concat([historical_mood_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
-            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
+            # Dynamically find the column to prevent exact-case matching errors
+            roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
             
-            if len(hist_df) >= 7:
-                def extract_percentage(text_val):
-                    match = re.search(r'([0-9.]+)%', str(text_val))
-                    return float(match.group(1)) if match else np.nan
-
-                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
-                
-                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
-                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
-                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
-                
-                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
-                pct_str = f"{final_score:.2f}%"
-                
-                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
-                elif final_score <= 40: trend_label = f"Negative 🔻 {pct_str}"
-                elif final_score <= 60: trend_label = f"Neutral ⚖️ {pct_str}"
-                elif final_score <= 80: trend_label = f"Positive 💚 {pct_str}"
-                else: trend_label = f"Super Positive 🚀 {pct_str}"
-                
-                print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
-                print(f"      🏆 Final Market Regime: {trend_label}")
-                
-                trend_summary_df = pd.DataFrame([{
-                    "last_updated": today_date_str,
-                    "avg_7d": round(val_7d, 2),
-                    "avg_14d": round(val_14d, 2),
-                    "avg_21d": round(val_21d, 2),
-                    "composite_score": round(final_score, 2),
-                    "trend_regime": trend_label
-                }])
-                trend_summary_df.to_sql("market_trend_summary", engine, if_exists="replace", index=False)
+            if roc_col is not None and not roc_df.empty:
+                roc_vals = roc_df[roc_col].tolist()
             else:
-                print("      ⚠️ Not enough history to calculate rolling averages yet.")
+                roc_vals = []
         except Exception as e:
-            print(f"      ❌ Trend Engine Error: {e}")
-    elif is_nse_holiday:
-        print("\n   ⏸️ Trend Engine Paused: Rolling calculations skipped due to NSE Trading Holiday.")
+            # Display a warning in Streamlit so it doesn't fail silently
+            st.warning(f"⚠️ SQL Error fetching Market Cycle ROC: {e}")
+            roc_vals = []
 
-    # ==========================================
-    # STEP 6: PUSH DATA BACK TO CLOUD TABLES
-    # ==========================================
-    print("\n📦 STEP 6: Delivering all final data to Supabase (Chunked Upload)...")
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals
+
+    except Exception as e:
+        st.error(f"DATABASE ERROR: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", []
+
+@st.cache_data(ttl=60)
+def fetch_market_breadth_from_gsheets():
     try:
-        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-        print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
+        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv"
+        df = pd.read_csv(url, header=None)
+        market_breadth_value = df.iloc[5, 7] 
+        if pd.isna(market_breadth_value):
+            return "N/A"
+        return str(market_breadth_value)
+    except Exception:
+        return "N/A"
+
+def fetch_chartink_data():
+    with requests.Session() as session:
+        try:
+            resp = session.get(CHARTINK_SCREENER_URL, timeout=10)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            meta_tag = soup.find('meta', {'name': 'csrf-token'})
+            if not meta_tag: return []
+            headers = {'x-csrf-token': meta_tag['content'], 'x-requested-with': 'XMLHttpRequest'}
+            api_response = session.post(CHARTINK_PROCESS_URL, headers=headers, data={'scan_clause': CHARTINK_SCAN_CLAUSE}, timeout=10)
+            data = api_response.json()
+            if 'data' in data and len(data['data']) > 0:
+                df = pd.DataFrame(data['data'])
+                return [[row['nsecode'], row['close'], row['per_chg'], row['volume'], 'NSE'] for _, row in df.iterrows()]
+            return []
+        except Exception:
+            return []
+
+def fetch_tradingview_data():
+    try:
+        response = requests.post(TV_URL, headers=TV_HEADERS, json=TV_PAYLOAD, timeout=10)
+        raw_data = response.json().get("data", [])
+        formatted_data = []
+        for item in raw_data:
+            full_ticker = item.get("s", "")
+            exchange, clean_name = full_ticker.split(':') if ':' in full_ticker else ("NSE", full_ticker)
+            formatted_data.append([clean_name, item["d"][1], item["d"][4], item["d"][5], exchange])
+        return formatted_data
+    except Exception:
+        return []
+
+@st.cache_data(ttl=60)
+def get_combined_data():
+    chartink_list = fetch_chartink_data()
+    tv_list = fetch_tradingview_data()
+    tv_list.sort(key=lambda x: 0 if x[4] == 'NSE' else 1)
+    
+    combined_data, seen_symbols = [], set()
+    for row in chartink_list:
+        symbol = re.sub(r'\s+', '', str(row[0])).upper()
+        combined_data.append(row)
+        seen_symbols.add(symbol)
         
-        if not ath_df.empty:
-            ath_df.to_sql("ATH_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-            print(f"   ✅ 'ATH_Analysis' overwritten successfully with new columns.")
-            
-        if not sector_summary_df.empty:
-            sector_summary_df.to_sql("ATH_Sector_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-            print(f"   ✅ 'ATH_Sector_Analysis' overwritten successfully.")
-            
-        if not industry_summary_df.empty:
-            industry_summary_df.to_sql("ATH_Industry_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-            print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
-            
-        timestamp_string = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')
-        sync_df = pd.DataFrame([{"last_sync": timestamp_string}])
-        sync_df.to_sql("sync_log", engine, if_exists="replace", index=False)
-        print(f"   🕒 Data timestamp set to IST: {timestamp_string}")
-            
-    except Exception as e:
-        print(f"   ❌ FATAL ERROR during database upload: {e}")
+    for row in tv_list:
+        symbol = re.sub(r'\s+', '', str(row[0])).upper()
+        if symbol not in seen_symbols:
+            combined_data.append(row)
+            seen_symbols.add(symbol)
+    return combined_data
 
-    # ==========================================
-    # STEP 7: PULL EXACT 20-MONTH CNXSMALLCAP ROC
-    # ==========================================
-    print("\n📈 STEP 7: Fetching Exact-Date 20-Month ROC for CNXSMALLCAP...")
-
+# ==========================================
+# 4. UI COMPONENTS & GRAPHS 
+# ==========================================
+def get_breadth_color(breadth_str):
     try:
-        tv = TvDatafeed()
-
-        # Pull daily history
-        tv_data = tv.get_hist(
-            symbol='CNXSMALLCAP',
-            exchange='NSE',
-            interval=Interval.in_daily,
-            n_bars=1000
-        )
-
-        if tv_data is not None and not tv_data.empty:
-
-            tv_data = tv_data.sort_index()
-
-            # Latest available trading day
-            current_date = tv_data.index[-1]
-            current_close = float(tv_data['close'].iloc[-1])
-
-            # Exact calendar date 20 months ago
-            target_date = current_date - pd.DateOffset(months=20)
-
-            # Nearest trading day on or before target date
-            historical_data = tv_data[tv_data.index <= target_date]
-
-            if not historical_data.empty:
-
-                past_date = historical_data.index[-1]
-                past_close = float(historical_data['close'].iloc[-1])
-
-                roc_20m = round(
-                    ((current_close - past_close) / past_close) * 100,
-                    2
-                )
-
-                print(f"   Current Date: {current_date.date()}")
-                print(f"   Current Close: {current_close}")
-                print(f"   Target Date (20M Ago): {target_date.date()}")
-                print(f"   Actual Trading Date: {past_date.date()}")
-                print(f"   Past Close: {past_close}")
-                print(f"   Exact 20M ROC: {roc_20m}%")
-
-                roc_timestamp = pd.Timestamp.now(
-                    tz='Asia/Kolkata'
-                ).strftime('%Y-%m-%d %H:%M:%S')
-
-                roc_df = pd.DataFrame([{
-                    "Date": roc_timestamp,
-                    "Symbol": "CNXSMALLCAP",
-                    "Current_Date": str(current_date.date()),
-                    "Past_Date": str(past_date.date()),
-                    "Current_Price": current_close,
-                    "Price_20_Months_Ago": past_close,
-                    "ROC_20M_Percent": roc_20m
-                }])
-
-                roc_df.to_sql(
-                    "CNXSMALLCAP_ROC",
-                    engine,
-                    if_exists="replace",
-                    index=False
-                )
-
-                print("   ✅ 'CNXSMALLCAP_ROC' updated successfully.")
-
+        match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
+        if match:
+            val = float(match.group(1))
+            if val <= 30.0:
+                return "rgba(252, 165, 165, 0.4)"  
+            elif val <= 40.0:
+                return "rgba(254, 202, 202, 0.4)"  
+            elif val <= 50.0:
+                return "rgba(253, 230, 138, 0.4)"  
+            elif val <= 60.0:
+                return "rgba(187, 247, 208, 0.4)"  
             else:
-                print("   ⚠️ Not enough history to calculate 20M ROC.")
+                return "rgba(134, 239, 172, 0.4)"  
+        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+    except:
+        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
+def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
+    """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
+    try:
+        match = re.search(r'(\d+\.?\d*)%', str(nse_breadth_str))
+        live_match = re.search(r'(\d+\.?\d*)', str(live_breadth_str))
+
+        if match:
+            val = float(match.group(1))
+            live_val = float(live_match.group(1)) if live_match else 0.0
+
+            if live_val > 50.0:
+                action_suffix = " - Trade"
+            elif val <= 50.0:
+                if "📈" in str(nse_breadth_str):
+                    action_suffix = " - Trade"
+                elif "📉" in str(nse_breadth_str) or "➖" in str(nse_breadth_str):
+                    action_suffix = " - Stop Trading"
+                else:
+                    action_suffix = "" 
+            else:
+                action_suffix = " - Trade"
+
+            # Base assignment logic
+            if val <= 20.0:
+                alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
+            elif val <= 25.0:
+                alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+            elif val <= 30.0:
+                alloc_str, color = f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+            elif val <= 35.0:
+                alloc_str, color = f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+            elif val <= 40.0:
+                alloc_str, color = f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+            elif val <= 45.0:
+                alloc_str, color = f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+            elif val <= 50.0:
+                alloc_str, color = f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+            else:
+                alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"   
+
+            # Check if action is NOT pure "Trade", force light red background
+            if action_suffix != " - Trade":
+                color = "rgba(252, 165, 165, 0.4)" # Light Red
+
+            return alloc_str, color
+
+        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+    except:
+        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+
+def create_metric_card(title, value, bg_color):
+    return f"""
+    <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); height: 100%;">
+        <span style="font-size: 0.875rem; color: #4B5563; font-weight: 500; font-family: 'Inter', sans-serif;">{title}</span><br>
+        <span style="color: #000000; font-size: 1.7rem; font-weight: 600; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif;">{value}</span>
+    </div>
+    """
+
+def render_market_cycle_graph(roc_vals):
+    """Encapsulates the Symmetrical Bell Curve logic and renders it to Streamlit"""
+    if not roc_vals:
+        st.info("No ROC data available to plot Market Cycle.")
+        return
+
+    roc_val = float(roc_vals[0])
+    trend_dir = "up"
+    # Compare latest ROC against previous to determine direction of the curve
+    if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
+        trend_dir = "down"
+
+    # =========================================================================
+    # PERFECT EQUAL SPACING (Every stage is separated by EXACTLY 4 months)
+    # =========================================================================
+    if trend_dir == "up":
+        if roc_val <= 20: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
+        elif roc_val <= 40: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
+        elif roc_val <= 60: stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
+        elif roc_val <= 80: stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
+        elif roc_val <= 100: stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 16, 66
+        else: stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
+    else:
+        if roc_val >= 80: stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 24, 90
+        elif roc_val >= 60: stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 28, 66
+        elif roc_val >= 40: stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 32, 33
+        elif roc_val >= 20: stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 36, 15
+        elif roc_val >= 0: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
+        else: stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 44, 2
+
+    # Determine Color Theme based on current stage
+    red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
+    if stage in red_stages:
+        theme_color = '#EF4444' # Red
+        bg_theme_start = 'rgba(239, 68, 68, 0.1)'
+        bg_theme_end = 'rgba(239, 68, 68, 0.02)'
+    else:
+        theme_color = '#10B981' # Green
+        bg_theme_start = 'rgba(39, 174, 96, 0.1)'
+        bg_theme_end = 'rgba(39, 174, 96, 0.02)'
+
+    # CURVE ARRAYS (Aligned strictly to 4-month increments up to 48 months)
+    curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+    curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
+    
+    # BOLD, HIGH-VISIBILITY LABELS
+    stage_names = [
+        "<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", 
+        "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", 
+        "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
+    ]
+
+    # Individual Text Coloring (Make Euphoria bold red)
+    text_colors = ['#111827'] * 13 # Dark Gray/Black for normal labels
+    text_colors[5] = '#EF4444' # Bold Red exclusively for Euphoria
+
+    fig = go.Figure()
+    
+    # 1. Enhanced Cycle Line (Forcing ALL labels to standard top-center)
+    fig.add_trace(go.Scatter(
+        x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
+        textposition="top center", 
+        textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
+        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
+        fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', 
+        hoverinfo='none', name='Market Cycle'
+    ))
+    
+    # 2. Prominent Colored Dot (Green or Red)
+    fig.add_trace(go.Scatter(
+        x=[dot_x], y=[dot_y], mode='markers', 
+        marker=dict(
+            color=theme_color, 
+            size=22, 
+            line=dict(color='#FFFFFF', width=4)
+        ), 
+        hoverinfo='none', name='Current Stage'
+    ))
+
+    # 3. Vertical Line exactly at 20 Months (Peak)
+    fig.add_shape(
+        type="line",
+        x0=20, y0=0, x1=20, y1=100,
+        line=dict(color="black", width=3)
+    )
+
+    # 4. Floating Annotation pointing to the dot
+    fig.add_annotation(
+        x=dot_x, y=dot_y + 15, 
+        text=f"<b>{stage}</b>",
+        showarrow=True,
+        arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
+        font=dict(family="Inter, sans-serif", size=14, color=theme_color),
+        bgcolor="rgba(255, 255, 255, 0.95)",
+        bordercolor=theme_color, borderwidth=2, borderpad=6,
+        opacity=1.0
+    )
+
+    # 5. Clean Layout with Explicit X/Y Axes Visible (Scaled perfectly to 50 for balance)
+    fig.update_layout(
+        xaxis=dict(
+            title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="black")),
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
+            zeroline=False,
+            showticklabels=True,
+            tickfont=dict(size=14, color="black", family="Inter"),
+            showline=True, linewidth=3, linecolor='black',
+            dtick=2, 
+            range=[-2, 50] # Pushed to 50 to accommodate the perfectly spaced timeline
+        ),
+        yaxis=dict(
+            title=dict(text="<b>Price</b>", font=dict(family="Inter", size=18, color="black")),
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
+            zeroline=False,
+            showticklabels=True,
+            tickfont=dict(size=14, color="black", family="Inter"),
+            showline=True, linewidth=3, linecolor='black',
+            range=[-5, 125]
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=60, r=40, t=30, b=60), showlegend=False, 
+        height=550 
+    )
+    
+    # 6. CSS Wrapper for the surrounding info box (Updated for multi-color heading)
+    st.markdown(f"""
+    <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
+                border-left: 4px solid {theme_color}; 
+                padding: 12px 18px; 
+                border-radius: 6px; 
+                margin-bottom: 15px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+        <h4 style="margin: 0 0 4px 0; color: #000000; font-family: 'Inter', sans-serif;">
+            CNXSMALLCAP ROC: <span style="color: {theme_color};">{roc_val}%</span>
+        </h4>
+        <h4 style="margin: 0; color: #000000; font-family: 'Inter', sans-serif;">
+            Current Stage: <span style="color: {theme_color};">{stage}</span> 
+        </h4>
+        <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+# ==========================================
+# 5. DASHBOARD MAIN LAYOUT
+# ==========================================
+header_col1, header_col2 = st.columns([2, 1])
+with header_col1:
+    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</p>", unsafe_allow_html=True)
+
+with header_col2:
+    ist = timezone(timedelta(hours=5, minutes=30))
+    current_time = datetime.now(ist).strftime('%I:%M:%S %p')
+    current_date = datetime.now(ist).strftime('%d %b %Y')
+    
+    dot_color = "green"
+    status_text = "LIVE DATA"
+    st.markdown(f"""
+        <div style="text-align: right; margin-top: 5px; color: gray;">
+            <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
+                {status_text} <div class="blob {dot_color}"></div><br>
+                <span style="color: #1E88E5; font-size: 1.4rem; font-weight: 800;">{current_time}</span><br>
+                <span style="font-size: 0.85rem;">{current_date}</span>
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.divider()
+
+with st.spinner("Scanning live markets & syncing with Supabase..."):
+    data = get_combined_data()
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals = fetch_database_reference()  
+    live_sheet_breadth = fetch_market_breadth_from_gsheets()
+
+    live_bg = get_breadth_color(live_sheet_breadth)
+    nse_bg = get_breadth_color(trend_regime)
+    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
+    default_bg = "rgba(216, 180, 254, 0.3)"
+
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    with metric_col1:
+        st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
+    with metric_col2:
+        st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_bg), unsafe_allow_html=True)
+    with metric_col3:
+        st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
+    with metric_col4:
+        st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if data:
+        # Load initially with a temporary scraped exchange column
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
+        df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
+
+        if not main_df.empty:
+            df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
+            df = df.merge(sec_rank_df, on="sector", how="left")
+            df = df.merge(ind_rank_df, on="broad_industry", how="left")
+            
+            # --- OVERWRITE EXCHANGE LOGIC ---
+            # Use Supabase 'db_exchange' if it exists and isn't empty, otherwise fallback to scraped
+            df['Exchange'] = np.where(df['db_exchange'].notna() & (df['db_exchange'] != ""), df['db_exchange'], df['Temp_Exchange'])
         else:
-            print("   ⚠️ Failed to fetch CNXSMALLCAP data.")
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+            df['Exchange'] = df['Temp_Exchange']
 
-    except Exception as e:
-        print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
+        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+        df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
 
-    print("\n" + "="*60)
-    print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
-    print("="*60 + "\n")
+        for col in ['sec_rank', 'ind_rank', 'relative_score']:
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
-if __name__ == "__main__":
-    run_daily_scraper()
+        df['Priority'] = np.nan
+
+        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
+            p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
+            p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
+            p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
+            p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+            p5 = (df['ind_rank'] <= 15) & (df['sec_rank'] >= 6) & ~p1 & ~p2 & ~p3 & ~p4
+
+            df.loc[p1, 'Priority'] = 1
+            df.loc[p2, 'Priority'] = 2
+            df.loc[p3, 'Priority'] = 3
+            df.loc[p4, 'Priority'] = 4
+            df.loc[p5, 'Priority'] = 5
+
+        display_cols = ["Priority", "Symbol", "Exchange", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        
+        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
+
+        display_df = display_df.rename(columns={
+            "sector": "Sector", 
+            "sec_rank": "Sector Rank", 
+            "broad_industry": "Industry", 
+            "ind_rank": "Ind. Rank", 
+            "relative_score": "Momentum Rank"
+        })
+        
+        if not raw_sec.empty and not raw_ind.empty:
+            
+            # --- MODULAR GRAPH RENDERING ---
+            with st.expander("🎢 Market Cycle", expanded=True):
+                render_market_cycle_graph(roc_vals)
+
+            # --- TOP SECTORS & INDUSTRIES ---
+            with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
+                lead_col1, lead_col2 = st.columns(2)
+                
+                with lead_col1:
+                    st.markdown("##### 🔥 Top 5 Sectors")
+                    sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                    sec_cols = [c for c in sec_cols if c in raw_sec.columns]
+                    top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
+                    
+                    top_2_sec_idx = []
+                    if 'Avg 1D Return %' in top_sec.columns:
+                        top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
+                    
+                    if 'ATH %' in top_sec.columns: 
+                        top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_sec.columns: 
+                        top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                    
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_sec.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for idx, row in top_sec.iterrows():
+                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_2_sec_idx else ""
+                        html += f"<tr{bg_style}>"
+                        for val in row: html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
+                    
+                with lead_col2:
+                    st.markdown("##### 🚀 Top 15 Industries")
+                    ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                    ind_cols = [c for c in ind_cols if c in raw_ind.columns]
+                    top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
+                    
+                    top_4_ind_idx = []
+                    if 'Avg 1D Return %' in top_ind.columns:
+                        top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
+                    
+                    if 'ATH %' in top_ind.columns: 
+                        top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_ind.columns: 
+                        top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                    
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_ind.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for idx, row in top_ind.iterrows():
+                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_4_ind_idx else ""
+                        html += f"<tr{bg_style}>"
+                        for val in row: html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
+                    
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        def highlight_priority(val):
+            try: 
+                return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else ''
+            except: 
+                return ''
+        
+        def safe_int(val, prefix="", suffix=""):
+            if val == "" or pd.isna(val): return ""
+            try: return f"{prefix}{int(float(val))}{suffix}"
+            except: return ""
+
+        styled_df = display_df.style.hide(axis="index").map(highlight_priority, subset=['Priority']).format({
+            "Close": "₹{:.2f}", 
+            "% Change": "{:.2f}%", 
+            "Turnover (Cr)": "₹{:.2f} Cr",
+            "Volume": "{:,.0f}",
+            "Momentum Rank": lambda x: safe_int(x),
+            "Priority": lambda x: safe_int(x, "Tier "),
+            "Sector Rank": lambda x: safe_int(x, "#"),
+            "Ind. Rank": lambda x: safe_int(x, "#"),
+        })
+        
+        html_table = styled_df.to_html()
+        st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
+
+    else:
+        st.info("No stocks matching criteria right now. Waiting for momentum...")
+
+time.sleep(60)
+st.rerun()
