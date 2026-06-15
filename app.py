@@ -163,7 +163,8 @@ def fetch_database_reference():
         # === UPDATED ROC LOGIC ===
         try:
             # Use SELECT * to avoid explicit column quoting issues in PostgreSQL
-            roc_df = pd.read_sql('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 2', engine)
+            # FETCH 25 days instead of 2 to allow the 20-day macro lookback
+            roc_df = pd.read_sql('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 25', engine)
             
             # Dynamically find the column to prevent exact-case matching errors
             roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
@@ -332,9 +333,12 @@ def render_market_cycle_graph(roc_vals):
 
     roc_val = float(roc_vals[0])
     trend_dir = "up"
-    # Compare latest ROC against previous to determine direction of the curve
-    if len(roc_vals) > 1 and roc_vals[0] < roc_vals[1]:
-        trend_dir = "down"
+    
+    # Compare latest ROC against 20 days ago (or furthest available) to determine direction
+    if len(roc_vals) > 1:
+        lookback_index = 20 if len(roc_vals) > 20 else len(roc_vals) - 1
+        if roc_val < float(roc_vals[lookback_index]):
+            trend_dir = "down"
 
     # =========================================================================
     # PERFECT EQUAL SPACING (Every stage is separated by EXACTLY 4 months)
