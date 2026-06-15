@@ -146,7 +146,7 @@ def fetch_database_reference():
                 
                 if len(vals) > 0 and current_val is not None:
                     avg_5d = sum(vals) / len(vals)
-                    diff = current_val - avg_5d
+                    diff = avg_5d - current_val
                     
                     if diff >= 2.0:
                         trend_sym = "📈"
@@ -340,18 +340,18 @@ def render_market_cycle_graph(roc_vals):
     # PERFECT EQUAL SPACING (Every stage is separated by EXACTLY 4 months)
     # =========================================================================
     if trend_dir == "up":
-        if roc_val <= 20: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
-        elif roc_val <= 40: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
-        elif roc_val <= 60: stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
-        elif roc_val <= 80: stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
+        if roc_val <= 0: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
+        elif roc_val <= 20: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
+        elif roc_val <= 40: stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
+        elif roc_val <= 60: stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
         elif roc_val <= 100: stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 16, 66
         else: stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
     else:
-        if roc_val >= 80: stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 24, 90
-        elif roc_val >= 60: stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 28, 66
-        elif roc_val >= 40: stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 32, 33
-        elif roc_val >= 20: stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 36, 15
-        elif roc_val >= 0: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
+        if roc_val >= 90: stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 24, 90
+        elif roc_val >= 80: stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 28, 66
+        elif roc_val >= 70: stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 32, 33
+        elif roc_val >= 60: stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 36, 15
+        elif roc_val > 20: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
         else: stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 44, 2
 
     # Determine Color Theme based on current stage
