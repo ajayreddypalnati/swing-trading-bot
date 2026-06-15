@@ -98,9 +98,23 @@ TV_PAYLOAD = {
 # ==========================================
 # 3. DATA FETCHING 
 # ==========================================
-# --- OPTION 1 FIX: Cache Supabase data for 5 minutes (300 seconds) ---
-@st.cache_data(ttl=300)
-def fetch_database_reference():
+
+def get_db_cache_key():
+    """Generates a dynamic string to control Streamlit's caching behavior based on IST."""
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now = datetime.now(ist)
+    
+    # Between 10:00 PM (22) and 4:59 AM (4)
+    if now.hour >= 22 or now.hour < 5:
+        # Changes every 10 minutes (e.g., _0, _1, _2... up to _5)
+        return f"night_mode_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
+    else:
+        # From 5:00 AM to 9:59 PM - Remains identical all day
+        return f"market_hours_locked_{now.strftime('%Y-%m-%d')}"
+
+# --- OPTION 1 FIX: Cache Supabase data using Dynamic Cache Key and 24h TTL ---
+@st.cache_data(ttl=86400)
+def fetch_database_reference(cache_key):
     try:
         db_url = st.secrets["DATABASE_URL"]
 
@@ -499,7 +513,8 @@ st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals = fetch_database_reference()  
+    current_cache_key = get_db_cache_key()
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals = fetch_database_reference(current_cache_key)  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
