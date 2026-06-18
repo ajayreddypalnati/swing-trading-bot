@@ -33,7 +33,7 @@ st.markdown("""
             width: 100%;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch; 
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
         .scrollable-table-container table {
             width: 100%;
@@ -737,7 +737,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                         
                         st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
-                        st.markdown("<br>", unsafe_allow_html=True)
                         
                         display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
                         display_mom = display_mom.rename(columns={
