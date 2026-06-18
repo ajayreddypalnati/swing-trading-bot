@@ -127,7 +127,6 @@ def fetch_database_reference(cache_key):
         with engine.connect() as conn:
             main_df_raw = pd.read_sql(text('SELECT * FROM stock_master'), conn)
             
-            # Dynamically map columns just like the scraper does to avoid exact match errors
             col_ticker = next((c for c in main_df_raw.columns if 'ticker' in str(c).lower()), 'Ticker')
             col_name = next((c for c in main_df_raw.columns if 'name' in str(c).lower()), 'Name')
             col_sector = next((c for c in main_df_raw.columns if 'sector' in str(c).lower()), 'Sector')
@@ -140,7 +139,6 @@ def fetch_database_reference(cache_key):
             col_down_ath = next((c for c in main_df_raw.columns if 'down' in str(c).lower() and 'ath' in str(c).lower()), 'Down %_ATH')
             col_1d_ret = next((c for c in main_df_raw.columns if '1day' in str(c).lower() and 'return' in str(c).lower()), '1day return %')
 
-            # Rename safely
             main_df = main_df_raw.rename(columns={
                 col_ticker: 'ticker',
                 col_name: 'stock_name',
@@ -577,29 +575,24 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 if not main_df.empty:
                     mom_df = main_df.copy()
                     
-                    # Convert required columns to numeric safely
                     mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
                     mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
                     mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
                     mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
                     mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
                     
-                    # Apply explicit filtering rules for the entire universe
                     f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
                     f_turnover = mom_df['turnover'] >= min_turnover
                     f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
                     f_ath      = mom_df['down_ath'] <= 20.0
                     
-                    # Full valid universe sorted by best momentum
                     full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
                     full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
                     full_filtered_mom['Rank'] = full_filtered_mom.index + 1
                     
-                    # Top 30 for the main display
                     filtered_mom = full_filtered_mom.head(30)
                     
                     if not filtered_mom.empty:
-                        # Calculate Average 1D Return for Top 25
                         top_25_avg = filtered_mom.head(25)['1d_return'].mean()
                         avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                         
@@ -619,7 +612,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                             'broad_industry': 'Industry'
                         })
                         
-                        # Handle NaN values for Band presentation
                         display_mom['Band'] = display_mom['Band'].fillna("-")
                         
                         styled_mom = display_mom.style.hide(axis="index").format({
@@ -645,32 +637,40 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     if uploaded_file is not None:
                         try:
-                            # Read uploaded file
                             if uploaded_file.name.endswith('.csv'):
                                 user_port_df = pd.read_csv(uploaded_file, header=None)
                             else:
                                 user_port_df = pd.read_csv(uploaded_file, header=None, sep='\t')
                             
-                            # Clean and extract tickers
                             raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
                             user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
-                            user_tickers = list(dict.fromkeys(user_tickers)) # Remove exact duplicates
+                            user_tickers = list(dict.fromkeys(user_tickers)) 
                             
                             n_stocks = len(user_tickers)
                             if n_stocks > 0:
                                 st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
                                 
-                                # Target pool is 2x the user's portfolio size
+                                # ---- EXCLUSION FEATURE ----
+                                st.markdown("#### 🚫 Exclude Unavailable Stocks")
+                                unavailable_tickers = st.multiselect(
+                                    "Select replacement tickers hitting upper circuits or with low liquidity to skip them:",
+                                    options=full_filtered_mom['ticker'].tolist(),
+                                    help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock."
+                                )
+                                
                                 target_pool_size = n_stocks * 2
                                 top_pool = full_filtered_mom.head(target_pool_size)
                                 top_pool_tickers = top_pool['ticker'].tolist()
                                 
-                                # Candidates available for replacing dropped stocks
-                                replacements_available = top_pool[~top_pool['ticker'].isin(user_tickers)].to_dict('records')
+                                # Remove user portfolio stocks AND manually excluded stocks from available replacements
+                                valid_reps = full_filtered_mom[
+                                    ~full_filtered_mom['ticker'].isin(user_tickers) & 
+                                    ~full_filtered_mom['ticker'].isin(unavailable_tickers)
+                                ]
+                                replacements_available = valid_reps.to_dict('records')
                                 
                                 rebalance_data = []
                                 for t in user_tickers:
-                                    # Find current rank
                                     rank_match = full_filtered_mom[full_filtered_mom['ticker'] == t]
                                     curr_rank = rank_match['Rank'].iloc[0] if not rank_match.empty else "Out of Range"
                                     
@@ -683,9 +683,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                             "Replacement Rank": "-"
                                         })
                                     else:
-                                        # Needs Rebalance
                                         if replacements_available:
-                                            rep = replacements_available.pop(0) # Pop highest momentum stock
+                                            rep = replacements_available.pop(0) 
                                             rep_ticker = rep['ticker']
                                             rep_rank = rep['Rank']
                                         else:
@@ -702,12 +701,11 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 
                                 rebal_df = pd.DataFrame(rebalance_data)
                                 
-                                # Apply color coding logic for Hold vs Rebalance
                                 def color_status(row):
                                     if 'Hold' in str(row['Status']):
-                                        return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) # Light Green
+                                        return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
                                     elif 'Rebalance' in str(row['Status']):
-                                        return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) # Light Red
+                                        return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
                                     return [''] * len(row)
                                 
                                 styled_rebal = rebal_df.style.apply(color_status, axis=1).hide(axis="index")
