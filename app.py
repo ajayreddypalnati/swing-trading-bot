@@ -104,15 +104,11 @@ def get_db_cache_key():
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
     
-    # Between 10:00 PM (22) and 4:59 AM (4)
     if now.hour >= 22 or now.hour < 5:
-        # Changes every 10 minutes (e.g., _0, _1, _2... up to _5)
         return f"night_mode_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
     else:
-        # From 5:00 AM to 9:59 PM - Remains identical all day
         return f"market_hours_locked_{now.strftime('%Y-%m-%d')}"
 
-# --- OPTION 1 FIX: Cache Supabase data using Dynamic Cache Key and 24h TTL ---
 @st.cache_data(ttl=86400)
 def fetch_database_reference(cache_key):
     try:
@@ -127,7 +123,22 @@ def fetch_database_reference(cache_key):
 
         engine = create_engine(db_url)
 
-        main_df = pd.read_sql('SELECT "Ticker" as ticker, "Sector" as sector, "Broad Industry" as broad_industry, "Relative score" as relative_score, "Exchange" as db_exchange FROM stock_master', engine)
+        # Updated to fetch specific new columns for the Momentum Screener
+        query_main = '''
+        SELECT 
+            "Ticker" as ticker, 
+            "Name" as stock_name,
+            "Sector" as sector, 
+            "Broad Industry" as broad_industry, 
+            "Relative score" as relative_score, 
+            "Exchange" as db_exchange,
+            "Mar Cap Rs.Cr." as market_cap,
+            "Turnover" as turnover,
+            "Band" as band,
+            "Down %_ATH" as down_ath
+        FROM stock_master
+        '''
+        main_df = pd.read_sql(query_main, engine)
         
         raw_sec = pd.read_sql('SELECT * FROM "ATH_Sector_Analysis"', engine)
         raw_ind = pd.read_sql('SELECT * FROM "ATH_Industry_Analysis"', engine)
@@ -147,7 +158,6 @@ def fetch_database_reference(cache_key):
             
             market_trend_summary_val = trend_df['composite_score'].iloc[0] if not trend_df.empty else None
             
-            # --- 5-DAY TREND LOGIC (Fixed for % strings) ---
             mood_df = pd.read_sql('SELECT "Date", "Market Breadth" FROM historical_market_mood ORDER BY "Date" DESC LIMIT 5', engine)
             
             if not mood_df.empty and market_trend_summary_val is not None:
@@ -174,13 +184,8 @@ def fetch_database_reference(cache_key):
             if 'trend_regime' not in locals():
                 trend_regime = "N/A"
 
-        # === UPDATED ROC LOGIC ===
         try:
-            # Use SELECT * to avoid explicit column quoting issues in PostgreSQL
-            # FETCH 25 days instead of 2 to allow the 20-day macro lookback
             roc_df = pd.read_sql('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 25', engine)
-            
-            # Dynamically find the column to prevent exact-case matching errors
             roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
             
             if roc_col is not None and not roc_df.empty:
@@ -188,7 +193,6 @@ def fetch_database_reference(cache_key):
             else:
                 roc_vals = []
         except Exception as e:
-            # Display a warning in Streamlit so it doesn't fail silently
             st.warning(f"⚠️ SQL Error fetching Market Cycle ROC: {e}")
             roc_vals = []
 
@@ -282,7 +286,6 @@ def get_breadth_color(breadth_str):
         return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
 
 def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
-    """Dynamically scales recommended portfolio exposure. Capped at 100% Equity. No MTF."""
     try:
         match = re.search(r'(\d+\.?\d*)%', str(nse_breadth_str))
         live_match = re.search(r'(\d+\.?\d*)', str(live_breadth_str))
@@ -303,7 +306,6 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             else:
                 action_suffix = " - Trade"
 
-            # Base assignment logic
             if val <= 20.0:
                 alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
             elif val <= 25.0:
@@ -321,9 +323,8 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             else:
                 alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"   
 
-            # Check if action is NOT pure "Trade", force light red background
             if action_suffix != " - Trade":
-                color = "rgba(252, 165, 165, 0.4)" # Light Red
+                color = "rgba(252, 165, 165, 0.4)" 
 
             return alloc_str, color
 
@@ -340,7 +341,6 @@ def create_metric_card(title, value, bg_color):
     """
 
 def render_market_cycle_graph(roc_vals):
-    """Encapsulates the Symmetrical Bell Curve logic and renders it to Streamlit"""
     if not roc_vals:
         st.info("No ROC data available to plot Market Cycle.")
         return
@@ -348,15 +348,11 @@ def render_market_cycle_graph(roc_vals):
     roc_val = float(roc_vals[0])
     trend_dir = "up"
     
-    # Compare latest ROC against 20 days ago (or furthest available) to determine direction
     if len(roc_vals) > 1:
         lookback_index = 20 if len(roc_vals) > 20 else len(roc_vals) - 1
         if roc_val < float(roc_vals[lookback_index]):
             trend_dir = "down"
 
-    # =========================================================================
-    # PERFECT EQUAL SPACING (Every stage is separated by EXACTLY 4 months)
-    # =========================================================================
     if trend_dir == "up":
         if roc_val <= 0: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
         elif roc_val <= 20: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
@@ -372,35 +368,30 @@ def render_market_cycle_graph(roc_vals):
         elif roc_val > 20: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
         else: stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 44, 2
 
-    # Determine Color Theme based on current stage
     red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
     if stage in red_stages:
-        theme_color = '#EF4444' # Red
+        theme_color = '#EF4444' 
         bg_theme_start = 'rgba(239, 68, 68, 0.1)'
         bg_theme_end = 'rgba(239, 68, 68, 0.02)'
     else:
-        theme_color = '#10B981' # Green
+        theme_color = '#10B981' 
         bg_theme_start = 'rgba(39, 174, 96, 0.1)'
         bg_theme_end = 'rgba(39, 174, 96, 0.02)'
 
-    # CURVE ARRAYS (Aligned strictly to 4-month increments up to 48 months)
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
     
-    # BOLD, HIGH-VISIBILITY LABELS
     stage_names = [
         "<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", 
         "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", 
         "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
     ]
 
-    # Individual Text Coloring (Make Euphoria bold red)
-    text_colors = ['#111827'] * 13 # Dark Gray/Black for normal labels
-    text_colors[5] = '#EF4444' # Bold Red exclusively for Euphoria
+    text_colors = ['#111827'] * 13 
+    text_colors[5] = '#EF4444' 
 
     fig = go.Figure()
     
-    # 1. Enhanced Cycle Line (Forcing ALL labels to standard top-center)
     fig.add_trace(go.Scatter(
         x=curve_x, y=curve_y, mode='lines+text', text=stage_names, 
         textposition="top center", 
@@ -410,70 +401,44 @@ def render_market_cycle_graph(roc_vals):
         hoverinfo='none', name='Market Cycle'
     ))
     
-    # 2. Prominent Colored Dot (Green or Red)
     fig.add_trace(go.Scatter(
         x=[dot_x], y=[dot_y], mode='markers', 
-        marker=dict(
-            color=theme_color, 
-            size=22, 
-            line=dict(color='#FFFFFF', width=4)
-        ), 
+        marker=dict(color=theme_color, size=22, line=dict(color='#FFFFFF', width=4)), 
         hoverinfo='none', name='Current Stage'
     ))
 
-    # 3. Vertical Line exactly at 20 Months (Peak)
-    fig.add_shape(
-        type="line",
-        x0=20, y0=0, x1=20, y1=100,
-        line=dict(color="black", width=3)
-    )
+    fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="black", width=3))
 
-    # 4. Floating Annotation pointing to the dot
     fig.add_annotation(
         x=dot_x, y=dot_y + 15, 
         text=f"<b>{stage}</b>",
-        showarrow=True,
-        arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
+        showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
         font=dict(family="Inter, sans-serif", size=14, color=theme_color),
-        bgcolor="rgba(255, 255, 255, 0.95)",
-        bordercolor=theme_color, borderwidth=2, borderpad=6,
+        bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6,
         opacity=1.0
     )
 
-    # 5. Clean Layout with Explicit X/Y Axes Visible (Scaled perfectly to 50 for balance)
     fig.update_layout(
         xaxis=dict(
             title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="black")),
-            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
-            zeroline=False,
-            showticklabels=True,
-            tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black',
-            dtick=2, 
-            range=[-2, 50] # Pushed to 50 to accommodate the perfectly spaced timeline
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False,
+            showticklabels=True, tickfont=dict(size=14, color="black", family="Inter"),
+            showline=True, linewidth=3, linecolor='black', dtick=2, range=[-2, 50] 
         ),
         yaxis=dict(
             title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="black")),
-            showgrid=True, gridcolor='rgba(128,128,128,0.2)',
-            zeroline=False,
-            showticklabels=True,
-            tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black',
-            range=[-5, 125]
+            showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False,
+            showticklabels=True, tickfont=dict(size=14, color="black", family="Inter"),
+            showline=True, linewidth=3, linecolor='black', range=[-5, 125]
         ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=60, r=40, t=30, b=60), showlegend=False, 
-        height=550 
+        margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
-    # 6. CSS Wrapper for the surrounding info box (Updated for multi-color heading)
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
-                border-left: 4px solid {theme_color}; 
-                padding: 12px 18px; 
-                border-radius: 6px; 
-                margin-bottom: 15px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                border-left: 4px solid {theme_color}; padding: 12px 18px; border-radius: 6px; 
+                margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
         <h4 style="margin: 0; color: #000000; font-family: 'Inter', sans-serif;">
             Current Stage: <span style="color: {theme_color};">{stage}</span> 
             <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
@@ -534,7 +499,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     st.markdown("<br>", unsafe_allow_html=True)
 
     if data:
-        # Load initially with a temporary scraped exchange column
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
 
@@ -543,8 +507,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df = df.merge(sec_rank_df, on="sector", how="left")
             df = df.merge(ind_rank_df, on="broad_industry", how="left")
             
-            # --- OVERWRITE EXCHANGE LOGIC ---
-            # Use Supabase 'db_exchange' if it exists and isn't empty, otherwise fallback to scraped
             df['Exchange'] = np.where(df['db_exchange'].notna() & (df['db_exchange'] != ""), df['db_exchange'], df['Temp_Exchange'])
         else:
             df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
@@ -587,9 +549,62 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         
         if not raw_sec.empty and not raw_ind.empty:
             
-            # --- MODULAR GRAPH RENDERING ---
+            # --- MARKET CYCLE GRAPH ---
             with st.expander("🎢 Market Cycle", expanded=False):
                 render_market_cycle_graph(roc_vals)
+                
+            # --- MOMENTUM SCREENER (NEW) ---
+            with st.expander("🚀 Momentum Screener", expanded=False):
+                st.markdown("##### Filter Top Momentum Breakouts")
+                
+                min_turnover = st.number_input("Minimum Turnover (in Cr):", min_value=0.0, value=5.0, step=1.0)
+                
+                if not main_df.empty:
+                    mom_df = main_df.copy()
+                    
+                    # Convert required columns to numeric safely
+                    mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
+                    mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
+                    mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
+                    mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
+                    
+                    # Apply explicit filtering rules
+                    f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
+                    f_turnover = mom_df['turnover'] >= min_turnover
+                    f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
+                    f_ath      = mom_df['down_ath'] <= 20.0
+                    
+                    filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
+                    
+                    # Sort low to high on relative score and take top 30
+                    filtered_mom = filtered_mom.sort_values(by='relative_score', ascending=True).head(30)
+                    
+                    if not filtered_mom.empty:
+                        filtered_mom = filtered_mom.reset_index(drop=True)
+                        filtered_mom['Rank'] = filtered_mom.index + 1
+                        
+                        display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'market_cap', 'turnover', 'sector', 'broad_industry']]
+                        display_mom = display_mom.rename(columns={
+                            'ticker': 'Ticker',
+                            'stock_name': 'Stock Name',
+                            'market_cap': 'Market Cap (Cr)',
+                            'turnover': 'Turnover (Cr)',
+                            'sector': 'Sector',
+                            'broad_industry': 'Industry'
+                        })
+                        
+                        styled_mom = display_mom.style.hide(axis="index").format({
+                            'Market Cap (Cr)': "{:,.2f}",
+                            'Turnover (Cr)': "{:,.2f}",
+                            'Rank': "{:.0f}"
+                        })
+                        
+                        html_mom = styled_mom.to_html()
+                        st.markdown(f'<div class="scrollable-table-container">{html_mom}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No stocks match the Momentum Screener criteria at the moment.")
+                else:
+                    st.warning("Database data is currently empty or failed to load.")
 
             # --- TOP SECTORS & INDUSTRIES ---
             with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
