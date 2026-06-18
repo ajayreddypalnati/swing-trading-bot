@@ -123,26 +123,41 @@ def fetch_database_reference(cache_key):
 
         engine = create_engine(db_url)
 
-        # The %% escapes the percent sign so SQLAlchemy doesn't crash
-        query_main = text('''
-        SELECT 
-            "Ticker" as ticker, 
-            "Name" as stock_name,
-            "Sector" as sector, 
-            "Broad Industry" as broad_industry, 
-            "Relative score" as relative_score, 
-            "Exchange" as db_exchange,
-            "Mar Cap Rs.Cr." as market_cap,
-            "Turnover" as turnover,
-            "Band" as band,
-            "Down %%_ATH" as down_ath
-        FROM stock_master
-        ''')
-        
+        # Use SELECT * to completely bypass SQLAlchemy column name formatting bugs
         with engine.connect() as conn:
-            main_df = pd.read_sql(query_main, conn)
+            main_df_raw = pd.read_sql(text('SELECT * FROM stock_master'), conn)
+            
+            # Dynamically map columns just like the scraper does to avoid exact match errors
+            col_ticker = next((c for c in main_df_raw.columns if 'ticker' in str(c).lower()), 'Ticker')
+            col_name = next((c for c in main_df_raw.columns if 'name' in str(c).lower()), 'Name')
+            col_sector = next((c for c in main_df_raw.columns if 'sector' in str(c).lower()), 'Sector')
+            col_ind = next((c for c in main_df_raw.columns if 'industry' in str(c).lower()), 'Broad Industry')
+            col_score = next((c for c in main_df_raw.columns if 'relative score' in str(c).lower()), 'Relative score')
+            col_exch = next((c for c in main_df_raw.columns if 'exchange' in str(c).lower()), 'Exchange')
+            col_mcap = next((c for c in main_df_raw.columns if 'mar cap' in str(c).lower() or 'market cap' in str(c).lower()), 'Mar Cap Rs.Cr.')
+            col_turnover = next((c for c in main_df_raw.columns if 'turnover' in str(c).lower()), 'Turnover')
+            col_band = next((c for c in main_df_raw.columns if 'band' in str(c).lower()), 'Band')
+            col_down_ath = next((c for c in main_df_raw.columns if 'down' in str(c).lower() and 'ath' in str(c).lower()), 'Down %_ATH')
+
+            # Rename safely
+            main_df = main_df_raw.rename(columns={
+                col_ticker: 'ticker',
+                col_name: 'stock_name',
+                col_sector: 'sector',
+                col_ind: 'broad_industry',
+                col_score: 'relative_score',
+                col_exch: 'db_exchange',
+                col_mcap: 'market_cap',
+                col_turnover: 'turnover',
+                col_band: 'band',
+                col_down_ath: 'down_ath'
+            })
+
             raw_sec = pd.read_sql(text('SELECT * FROM "ATH_Sector_Analysis"'), conn)
             raw_ind = pd.read_sql(text('SELECT * FROM "ATH_Industry_Analysis"'), conn)
+            
+            sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
+            ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
             
             try:
                 sync_df = pd.read_sql(text('SELECT * FROM sync_log'), conn)
