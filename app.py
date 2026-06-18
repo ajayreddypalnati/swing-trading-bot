@@ -9,6 +9,7 @@ import re
 import warnings
 from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
+import io
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -583,21 +584,21 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
                     mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
                     
-                    # Apply explicit filtering rules
+                    # Apply explicit filtering rules for the entire universe
                     f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
                     f_turnover = mom_df['turnover'] >= min_turnover
                     f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
                     f_ath      = mom_df['down_ath'] <= 20.0
                     
-                    filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
+                    # Full valid universe sorted by best momentum
+                    full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
+                    full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
+                    full_filtered_mom['Rank'] = full_filtered_mom.index + 1
                     
-                    # Sort low to high on relative score and take top 30
-                    filtered_mom = filtered_mom.sort_values(by='relative_score', ascending=True).head(30)
+                    # Top 30 for the main display
+                    filtered_mom = full_filtered_mom.head(30)
                     
                     if not filtered_mom.empty:
-                        filtered_mom = filtered_mom.reset_index(drop=True)
-                        filtered_mom['Rank'] = filtered_mom.index + 1
-                        
                         # Calculate Average 1D Return for Top 25
                         top_25_avg = filtered_mom.head(25)['1d_return'].mean()
                         avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
@@ -632,6 +633,92 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         st.markdown(f'<div class="scrollable-table-container">{html_mom}</div>', unsafe_allow_html=True)
                     else:
                         st.info("No stocks match the Momentum Screener criteria at the moment.")
+                        
+                    # ===============================================
+                    # 🔄 PORTFOLIO REBALANCER SECTION
+                    # ===============================================
+                    st.divider()
+                    st.markdown("### 🔄 Upload Portfolio Stocks")
+                    st.markdown("<span style='color: gray; font-size: 0.9rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
+                    
+                    uploaded_file = st.file_uploader("", type=['csv', 'txt'], label_visibility="collapsed")
+                    
+                    if uploaded_file is not None:
+                        try:
+                            # Read uploaded file
+                            if uploaded_file.name.endswith('.csv'):
+                                user_port_df = pd.read_csv(uploaded_file, header=None)
+                            else:
+                                user_port_df = pd.read_csv(uploaded_file, header=None, sep='\t')
+                            
+                            # Clean and extract tickers
+                            raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                            user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
+                            user_tickers = list(dict.fromkeys(user_tickers)) # Remove exact duplicates
+                            
+                            n_stocks = len(user_tickers)
+                            if n_stocks > 0:
+                                st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
+                                
+                                # Target pool is 2x the user's portfolio size
+                                target_pool_size = n_stocks * 2
+                                top_pool = full_filtered_mom.head(target_pool_size)
+                                top_pool_tickers = top_pool['ticker'].tolist()
+                                
+                                # Candidates available for replacing dropped stocks
+                                replacements_available = top_pool[~top_pool['ticker'].isin(user_tickers)].to_dict('records')
+                                
+                                rebalance_data = []
+                                for t in user_tickers:
+                                    # Find current rank
+                                    rank_match = full_filtered_mom[full_filtered_mom['ticker'] == t]
+                                    curr_rank = rank_match['Rank'].iloc[0] if not rank_match.empty else "Out of Range"
+                                    
+                                    if t in top_pool_tickers:
+                                        rebalance_data.append({
+                                            "Portfolio Ticker": t,
+                                            "Current Rank": curr_rank,
+                                            "Status": "In Range (Hold)",
+                                            "Suggested Replacement": "-",
+                                            "Replacement Rank": "-"
+                                        })
+                                    else:
+                                        # Needs Rebalance
+                                        if replacements_available:
+                                            rep = replacements_available.pop(0) # Pop highest momentum stock
+                                            rep_ticker = rep['ticker']
+                                            rep_rank = rep['Rank']
+                                        else:
+                                            rep_ticker = "No valid replacements left"
+                                            rep_rank = "-"
+                                            
+                                        rebalance_data.append({
+                                            "Portfolio Ticker": t,
+                                            "Current Rank": curr_rank,
+                                            "Status": "Out of Range (Rebalance)",
+                                            "Suggested Replacement": rep_ticker,
+                                            "Replacement Rank": rep_rank
+                                        })
+                                
+                                rebal_df = pd.DataFrame(rebalance_data)
+                                
+                                # Apply color coding logic for Hold vs Rebalance
+                                def color_status(row):
+                                    if 'Hold' in str(row['Status']):
+                                        return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) # Light Green
+                                    elif 'Rebalance' in str(row['Status']):
+                                        return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) # Light Red
+                                    return [''] * len(row)
+                                
+                                styled_rebal = rebal_df.style.apply(color_status, axis=1).hide(axis="index")
+                                html_rebal = styled_rebal.to_html()
+                                st.markdown(f'<div class="scrollable-table-container">{html_rebal}</div>', unsafe_allow_html=True)
+                                
+                            else:
+                                st.warning("Could not find any valid tickers in the uploaded file.")
+                        except Exception as e:
+                            st.error(f"Error reading file: {e}")
+                            
                 else:
                     st.warning("Database data is currently empty or failed to load.")
 
