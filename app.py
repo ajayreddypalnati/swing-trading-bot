@@ -211,7 +211,6 @@ def fetch_database_reference(cache_key):
                 st.warning(f"⚠️ SQL Error fetching Market Cycle ROC: {e}")
                 roc_vals = []
 
-            # --- NEW: Fetch ETF Screener ---
             try:
                 etf_df = pd.read_sql(text('SELECT * FROM "ETF Screener"'), conn)
             except Exception as e:
@@ -666,6 +665,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         
                     e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
                     e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
+                    e_df['Chg %'] = pd.to_numeric(e_df['Chg %'], errors='coerce')
                     
                     f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
                     f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
@@ -688,15 +688,17 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     etf_display = pd.DataFrame(final_etfs)
                     
                     if not etf_display.empty:
+                        etf_display = etf_display.head(10) # Max 10 rows
                         etf_display = etf_display.reset_index(drop=True)
                         etf_display['Rank'] = etf_display.index + 1
                         
-                        show_cols = ['Rank', 'Symbol', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
+                        show_cols = ['Rank', 'Symbol', 'Chg %', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
                         show_cols = [c for c in show_cols if c in etf_display.columns]
                         etf_display = etf_display[show_cols]
                         
                         styled_etf = etf_display.style.hide(axis="index").format({
-                            'Turnover (Cr)': "{:,.2f}"
+                            'Turnover (Cr)': "{:,.2f}",
+                            'Chg %': "{:.2f}%"
                         })
                         html_etf = styled_etf.to_html()
                         st.markdown(f'<div class="scrollable-table-container">{html_etf}</div>', unsafe_allow_html=True)
