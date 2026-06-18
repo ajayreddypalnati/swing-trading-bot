@@ -105,10 +105,12 @@ def get_db_cache_key():
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
     
-    if now.hour >= 22 or now.hour < 5:
-        return f"night_mode_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
+    # 9 AM to 9 PM IST: Database is static, fetch only once per hour
+    if 9 <= now.hour < 21:
+        return f"locked_{now.strftime('%Y-%m-%d_%H')}"
+    # 9 PM to 9 AM IST: Fetch every 10 minutes to catch scraper updates
     else:
-        return f"market_hours_locked_{now.strftime('%Y-%m-%d')}"
+        return f"active_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
 
 @st.cache_data(ttl=86400)
 def fetch_database_reference(cache_key):
@@ -209,11 +211,18 @@ def fetch_database_reference(cache_key):
                 st.warning(f"⚠️ SQL Error fetching Market Cycle ROC: {e}")
                 roc_vals = []
 
-        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals
+            # --- NEW: Fetch ETF Screener ---
+            try:
+                etf_df = pd.read_sql(text('SELECT * FROM "ETF Screener"'), conn)
+            except Exception as e:
+                st.warning(f"⚠️ SQL Error fetching ETF Screener: {e}")
+                etf_df = pd.DataFrame()
+
+        return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df
 
     except Exception as e:
         st.error(f"DATABASE ERROR: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", []
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", [], pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
@@ -492,7 +501,7 @@ st.divider()
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     current_cache_key = get_db_cache_key()
-    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals = fetch_database_reference(current_cache_key)  
+    main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df = fetch_database_reference(current_cache_key)  
     live_sheet_breadth = fetch_market_breadth_from_gsheets()
 
     live_bg = get_breadth_color(live_sheet_breadth)
@@ -511,6 +520,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # ==========================================
+    # LIVE STOCKS TABLE (MAIN VIEW)
+    # ==========================================
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
@@ -522,7 +534,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             
             df['Exchange'] = np.where(df['db_exchange'].notna() & (df['db_exchange'] != ""), df['db_exchange'], df['Temp_Exchange'])
         else:
-            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'] = "", "", np.nan, np.nan, np.nan
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['band'] = "", "", np.nan, np.nan, np.nan, ""
             df['Exchange'] = df['Temp_Exchange']
 
         df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
@@ -547,12 +559,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             df.loc[p4, 'Priority'] = 4
             df.loc[p5, 'Priority'] = 5
 
-        display_cols = ["Priority", "Symbol", "Exchange", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
 
         display_df = display_df.rename(columns={
+            "band": "Band",
             "sector": "Sector", 
             "sec_rank": "Sector Rank", 
             "broad_industry": "Industry", 
@@ -560,17 +573,142 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             "relative_score": "Momentum Rank"
         })
         
+        if 'Band' in display_df.columns:
+            display_df['Band'] = display_df['Band'].replace("", "-").fillna("-")
+        
         if not raw_sec.empty and not raw_ind.empty:
             
-            # --- MARKET CYCLE GRAPH ---
-            with st.expander("🎢 Market Cycle", expanded=False):
+            # --- COMBINED MARKET CYCLE & LEADERS ---
+            with st.expander("🎢 Market Cycle & Current Market Leaders (Top Sectors & Industry)", expanded=False):
                 render_market_cycle_graph(roc_vals)
                 
-            # --- MOMENTUM SCREENER (NEW) ---
-            with st.expander("🚀 Momentum Screener", expanded=False):
+                st.divider()
                 
+                lead_col1, lead_col2 = st.columns(2)
+                with lead_col1:
+                    st.markdown("##### 🔥 Top 5 Sectors")
+                    sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                    sec_cols = [c for c in sec_cols if c in raw_sec.columns]
+                    top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
+                    
+                    top_2_sec_idx = []
+                    if 'Avg 1D Return %' in top_sec.columns:
+                        top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
+                    
+                    if 'ATH %' in top_sec.columns: 
+                        top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_sec.columns: 
+                        top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                    
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_sec.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for idx, row in top_sec.iterrows():
+                        html += "<tr>"
+                        for c in top_sec.columns:
+                            val = row[c]
+                            if idx in top_2_sec_idx and c == '1D Avg %':
+                                html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                            elif idx in top_2_sec_idx and c == 'Sector':
+                                html += f"<td><b>{val}</b></td>"
+                            else:
+                                html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
+                    
+                with lead_col2:
+                    st.markdown("##### 🚀 Top 15 Industries")
+                    ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                    ind_cols = [c for c in ind_cols if c in raw_ind.columns]
+                    top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
+                    
+                    top_4_ind_idx = []
+                    if 'Avg 1D Return %' in top_ind.columns:
+                        top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
+                    
+                    if 'ATH %' in top_ind.columns: 
+                        top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                    if 'Avg 1D Return %' in top_ind.columns: 
+                        top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
+                    
+                    top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                    
+                    html = "<table class='sleek-table'><thead><tr>"
+                    for col in top_ind.columns: html += f"<th>{col}</th>"
+                    html += "</tr></thead><tbody>"
+                    for idx, row in top_ind.iterrows():
+                        html += "<tr>"
+                        for c in top_ind.columns:
+                            val = row[c]
+                            if idx in top_4_ind_idx and c == '1D Avg %':
+                                html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                            elif idx in top_4_ind_idx and c == 'Broad Industry':
+                                html += f"<td><b>{val}</b></td>"
+                            else:
+                                html += f"<td>{val}</td>"
+                        html += "</tr>"
+                    html += "</tbody></table>"
+                    st.markdown(html, unsafe_allow_html=True)
+                
+            # --- ETF SCREENER (NEW) ---
+            with st.expander("📊 ETF Screener", expanded=False):
                 st.markdown("### Minimum Turnover (in Cr)")
-                min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, label_visibility="collapsed")
+                etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
+                
+                if not etf_df.empty:
+                    e_df = etf_df.copy()
+                    
+                    if 'Catergory' in e_df.columns:
+                        e_df = e_df.rename(columns={'Catergory': 'Category'})
+                        
+                    e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
+                    e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
+                    
+                    f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
+                    f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
+                    
+                    valid_etfs = e_df[f_ema & f_turn].sort_values('Relative Score', ascending=True)
+                    
+                    final_etfs = []
+                    seen_categories = set()
+                    
+                    for _, row in valid_etfs.iterrows():
+                        cat = str(row.get('Category', 'Unknown')).strip()
+                        if cat not in seen_categories and cat != 'nan' and cat != 'Unknown':
+                            seen_categories.add(cat)
+                            final_etfs.append(row)
+                        elif cat == 'Unknown' or cat == 'nan':
+                            if 'Unknown' not in seen_categories:
+                                seen_categories.add('Unknown')
+                                final_etfs.append(row)
+                                
+                    etf_display = pd.DataFrame(final_etfs)
+                    
+                    if not etf_display.empty:
+                        etf_display = etf_display.reset_index(drop=True)
+                        etf_display['Rank'] = etf_display.index + 1
+                        
+                        show_cols = ['Rank', 'Symbol', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
+                        show_cols = [c for c in show_cols if c in etf_display.columns]
+                        etf_display = etf_display[show_cols]
+                        
+                        styled_etf = etf_display.style.hide(axis="index").format({
+                            'Turnover (Cr)': "{:,.2f}"
+                        })
+                        html_etf = styled_etf.to_html()
+                        st.markdown(f'<div class="scrollable-table-container">{html_etf}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("No ETFs match the criteria at the moment.")
+                else:
+                    st.warning("ETF data is currently empty or failed to load.")
+                
+            # --- MOMENTUM SCREENER ---
+            with st.expander("🚀 Momentum Screener", expanded=False):
+                st.markdown("### Minimum Turnover (in Cr)")
+                min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
                 
                 if not main_df.empty:
                     mom_df = main_df.copy()
@@ -650,7 +788,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                             if n_stocks > 0:
                                 st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
                                 
-                                # ---- EXCLUSION FEATURE ----
                                 st.markdown("#### 🚫 Exclude Unavailable Stocks")
                                 unavailable_tickers = st.multiselect(
                                     "Select replacement tickers hitting upper circuits or with low liquidity to skip them:",
@@ -662,7 +799,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 top_pool = full_filtered_mom.head(target_pool_size)
                                 top_pool_tickers = top_pool['ticker'].tolist()
                                 
-                                # Remove user portfolio stocks AND manually excluded stocks from available replacements
                                 valid_reps = full_filtered_mom[
                                     ~full_filtered_mom['ticker'].isin(user_tickers) & 
                                     ~full_filtered_mom['ticker'].isin(unavailable_tickers)
@@ -719,69 +855,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                             
                 else:
                     st.warning("Database data is currently empty or failed to load.")
-
-            # --- TOP SECTORS & INDUSTRIES ---
-            with st.expander("🏆 Current Market Leaders (Top Sectors & Industries)", expanded=False):
-                lead_col1, lead_col2 = st.columns(2)
-                
-                with lead_col1:
-                    st.markdown("##### 🔥 Top 5 Sectors")
-                    sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
-                    sec_cols = [c for c in sec_cols if c in raw_sec.columns]
-                    top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
-                    
-                    top_2_sec_idx = []
-                    if 'Avg 1D Return %' in top_sec.columns:
-                        top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
-                    
-                    if 'ATH %' in top_sec.columns: 
-                        top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
-                    if 'Avg 1D Return %' in top_sec.columns: 
-                        top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
-                    
-                    top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    
-                    html = "<table class='sleek-table'><thead><tr>"
-                    for col in top_sec.columns: html += f"<th>{col}</th>"
-                    html += "</tr></thead><tbody>"
-                    for idx, row in top_sec.iterrows():
-                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_2_sec_idx else ""
-                        html += f"<tr{bg_style}>"
-                        for val in row: html += f"<td>{val}</td>"
-                        html += "</tr>"
-                    html += "</tbody></table>"
-                    st.markdown(html, unsafe_allow_html=True)
-                    
-                with lead_col2:
-                    st.markdown("##### 🚀 Top 15 Industries")
-                    ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
-                    ind_cols = [c for c in ind_cols if c in raw_ind.columns]
-                    top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
-                    
-                    top_4_ind_idx = []
-                    if 'Avg 1D Return %' in top_ind.columns:
-                        top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
-                    
-                    if 'ATH %' in top_ind.columns: 
-                        top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
-                    if 'Avg 1D Return %' in top_ind.columns: 
-                        top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
-                    
-                    top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    
-                    html = "<table class='sleek-table'><thead><tr>"
-                    for col in top_ind.columns: html += f"<th>{col}</th>"
-                    html += "</tr></thead><tbody>"
-                    for idx, row in top_ind.iterrows():
-                        bg_style = " style='background-color: rgba(187, 247, 208, 0.5);'" if idx in top_4_ind_idx else ""
-                        html += f"<tr{bg_style}>"
-                        for val in row: html += f"<td>{val}</td>"
-                        html += "</tr>"
-                    html += "</tbody></table>"
-                    st.markdown(html, unsafe_allow_html=True)
-                    
-            st.markdown("<br>", unsafe_allow_html=True)
-
+            
         def highlight_priority(val):
             try: 
                 return 'background-color: rgba(39, 174, 96, 0.15)' if float(val) > 0 else ''
