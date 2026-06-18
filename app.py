@@ -123,7 +123,6 @@ def fetch_database_reference(cache_key):
 
         engine = create_engine(db_url)
 
-        # Use SELECT * to completely bypass SQLAlchemy column name formatting bugs
         with engine.connect() as conn:
             main_df_raw = pd.read_sql(text('SELECT * FROM stock_master'), conn)
             
@@ -138,6 +137,7 @@ def fetch_database_reference(cache_key):
             col_turnover = next((c for c in main_df_raw.columns if 'turnover' in str(c).lower()), 'Turnover')
             col_band = next((c for c in main_df_raw.columns if 'band' in str(c).lower()), 'Band')
             col_down_ath = next((c for c in main_df_raw.columns if 'down' in str(c).lower() and 'ath' in str(c).lower()), 'Down %_ATH')
+            col_1d_ret = next((c for c in main_df_raw.columns if '1day' in str(c).lower() and 'return' in str(c).lower()), '1day return %')
 
             # Rename safely
             main_df = main_df_raw.rename(columns={
@@ -150,7 +150,8 @@ def fetch_database_reference(cache_key):
                 col_mcap: 'market_cap',
                 col_turnover: 'turnover',
                 col_band: 'band',
-                col_down_ath: 'down_ath'
+                col_down_ath: 'down_ath',
+                col_1d_ret: '1d_return'
             })
 
             raw_sec = pd.read_sql(text('SELECT * FROM "ATH_Sector_Analysis"'), conn)
@@ -568,9 +569,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
             # --- MOMENTUM SCREENER (NEW) ---
             with st.expander("🚀 Momentum Screener", expanded=False):
-                st.markdown("##### Filter Top Momentum Breakouts")
                 
-                min_turnover = st.number_input("Minimum Turnover (in Cr):", min_value=0.0, value=5.0, step=1.0)
+                st.markdown("### Minimum Turnover (in Cr)")
+                min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, label_visibility="collapsed")
                 
                 if not main_df.empty:
                     mom_df = main_df.copy()
@@ -580,6 +581,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
                     mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
                     mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
+                    mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
                     
                     # Apply explicit filtering rules
                     f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
@@ -596,19 +598,33 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         filtered_mom = filtered_mom.reset_index(drop=True)
                         filtered_mom['Rank'] = filtered_mom.index + 1
                         
-                        display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'market_cap', 'turnover', 'sector', 'broad_industry']]
+                        # Calculate Average 1D Return for Top 25
+                        top_25_avg = filtered_mom.head(25)['1d_return'].mean()
+                        avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
+                        
+                        st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                        display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
                         display_mom = display_mom.rename(columns={
                             'ticker': 'Ticker',
                             'stock_name': 'Stock Name',
+                            'db_exchange': 'Exchange',
                             'market_cap': 'Market Cap (Cr)',
                             'turnover': 'Turnover (Cr)',
+                            '1d_return': '1 Day Return %',
+                            'band': 'Band',
                             'sector': 'Sector',
                             'broad_industry': 'Industry'
                         })
                         
+                        # Handle NaN values for Band presentation
+                        display_mom['Band'] = display_mom['Band'].fillna("-")
+                        
                         styled_mom = display_mom.style.hide(axis="index").format({
                             'Market Cap (Cr)': "{:,.2f}",
                             'Turnover (Cr)': "{:,.2f}",
+                            '1 Day Return %': "{:.2f}%",
                             'Rank': "{:.0f}"
                         })
                         
