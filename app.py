@@ -21,7 +21,7 @@ st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="w
 # ==========================================
 st.markdown("""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700;800&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
@@ -62,21 +62,67 @@ st.markdown("""
         .sleek-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.85rem; /* Matches Streamlit native size */
+            font-size: 0.85rem; 
         }
         .sleek-table th {
-            background-color: rgba(128, 128, 128, 0.08) !important; /* Grey background matching main table */
+            background-color: rgba(128, 128, 128, 0.08) !important; 
             text-align: center;
             vertical-align: middle;
             padding: 10px 8px;
             border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-            font-weight: bold !important; /* Bold headers */
+            font-weight: bold !important; 
         }
         .sleek-table td {
             text-align: center;
             vertical-align: middle;
             padding: 8px;
             border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+        }
+
+        /* ========================================= */
+        /* STUNNING CUSTOM EXPANDER (TOGGLE) STYLING */
+        /* ========================================= */
+        [data-testid="stExpander"] {
+            border: 1px solid rgba(128,128,128,0.15) !important;
+            border-radius: 10px !important;
+            overflow: hidden;
+            margin-bottom: 18px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.03) !important;
+        }
+        
+        /* Make the text inside the toggle BIG and BOLD */
+        [data-testid="stExpander"] summary p {
+            font-size: 1.15rem !important; 
+            font-weight: 800 !important;   
+            color: #1f2937 !important;
+            letter-spacing: 0.3px;
+        }
+        
+        /* Expander 1: Market Cycle & Leaders (Light Purple Theme) */
+        [data-testid="stExpander"]:nth-of-type(1) summary {
+            background: linear-gradient(90deg, rgba(216, 180, 254, 0.35) 0%, rgba(233, 213, 255, 0.1) 100%) !important;
+            border-left: 6px solid #a855f7 !important;
+            padding: 0.5rem 1rem !important;
+        }
+        
+        /* Expander 2: ETF Screener (Light Sky Blue Theme) */
+        [data-testid="stExpander"]:nth-of-type(2) summary {
+            background: linear-gradient(90deg, rgba(186, 230, 253, 0.45) 0%, rgba(224, 242, 254, 0.1) 100%) !important;
+            border-left: 6px solid #0ea5e9 !important;
+            padding: 0.5rem 1rem !important;
+        }
+        
+        /* Expander 3: Momentum Screener (Light Emerald Green Theme) */
+        [data-testid="stExpander"]:nth-of-type(3) summary {
+            background: linear-gradient(90deg, rgba(167, 243, 208, 0.45) 0%, rgba(209, 250, 229, 0.1) 100%) !important;
+            border-left: 6px solid #10b981 !important;
+            padding: 0.5rem 1rem !important;
+        }
+        
+        /* Smooth hover effect for the toggles */
+        [data-testid="stExpander"] summary:hover {
+            opacity: 0.85;
+            transition: opacity 0.2s ease-in-out;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -652,7 +698,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     html += "</tbody></table>"
                     st.markdown(html, unsafe_allow_html=True)
                 
-            # --- ETF SCREENER (NEW) ---
+            # --- ETF SCREENER ---
             with st.expander("📊 ETF Screener", expanded=False):
                 st.markdown("### Minimum Turnover (in Cr)")
                 etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
@@ -688,7 +734,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     etf_display = pd.DataFrame(final_etfs)
                     
                     if not etf_display.empty:
-                        etf_display = etf_display.head(10) # Max 10 rows
+                        etf_display = etf_display.head(10) 
                         etf_display = etf_display.reset_index(drop=True)
                         etf_display['Rank'] = etf_display.index + 1
                         
@@ -696,10 +742,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         show_cols = [c for c in show_cols if c in etf_display.columns]
                         etf_display = etf_display[show_cols]
                         
-                        # Calculate top 4 indices by Chg %
                         top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
                         
-                        # Calculate Average for top 4 Chg %
                         top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
                         avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                         
