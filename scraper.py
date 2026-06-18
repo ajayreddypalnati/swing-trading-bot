@@ -113,6 +113,107 @@ def fetch_with_retry(session, url, referer_url=None, retries=3):
         random_sleep(1500, 3500)
     return None
 
+# ==========================================
+# NEW: ETF DOWNLOAD & RANK ENGINE
+# ==========================================
+def download_and_rank_etfs():
+    print("\n📈 STEP 8: Fetching and Ranking NSE ETFs...")
+    url = "https://scanner.tradingview.com/india/scan"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "columns": [
+            "name", "description", "close", "change", 
+            "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", "exchange",
+            "EMA21", "average_volume_30d_calc"
+        ],
+        "filter": [
+            {"left": "exchange", "operation": "equal", "right": "NSE"},
+            {"left": "type", "operation": "equal", "right": "fund"}
+        ],
+        "ignore_unknown_fields": False,
+        "markets": ["india"],
+        "options": {"lang": "en"},
+        "range": [0, 500],  
+        "sort": {"sortBy": "Perf.10Y", "sortOrder": "desc"}
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        data = response.json()
+        rows = [item['d'] for item in data.get('data', [])]
+
+        if not rows:
+            print("   ⚠️ No ETF data returned from TradingView.")
+            return
+
+        df = pd.DataFrame(rows, columns=payload["columns"])
+        df.columns = [
+            "Symbol", "Name", "Price (INR)", "Chg %", 
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %", "Exchange",
+            "EMA 21", "Avg Vol 30D"
+        ]
+
+        df['EMA 21 Status'] = df.apply(
+            lambda row: "Above 21 Ema" if pd.notnull(row['Price (INR)']) and pd.notnull(row['EMA 21']) and row['Price (INR)'] > row['EMA 21'] 
+            else ("Below 21 Ema" if pd.notnull(row['Price (INR)']) and pd.notnull(row['EMA 21']) else "N/A"), 
+            axis=1
+        )
+
+        df['Turnover (Cr)'] = ((df['Price (INR)'] * df['Avg Vol 30D']) / 10000000).round(2)
+
+        print("   🧮 Calculating relative scores and ranks for ETFs...")
+        rank_1m = df['Perf 1M %'].rank(ascending=False, method='min', na_option='bottom')
+        rank_3m = df['Perf 3M %'].rank(ascending=False, method='min', na_option='bottom')
+        rank_6m = df['Perf 6M %'].rank(ascending=False, method='min', na_option='bottom')
+
+        df['Relative Score'] = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
+        df['Final Rank'] = df['Relative Score'].rank(ascending=True, method='min').astype('Int64')
+
+        cols = [
+            "Final Rank", "Relative Score", "Symbol", "Name", "Exchange", 
+            "Price (INR)", "EMA 21", "EMA 21 Status", "Chg %", "Turnover (Cr)", "Avg Vol 30D",
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
+        ]
+        
+        df = df[cols].sort_values('Final Rank')
+
+        # VLOOKUP LOGIC: Pulling Category from Supabase
+        print("   🔗 VLOOKUP: Mapping ETF Categories from Supabase 'ETF Category' table...")
+        try:
+            # Connect to Supabase to fetch mapping
+            with engine.connect() as conn:
+                category_df = pd.read_sql(text('SELECT "Symbol", "Catergory" FROM "ETF Category"'), conn)
+            
+            # Map the categories via Left Join
+            df = pd.merge(df, category_df, on='Symbol', how='left')
+            
+            # Rename typo column from Supabase to proper format
+            df.rename(columns={'Catergory': 'Category'}, inplace=True)
+            print("   ✅ Categories successfully mapped and appended.")
+        except Exception as e:
+            print(f"   ⚠️ WARNING: Could not fetch or merge ETF Category map: {e}")
+            df['Category'] = np.nan
+
+        print(f"   ☁️ Saving {len(df)} ranked ETFs directly to Supabase...")
+        try:
+            df.to_sql("ETF Screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print("   ✅ 'ETF Screener' table overwritten successfully.")
+        except Exception as e:
+            print(f"   ❌ Failed to save ETF Screener to Supabase: {e}")
+
+    except Exception as e:
+        print(f"   ❌ An error occurred processing ETFs: {e}")
+
+
+# ==========================================
+# MAIN PIPELINE
+# ==========================================
 def run_daily_scraper():
     print("\n" + "="*60)
     print("🚀 STARTING: Cloud-Native Market Scraper & Trend Engine")
@@ -747,10 +848,16 @@ def run_daily_scraper():
             print("   ⚠️ Failed to fetch CNXSMALLCAP data.")
     except Exception as e:
         print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
+        
+    # ==========================================
+    # STEP 8: DOWNLOAD & RANK ETFS (NEW)
+    # ==========================================
+    download_and_rank_etfs()
 
     print("\n" + "="*60)
     print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
     print("="*60 + "\n")
+
 
 if __name__ == "__main__":
     run_daily_scraper()
