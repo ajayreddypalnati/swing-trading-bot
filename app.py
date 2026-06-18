@@ -696,10 +696,33 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         show_cols = [c for c in show_cols if c in etf_display.columns]
                         etf_display = etf_display[show_cols]
                         
-                        styled_etf = etf_display.style.hide(axis="index").format({
+                        # Calculate top 4 indices by Chg %
+                        top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
+                        
+                        # Calculate Average for top 4 Chg %
+                        top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
+                        avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
+                        
+                        st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                        def style_etf_row(row):
+                            is_top_4 = row.name in top_4_chg_idx
+                            styles = []
+                            for col in row.index:
+                                cell_style = ""
+                                if is_top_4:
+                                    cell_style += "font-weight: 700; color: #000000; "
+                                    if col == 'Chg %':
+                                        cell_style += "background-color: rgba(187, 247, 208, 0.5); "
+                                styles.append(cell_style)
+                            return styles
+                            
+                        styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
                             'Turnover (Cr)': "{:,.2f}",
                             'Chg %': "{:.2f}%"
                         })
+                        
                         html_etf = styled_etf.to_html()
                         st.markdown(f'<div class="scrollable-table-container">{html_etf}</div>', unsafe_allow_html=True)
                     else:
