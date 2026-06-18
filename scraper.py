@@ -97,7 +97,7 @@ def fetch_with_retry(session, url, referer_url=None, retries=3):
         "User-Agent": USER_AGENT,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
-        "Cookie": session.screener_cookies
+        "Cookie": getattr(session, 'screener_cookies', '')
     }
     if referer_url: headers["Referer"] = referer_url
         
@@ -134,7 +134,6 @@ def run_daily_scraper():
         col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
         col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
         col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
-        col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
         
         unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
         if unknown_mask.any():
@@ -143,9 +142,9 @@ def run_daily_scraper():
                 conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
             static_df = static_df[~unknown_mask]
         
-        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
+        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e] if c in static_df.columns]
         static_subset = static_df[cols_to_keep].copy()
-        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
+        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
         static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
         
         known_names = set(static_subset['Name'].tolist())
@@ -153,7 +152,7 @@ def run_daily_scraper():
     except Exception as e:
         print(f"   ⚠️ Could not load database cache. Starting fresh. ({e})")
         known_names = set()
-        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
+        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange'])
 
     if 'Exchange' not in static_subset.columns:
         static_subset['Exchange'] = "NSE"
@@ -297,8 +296,7 @@ def run_daily_scraper():
                     'Ticker': [r.get(original_col_t) for r in new_records],
                     'Sector': [r.get(original_col_s) for r in new_records],
                     'Broad Industry': [r.get(original_col_i) for r in new_records],
-                    'Exchange': [r.get(original_col_e) for r in new_records],
-                    'Static_ATH': [np.nan for _ in new_records]
+                    'Exchange': [r.get(original_col_e) for r in new_records]
                 })
                 static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
                 print("   ✅ New companies saved successfully.")
@@ -338,6 +336,66 @@ def run_daily_scraper():
     live_df = live_df.drop(columns=['live_ticker_slug'])
     merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
     merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
+    
+    # -------------------------------------------------------------
+    # NEW LOGIC: Calculate Down %_ATH natively
+    # Formula: max(0, ((ATH - CMP) / ATH) * 100)
+    # -------------------------------------------------------------
+    cmp_col = next((c for c in merged_df.columns if 'cmp rs' in c.lower()), None)
+    ath_col = next((c for c in merged_df.columns if 'all time high' in c.lower()), None)
+    
+    if cmp_col and ath_col:
+        print(f"\n📉 STEP 4.1: Calculating Down %_ATH using [{ath_col}] and [{cmp_col}]...")
+        merged_df[ath_col] = pd.to_numeric(merged_df[ath_col], errors='coerce')
+        merged_df[cmp_col] = pd.to_numeric(merged_df[cmp_col], errors='coerce')
+        
+        # Calculate difference, multiply by 100, clip negative values to 0, and round to 2 decimals
+        merged_df['Down %_ATH'] = (((merged_df[ath_col] - merged_df[cmp_col]) / merged_df[ath_col]) * 100).clip(lower=0).round(2)
+        print("   ✅ 'Down %_ATH' column successfully calculated and appended.")
+    else:
+        print("\n   ⚠️ WARNING: Cannot calculate Down %_ATH. Missing CMP or ATH columns.")
+
+    # -------------------------------------------------------------
+    # NEW LOGIC: Fetch NSE Price Bands
+    # -------------------------------------------------------------
+    print("\n🏷️ STEP 4.2: Fetching NSE Price Bands (sec_list.csv)...")
+    file_url = "https://archives.nseindia.com/content/equities/sec_list.csv"
+    band_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+    }
+    band_df = pd.DataFrame()
+    for attempt in range(1, 4):
+        try:
+            time.sleep(random.uniform(1, 3))
+            resp = requests.get(file_url, headers=band_headers, timeout=10)
+            if resp.status_code == 200:
+                band_df = pd.read_csv(io.StringIO(resp.text))
+                break
+        except Exception as e:
+            print(f"   ⚠️ Attempt {attempt} failed: {e}")
+            
+    if not band_df.empty and len(band_df.columns) >= 4:
+        band_df.columns = [str(c).strip() for c in band_df.columns]
+        
+        if 'Symbol' in band_df.columns and 'Band' in band_df.columns:
+            band_subset = band_df[['Symbol', 'Band']].drop_duplicates(subset=['Symbol'])
+            band_subset['Symbol'] = band_subset['Symbol'].astype(str).str.strip().str.upper()
+            
+            merged_df['temp_ticker'] = merged_df['Ticker'].astype(str).str.strip().str.upper()
+            merged_df = pd.merge(merged_df, band_subset, left_on='temp_ticker', right_on='Symbol', how='left')
+            
+            # Restrict assigning Band only to NSE and NSE SME
+            valid_exchanges = ['NSE', 'NSE SME']
+            is_nse_mask = merged_df['Exchange'].astype(str).str.strip().str.upper().isin(valid_exchanges)
+            merged_df.loc[~is_nse_mask, 'Band'] = np.nan
+            
+            merged_df.drop(columns=['temp_ticker', 'Symbol'], inplace=True)
+            print("   ✅ Price Bands successfully merged for NSE/NSE SME stocks.")
+        else:
+            print("   ⚠️ WARNING: 'Symbol' or 'Band' columns missing from downloaded CSV.")
+    else:
+        print("   ❌ ERROR: Failed to download or parse sec_list.csv.")
+
 
     # ==========================================
     # STEP 5.1: SCRAPE ATH DATA & RANK SECTORS
@@ -382,13 +440,11 @@ def run_daily_scraper():
         if ath_dataframes:
             ath_df = pd.concat(ath_dataframes, ignore_index=True)
             
-            # Drop the redundant 'Is not SME' column
             if 'Is not SME' in ath_df.columns:
                 ath_df = ath_df.drop(columns=['Is not SME'])
                 
             print(f"   ✅ Collected detailed data for {len(ath_df)} ATH companies.")
             
-            # VLOOKUP LOGIC: Pull mapping details from merged_df into the new ath_df
             cols_to_pull = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange']
             existing_cols = [c for c in cols_to_pull if c in merged_df.columns]
             
@@ -399,7 +455,6 @@ def run_daily_scraper():
     else:
         print("   ❌ Failed to fetch ATH Screener. Sector analysis will be empty.")
 
-    # Apply NEW SME LOGIC: Look strictly at the "Is SME" column to filter out SMEs (1 = SME)
     sme_col = next((c for c in merged_df.columns if str(c).strip().lower() == 'is sme'), None)
     
     if sme_col:
@@ -409,7 +464,6 @@ def run_daily_scraper():
         print("   ⚠️ WARNING: 'Is SME' column not found! Proceeding without SME filtering.")
         analysis_df = merged_df.copy()
     
-    # Assign True/False based directly on the scraped list
     analysis_df['is_ath'] = analysis_df['Name'].astype(str).str.strip().isin(ath_names)
 
     def build_summary_table(df, group_col):
@@ -427,27 +481,21 @@ def run_daily_scraper():
     sector_summary_df = build_summary_table(analysis_df, col_sector)
     industry_summary_df = build_summary_table(analysis_df, col_industry)
     
-    # -------------------------------------------------------------
-    # NEW LOGIC: Calculate Average 1-Day Return of ATH Stocks
-    # -------------------------------------------------------------
     if not ath_df.empty:
         ath_1d_col = next((c for c in ath_df.columns if '1day return' in c.lower() or '1d' in c.lower()), None)
         if ath_1d_col:
             ath_df[ath_1d_col] = pd.to_numeric(ath_df[ath_1d_col], errors='coerce')
             
-            # Merge Avg 1D Return for Sectors
             if col_sector in ath_df.columns and not sector_summary_df.empty:
                 sec_avg = ath_df.groupby(col_sector)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
                 sector_summary_df = pd.merge(sector_summary_df, sec_avg, on=col_sector, how='left')
                 sector_summary_df['Avg 1D Return %'] = sector_summary_df['Avg 1D Return %'].round(2)
                 
-            # Merge Avg 1D Return for Industries
             if col_industry in ath_df.columns and not industry_summary_df.empty:
                 ind_avg = ath_df.groupby(col_industry)[ath_1d_col].mean().reset_index().rename(columns={ath_1d_col: 'Avg 1D Return %'})
                 industry_summary_df = pd.merge(industry_summary_df, ind_avg, on=col_industry, how='left')
                 industry_summary_df['Avg 1D Return %'] = industry_summary_df['Avg 1D Return %'].round(2)
 
-    # STRICT REQUIREMENT: Sort explicitly by Rank (Lowest to Highest)
     if not sector_summary_df.empty:
         sector_summary_df = sector_summary_df.sort_values(by='Rank', ascending=True).reset_index(drop=True)
     if not industry_summary_df.empty:
@@ -460,6 +508,11 @@ def run_daily_scraper():
     # ==========================================
     now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
     
+    # -------------------------------------------------------------
+    # NEW LOGIC: Prevent historical market mood updates between 9AM and 9PM
+    # -------------------------------------------------------------
+    is_time_locked = 9 <= now_ist.hour < 21
+
     if now_ist.hour < 9:
         trading_date = now_ist - pd.Timedelta(days=1)
     else:
@@ -473,81 +526,84 @@ def run_daily_scraper():
     is_nse_holiday = False
     
     if is_weekday:
-        print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
-        try:
-            query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
-            with engine.connect() as conn:
-                existing_mood = pd.read_sql(query_dup, conn)
-            already_logged = not existing_mood.empty
-        except Exception:
-            already_logged = False
-            
-        if not already_logged:
-            mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
-            
-            col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
-            if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
-
-            if col_chg:
-                mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
-                valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
-                total_stocks = int(len(valid_returns))
-                positive_stocks = int((valid_returns[col_chg] > 0).sum())
-                
-                if total_stocks > 0:
-                    ratio = positive_stocks / total_stocks
-                    score = ratio * 100
-                    pct_str = f"{score:.2f}%"  
-                    
-                    print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
-                    try:
-                        query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
-                        with engine.connect() as conn:
-                            last_entry_df = pd.read_sql(query_last, conn)
-                        
-                        if not last_entry_df.empty:
-                            last_text = str(last_entry_df['Market Breadth'].iloc[0])
-                            match_pct = re.search(r'([0-9.]+)%', last_text)
-                            if match_pct:
-                                last_logged_pct = float(match_pct.group(1))
-                                today_rounded_pct = round(score, 2)
-                                
-                                if today_rounded_pct == last_logged_pct:
-                                    return_variance = float(valid_returns[col_chg].var())
-                                    
-                                    if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
-                                        is_nse_holiday = True
-                                        print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
-                                        print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
-                    except Exception as e:
-                        print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
-                    
-                    if not is_nse_holiday:
-                        if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
-                        elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
-                        elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
-                        elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
-                        else: mood_label = f"Super Positive 🚀 {pct_str}"
-                            
-                        historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
-                        
-                        print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
-                        print(f"      🚦 Today's Mood: {mood_label}")
-                        
-                        try:
-                            historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
-                            print("      ✅ Market Mood successfully logged to history.")
-                        except Exception as e:
-                            print(f"      ❌ Failed to save market mood: {e}")
+        if is_time_locked:
+            print(f"\n   ⏸️ Market Engine Paused: Current time ({now_ist.strftime('%I:%M %p')}) is between 9 AM and 9 PM IST. Skipping mood updates to prevent intra-day logging.")
         else:
-            print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
+            print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
+            try:
+                query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
+                with engine.connect() as conn:
+                    existing_mood = pd.read_sql(query_dup, conn)
+                already_logged = not existing_mood.empty
+            except Exception:
+                already_logged = False
+                
+            if not already_logged:
+                mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
+                
+                col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
+                if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
+
+                if col_chg:
+                    mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
+                    valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
+                    total_stocks = int(len(valid_returns))
+                    positive_stocks = int((valid_returns[col_chg] > 0).sum())
+                    
+                    if total_stocks > 0:
+                        ratio = positive_stocks / total_stocks
+                        score = ratio * 100
+                        pct_str = f"{score:.2f}%"  
+                        
+                        print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
+                        try:
+                            query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
+                            with engine.connect() as conn:
+                                last_entry_df = pd.read_sql(query_last, conn)
+                            
+                            if not last_entry_df.empty:
+                                last_text = str(last_entry_df['Market Breadth'].iloc[0])
+                                match_pct = re.search(r'([0-9.]+)%', last_text)
+                                if match_pct:
+                                    last_logged_pct = float(match_pct.group(1))
+                                    today_rounded_pct = round(score, 2)
+                                    
+                                    if today_rounded_pct == last_logged_pct:
+                                        return_variance = float(valid_returns[col_chg].var())
+                                        
+                                        if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
+                                            is_nse_holiday = True
+                                            print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
+                                            print("      🔕 Return analysis confirms 0% market variance. Skipping timeline insertion.")
+                        except Exception as e:
+                            print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
+                        
+                        if not is_nse_holiday:
+                            if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
+                            elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
+                            elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
+                            elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
+                            else: mood_label = f"Super Positive 🚀 {pct_str}"
+                                
+                            historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
+                            
+                            print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
+                            print(f"      🚦 Today's Mood: {mood_label}")
+                            
+                            try:
+                                historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
+                                print("      ✅ Market Mood successfully logged to history.")
+                            except Exception as e:
+                                print(f"      ❌ Failed to save market mood: {e}")
+            else:
+                print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
     else:
         print(f"\n   ⏸️ Skipping Market Mood: {today_date_str} is not a valid weekday.")
 
     # ==========================================
     # STEP 5.3: COMPOSITE SMOOTHED TREND ENGINE
     # ==========================================
-    if is_weekday and not already_logged and not is_nse_holiday:
+    if is_weekday and not is_time_locked and not already_logged and not is_nse_holiday:
         print("\n   📈 Calculating 7-Day, 14-Day, and 21-Day Composite Trend...")
         try:
             query_all = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30')
@@ -594,8 +650,6 @@ def run_daily_scraper():
                 print("      ⚠️ Not enough history to calculate rolling averages yet.")
         except Exception as e:
             print(f"      ❌ Trend Engine Error: {e}")
-    elif is_nse_holiday:
-        print("\n   ⏸️ Trend Engine Paused: Rolling calculations skipped due to NSE Trading Holiday.")
 
     # ==========================================
     # STEP 6: PUSH DATA BACK TO CLOUD TABLES
@@ -632,8 +686,6 @@ def run_daily_scraper():
 
     try:
         tv = TvDatafeed()
-
-        # Pull daily history
         tv_data = tv.get_hist(
             symbol='CNXSMALLCAP',
             exchange='NSE',
@@ -642,28 +694,19 @@ def run_daily_scraper():
         )
 
         if tv_data is not None and not tv_data.empty:
-
             tv_data = tv_data.sort_index()
 
-            # Latest available trading day
             current_date = tv_data.index[-1]
             current_close = float(tv_data['close'].iloc[-1])
 
-            # Exact calendar date 20 months ago
             target_date = current_date - pd.DateOffset(months=20)
-
-            # Nearest trading day on or before target date
             historical_data = tv_data[tv_data.index <= target_date]
 
             if not historical_data.empty:
-
                 past_date = historical_data.index[-1]
                 past_close = float(historical_data['close'].iloc[-1])
 
-                roc_20m = round(
-                    ((current_close - past_close) / past_close) * 100,
-                    2
-                )
+                roc_20m = round(((current_close - past_close) / past_close) * 100, 2)
 
                 print(f"   Current Date: {current_date.date()}")
                 print(f"   Current Close: {current_close}")
@@ -672,9 +715,7 @@ def run_daily_scraper():
                 print(f"   Past Close: {past_close}")
                 print(f"   Exact 20M ROC: {roc_20m}%")
 
-                roc_timestamp = pd.Timestamp.now(
-                    tz='Asia/Kolkata'
-                ).strftime('%Y-%m-%d %H:%M:%S')
+                roc_timestamp = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%Y-%m-%d %H:%M:%S')
 
                 roc_df = pd.DataFrame([{
                     "Date": roc_timestamp,
@@ -686,21 +727,12 @@ def run_daily_scraper():
                     "ROC_20M_Percent": roc_20m
                 }])
 
-                roc_df.to_sql(
-                    "CNXSMALLCAP_ROC",
-                    engine,
-                    if_exists="append",
-                    index=False
-                )
-
+                roc_df.to_sql("CNXSMALLCAP_ROC", engine, if_exists="append", index=False)
                 print("   ✅ 'CNXSMALLCAP_ROC' updated successfully.")
-
             else:
                 print("   ⚠️ Not enough history to calculate 20M ROC.")
-
         else:
             print("   ⚠️ Failed to fetch CNXSMALLCAP data.")
-
     except Exception as e:
         print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
 
