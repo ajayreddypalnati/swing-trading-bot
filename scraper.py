@@ -338,14 +338,15 @@ def run_daily_scraper():
     merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
     
     # -------------------------------------------------------------
-    # NEW LOGIC: Calculate Down %_ATH natively
-    # Formula: max(0, ((ATH - CMP) / ATH) * 100)
+    # NEW LOGIC: Calculate Down %_ATH & Turnover natively
     # -------------------------------------------------------------
-    cmp_col = next((c for c in merged_df.columns if 'cmp rs' in c.lower()), None)
-    ath_col = next((c for c in merged_df.columns if 'all time high' in c.lower()), None)
+    # Ultra-robust column matching based on Supabase screenshots
+    cmp_col = next((c for c in merged_df.columns if 'cmp' in str(c).lower()), None)
+    ath_col = next((c for c in merged_df.columns if 'all time high' in str(c).lower() or 'alltime' in str(c).lower()), None)
+    vol_col = next((c for c in merged_df.columns if 'avg vol' in str(c).lower()), None)
     
     if cmp_col and ath_col:
-        print(f"\n📉 STEP 4.1: Calculating Down %_ATH using [{ath_col}] and [{cmp_col}]...")
+        print(f"\n📉 STEP 4.1a: Calculating Down %_ATH using [{ath_col}] and [{cmp_col}]...")
         merged_df[ath_col] = pd.to_numeric(merged_df[ath_col], errors='coerce')
         merged_df[cmp_col] = pd.to_numeric(merged_df[cmp_col], errors='coerce')
         
@@ -353,7 +354,18 @@ def run_daily_scraper():
         merged_df['Down %_ATH'] = (((merged_df[ath_col] - merged_df[cmp_col]) / merged_df[ath_col]) * 100).clip(lower=0).round(2)
         print("   ✅ 'Down %_ATH' column successfully calculated and appended.")
     else:
-        print("\n   ⚠️ WARNING: Cannot calculate Down %_ATH. Missing CMP or ATH columns.")
+        print(f"\n   ⚠️ WARNING: Cannot calculate Down %_ATH. Found CMP Col: {cmp_col}, Found ATH Col: {ath_col}")
+
+    if cmp_col and vol_col:
+        print(f"🔄 STEP 4.1b: Calculating Turnover using [{cmp_col}] and [{vol_col}]...")
+        merged_df[vol_col] = pd.to_numeric(merged_df[vol_col], errors='coerce')
+        
+        # Turnover in Crores = (CMP * Avg Volume) / 10,000,000
+        merged_df['Turnover'] = ((merged_df[cmp_col] * merged_df[vol_col]) / 10000000).round(2)
+        print("   ✅ 'Turnover' column successfully calculated in Crores.")
+    else:
+        print(f"   ⚠️ WARNING: Cannot calculate Turnover. Found CMP Col: {cmp_col}, Found Vol Col: {vol_col}")
+
 
     # -------------------------------------------------------------
     # NEW LOGIC: Fetch NSE Price Bands
