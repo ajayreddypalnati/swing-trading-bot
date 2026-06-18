@@ -80,49 +80,20 @@ st.markdown("""
         }
 
         /* ========================================= */
-        /* STUNNING CUSTOM EXPANDER (TOGGLE) STYLING */
+        /* CUSTOM EXPANDER (TOGGLE) STYLING          */
         /* ========================================= */
         [data-testid="stExpander"] {
             border: 1px solid rgba(128,128,128,0.15) !important;
-            border-radius: 10px !important;
-            overflow: hidden;
-            margin-bottom: 18px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.03) !important;
+            border-radius: 8px !important;
+            margin-bottom: 15px !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
         }
         
-        /* Make the text inside the toggle BIG and BOLD */
+        /* Make the text inside the toggle BIG and BOLD, keep default colors */
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important; 
             font-weight: 800 !important;   
             color: #1f2937 !important;
-            letter-spacing: 0.3px;
-        }
-        
-        /* Expander 1: Market Cycle & Leaders (Light Purple Theme) */
-        [data-testid="stExpander"]:nth-of-type(1) summary {
-            background: linear-gradient(90deg, rgba(216, 180, 254, 0.35) 0%, rgba(233, 213, 255, 0.1) 100%) !important;
-            border-left: 6px solid #a855f7 !important;
-            padding: 0.5rem 1rem !important;
-        }
-        
-        /* Expander 2: ETF Screener (Light Sky Blue Theme) */
-        [data-testid="stExpander"]:nth-of-type(2) summary {
-            background: linear-gradient(90deg, rgba(186, 230, 253, 0.45) 0%, rgba(224, 242, 254, 0.1) 100%) !important;
-            border-left: 6px solid #0ea5e9 !important;
-            padding: 0.5rem 1rem !important;
-        }
-        
-        /* Expander 3: Momentum Screener (Light Emerald Green Theme) */
-        [data-testid="stExpander"]:nth-of-type(3) summary {
-            background: linear-gradient(90deg, rgba(167, 243, 208, 0.45) 0%, rgba(209, 250, 229, 0.1) 100%) !important;
-            border-left: 6px solid #10b981 !important;
-            padding: 0.5rem 1rem !important;
-        }
-        
-        /* Smooth hover effect for the toggles */
-        [data-testid="stExpander"] summary:hover {
-            opacity: 0.85;
-            transition: opacity 0.2s ease-in-out;
         }
     </style>
 """, unsafe_allow_html=True)
