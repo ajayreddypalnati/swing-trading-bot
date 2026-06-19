@@ -20,8 +20,6 @@ st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="w
 # ==========================================
 # 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
 # ==========================================
-import streamlit.components.v1 as components
-
 components.html(
     """
     <script>
@@ -63,7 +61,7 @@ components.html(
             });
             doc.body.dispatchEvent(syntheticEvent);
         }
-    }, true); // <--- This 'true' is the secret sauce.
+    }, true); 
     </script>
     """,
     height=0,
@@ -147,6 +145,22 @@ st.markdown("""
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important; 
             font-weight: 800 !important;   
+        }
+        
+        /* Refresh Button Styling */
+        div.stButton > button:first-child {
+            background-color: transparent !important;
+            border: 1px solid #d1d5db !important;
+            color: #4b5563 !important;
+            font-size: 0.75rem !important;
+            padding: 0.25rem 0.5rem !important;
+            border-radius: 0.375rem !important;
+            margin-top: 0.5rem !important;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #f3f4f6 !important;
+            color: #111827 !important;
+            border-color: #9ca3af !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -555,6 +569,8 @@ with header_col2:
     
     dot_color = "green"
     status_text = "LIVE DATA"
+    
+    # Adding the manual clear cache button in the top right header
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
@@ -564,6 +580,10 @@ with header_col2:
             </span>
         </div>
         """, unsafe_allow_html=True)
+        
+    if st.button("🔄 Refresh Database"):
+        st.cache_data.clear()
+        st.rerun()
 
 st.divider()
 
