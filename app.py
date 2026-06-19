@@ -20,30 +20,50 @@ st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="w
 # ==========================================
 # 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
 # ==========================================
+import streamlit.components.v1 as components
+
 components.html(
     """
     <script>
     const doc = window.parent.document;
+    
+    // The 'true' at the end hooks into the CAPTURE phase, beating Streamlit's React listeners
     doc.addEventListener('keydown', function(e) {
-        // Trigger Clear Cache on Ctrl+Q or Cmd+Q
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'q') {
+        
+        // 1. COMPLETELY BLOCK STREAMLIT'S NATIVE 'C' BEHAVIOR
+        if (e.key && e.key.toLowerCase() === 'c') {
+            
+            // If pressing Ctrl+C or Cmd+C, kill the event for Streamlit. 
+            // The browser will still perform the normal text copy.
+            if (e.ctrlKey || e.metaKey) {
+                e.stopPropagation();
+                return;
+            }
+            
+            // If pressing just 'c' while not typing in an input box, kill it.
+            const tag = e.target.tagName.toLowerCase();
+            if (tag !== 'input' && tag !== 'textarea') {
+                e.stopPropagation();
+            }
+        }
+        
+        // 2. MAP CTRL+Q (or CMD+Q) TO CLEAR CACHE
+        if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === 'q') {
             e.preventDefault();
             e.stopPropagation();
-            // Simulate pressing 'c' to open Streamlit's native Clear Cache dialog
-            doc.dispatchEvent(new KeyboardEvent('keydown', {
+            
+            // Dispatch a "clean" synthetic 'c' event to trick Streamlit into opening the cache menu
+            const syntheticEvent = new KeyboardEvent('keydown', {
                 key: 'c',
                 code: 'KeyC',
                 bubbles: true,
                 cancelable: true,
-                composed: true
-            }));
+                ctrlKey: false, // Must be false so it bypasses our blocker above
+                metaKey: false
+            });
+            doc.body.dispatchEvent(syntheticEvent);
         }
-        // Block native 'c' or 'Ctrl+C' from triggering Streamlit's dialog at the app level
-        // (Allows default browser copying to work flawlessly)
-        if (e.key.toLowerCase() === 'c' && e.isTrusted && (e.target === doc.body || e.target === doc.documentElement)) {
-            e.stopPropagation();
-        }
-    }, true);
+    }, true); // <--- This 'true' is the secret sauce.
     </script>
     """,
     height=0,
