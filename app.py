@@ -5,6 +5,7 @@ import numpy as np
 import time
 from datetime import datetime, timezone, timedelta
 import streamlit as st
+import streamlit.components.v1 as components
 import re
 import warnings
 from sqlalchemy import create_engine, text
@@ -15,6 +16,39 @@ import io
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+
+# ==========================================
+# 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
+# ==========================================
+components.html(
+    """
+    <script>
+    const doc = window.parent.document;
+    doc.addEventListener('keydown', function(e) {
+        // Trigger Clear Cache on Ctrl+Q or Cmd+Q
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'q') {
+            e.preventDefault();
+            e.stopPropagation();
+            // Simulate pressing 'c' to open Streamlit's native Clear Cache dialog
+            doc.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'c',
+                code: 'KeyC',
+                bubbles: true,
+                cancelable: true,
+                composed: true
+            }));
+        }
+        // Block native 'c' or 'Ctrl+C' from triggering Streamlit's dialog at the app level
+        // (Allows default browser copying to work flawlessly)
+        if (e.key.toLowerCase() === 'c' && e.isTrusted && (e.target === doc.body || e.target === doc.documentElement)) {
+            e.stopPropagation();
+        }
+    }, true);
+    </script>
+    """,
+    height=0,
+    width=0,
+)
 
 # ==========================================
 # 1. CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling)
@@ -89,11 +123,10 @@ st.markdown("""
             box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
         }
         
-        /* Make the text inside the toggle BIG and BOLD, keep default colors */
+        /* Make the text inside the toggle BIG and BOLD. Color inherits automatically for Dark/Light mode */
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important; 
             font-weight: 800 !important;   
-            color: #1f2937 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -727,7 +760,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                             for col in row.index:
                                 cell_style = ""
                                 if is_top_4:
-                                    cell_style += "font-weight: 700; color: #000000; "
+                                    cell_style += "font-weight: 700; "
                                     if col == 'Chg %':
                                         cell_style += "background-color: rgba(187, 247, 208, 0.5); "
                                 styles.append(cell_style)
