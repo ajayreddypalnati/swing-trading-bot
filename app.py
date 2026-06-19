@@ -12,62 +12,6 @@ from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
 import io
 
-# Silence terminal spam
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
-st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
-
-# ==========================================
-# 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
-# ==========================================
-components.html(
-    """
-    <script>
-    const doc = window.parent.document;
-    
-    // The 'true' at the end hooks into the CAPTURE phase, beating Streamlit's React listeners
-    doc.addEventListener('keydown', function(e) {
-        
-        // 1. COMPLETELY BLOCK STREAMLIT'S NATIVE 'C' BEHAVIOR
-        if (e.key && e.key.toLowerCase() === 'c') {
-            
-            // If pressing Ctrl+C or Cmd+C, kill the event for Streamlit. 
-            // The browser will still perform the normal text copy.
-            if (e.ctrlKey || e.metaKey) {
-                e.stopPropagation();
-                return;
-            }
-            
-            // If pressing just 'c' while not typing in an input box, kill it.
-            const tag = e.target.tagName.toLowerCase();
-            if (tag !== 'input' && tag !== 'textarea') {
-                e.stopPropagation();
-            }
-        }
-        
-        // 2. MAP CTRL+Q (or CMD+Q) TO CLEAR CACHE
-        if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === 'q') {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Dispatch a "clean" synthetic 'c' event to trick Streamlit into opening the cache menu
-            const syntheticEvent = new KeyboardEvent('keydown', {
-                key: 'c',
-                code: 'KeyC',
-                bubbles: true,
-                cancelable: true,
-                ctrlKey: false, // Must be false so it bypasses our blocker above
-                metaKey: false
-            });
-            doc.body.dispatchEvent(syntheticEvent);
-        }
-    }, true); 
-    </script>
-    """,
-    height=0,
-    width=0,
-)
-
 # ==========================================
 # 1. CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling)
 # ==========================================
@@ -145,22 +89,6 @@ st.markdown("""
         [data-testid="stExpander"] summary p {
             font-size: 1.15rem !important; 
             font-weight: 800 !important;   
-        }
-        
-        /* Refresh Button Styling */
-        div.stButton > button:first-child {
-            background-color: transparent !important;
-            border: 1px solid #d1d5db !important;
-            color: #4b5563 !important;
-            font-size: 0.75rem !important;
-            padding: 0.25rem 0.5rem !important;
-            border-radius: 0.375rem !important;
-            margin-top: 0.5rem !important;
-        }
-        div.stButton > button:first-child:hover {
-            background-color: #f3f4f6 !important;
-            color: #111827 !important;
-            border-color: #9ca3af !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -569,8 +497,6 @@ with header_col2:
     
     dot_color = "green"
     status_text = "LIVE DATA"
-    
-    # Adding the manual clear cache button in the top right header
     st.markdown(f"""
         <div style="text-align: right; margin-top: 5px; color: gray;">
             <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
@@ -580,10 +506,6 @@ with header_col2:
             </span>
         </div>
         """, unsafe_allow_html=True)
-        
-    if st.button("🔄 Refresh Database"):
-        st.cache_data.clear()
-        st.rerun()
 
 st.divider()
 
