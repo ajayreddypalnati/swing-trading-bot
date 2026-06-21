@@ -59,8 +59,8 @@ st.markdown("""
             box-shadow: -10px 0 20px rgba(0,0,0,0.2);
         }
         .header-left { position: relative; z-index: 2; color: #F4F1E1; }
-        .header-left h1 { color: #F4F1E1 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
-        .header-left p { color: #F4F1E1 !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.85;}
+        .header-left h1 { color: #FFFFFF !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+        .header-left p { color: #FFFFFF !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.9; }
         
         .header-right { position: relative; z-index: 2; text-align: right; color: #0B1D30; padding-right: 15px;}
         .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
