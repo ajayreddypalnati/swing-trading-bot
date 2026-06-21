@@ -19,7 +19,48 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. CSS INJECTION (Dark-Themed Sleek UI & Bulletproof Mobile Scrolling)
+# 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
+# ==========================================
+components.html(
+    """
+    <script>
+    const doc = window.parent.document;
+    
+    doc.addEventListener('keydown', function(e) {
+        if (e.key && e.key.toLowerCase() === 'c') {
+            if (e.ctrlKey || e.metaKey) {
+                e.stopPropagation();
+                return;
+            }
+            const tag = e.target.tagName.toLowerCase();
+            if (tag !== 'input' && tag !== 'textarea') {
+                e.stopPropagation();
+            }
+        }
+        
+        if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === 'q') {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const syntheticEvent = new KeyboardEvent('keydown', {
+                key: 'c',
+                code: 'KeyC',
+                bubbles: true,
+                cancelable: true,
+                ctrlKey: false, 
+                metaKey: false
+            });
+            doc.body.dispatchEvent(syntheticEvent);
+        }
+    }, true); 
+    </script>
+    """,
+    height=0,
+    width=0,
+)
+
+# ==========================================
+# 1. CSS INJECTION (Premium Theme & Header)
 # ==========================================
 st.markdown("""
     <style>
@@ -28,74 +69,62 @@ st.markdown("""
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
         
-        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 8px; height: 12px; width: 12px; animation: pulse-green 2s infinite; display: inline-block; }
+        .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* CUSTOM HTML TABLE SCROLLING WRAPPER (Main Table) */
-        .scrollable-table-container {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch; 
-            margin-bottom: 0.5rem;
+        /* PREMIUM CUSTOM HEADER */
+        .premium-header {
+            background: #0B1D30; /* Navy Blue from image */
+            border-radius: 12px;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
         }
-        .scrollable-table-container table {
-            width: 100%;
-            min-width: 900px; 
-            border-collapse: collapse;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        /* Geometric Cream Overlay */
+        .premium-header::after {
+            content: '';
+            position: absolute;
+            top: -50px;
+            right: -50px;
+            width: 350px;
+            height: 200%;
+            background: #F4F1E1; /* Cream from image */
+            transform: rotate(20deg);
+            z-index: 1;
+            box-shadow: -10px 0 20px rgba(0,0,0,0.2);
         }
-        .scrollable-table-container th {
-            background-color: rgba(128, 128, 128, 0.08) !important;
-            text-align: center !important;
-            vertical-align: middle !important;
-            font-size: 0.85rem;
-            padding: 15px !important;
-            white-space: nowrap; 
-        }
-        .scrollable-table-container td {
-            text-align: center !important;
-            vertical-align: middle !important;
-            padding: 12px !important;
-            border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important;
-            white-space: nowrap; 
-        }
+        .header-left { position: relative; z-index: 2; color: #F4F1E1; }
+        .header-left h1 { color: #F4F1E1 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+        .header-left p { color: #8B9BB4; margin: 5px 0 0 0; font-size: 1rem; }
         
-        /* SLEEK HTML TABLE (For Top Sectors / Industries) */
-        .sleek-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem; 
-        }
-        .sleek-table th {
-            background-color: rgba(128, 128, 128, 0.08) !important; 
-            text-align: center;
-            vertical-align: middle;
-            padding: 10px 8px;
-            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-            font-weight: bold !important; 
-        }
-        .sleek-table td {
-            text-align: center;
-            vertical-align: middle;
-            padding: 8px;
-            border-bottom: 1px solid rgba(128, 128, 128, 0.1);
-        }
+        .header-right { position: relative; z-index: 2; text-align: right; color: #0B1D30; padding-right: 15px;}
+        .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
+        .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
+        .header-right .date { font-size: 0.9rem; font-weight: 600; color: #3A4A5A;}
 
-        /* ========================================= */
-        /* CUSTOM EXPANDER (TOGGLE) STYLING          */
-        /* ========================================= */
-        [data-testid="stExpander"] {
-            border: 1px solid rgba(128,128,128,0.15) !important;
-            border-radius: 8px !important;
-            margin-bottom: 15px !important;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
+        @media (max-width: 768px) {
+            .premium-header { flex-direction: column; align-items: flex-start; padding: 20px; }
+            .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #E5E1CD;}
+            .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* Make the text inside the toggle BIG and BOLD */
-        [data-testid="stExpander"] summary p {
-            font-size: 1.15rem !important; 
-            font-weight: 800 !important;   
-        }
+        /* TABLE STYLING */
+        .scrollable-table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.5rem; }
+        .scrollable-table-container table { width: 100%; min-width: 900px; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .scrollable-table-container th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; vertical-align: middle !important; font-size: 0.85rem; padding: 15px !important; white-space: nowrap; }
+        .scrollable-table-container td { text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; white-space: nowrap; }
+        
+        .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .sleek-table th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center; vertical-align: middle; padding: 10px 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold !important; }
+        .sleek-table td { text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
+
+        /* EXPANDER (TOGGLE) STYLING */
+        [data-testid="stExpander"] { border: 1px solid rgba(128,128,128,0.15) !important; border-radius: 8px !important; margin-bottom: 15px !important; box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important; }
+        [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 800 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -117,9 +146,7 @@ TV_PAYLOAD = {
 # ==========================================
 # 3. DATA FETCHING 
 # ==========================================
-
 def get_db_cache_key():
-    """Generates a dynamic string to control Streamlit's caching behavior based on IST."""
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
     if 9 <= now.hour < 21:
@@ -458,31 +485,27 @@ def render_market_cycle_graph(roc_vals):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 5. DASHBOARD MAIN LAYOUT
+# 5. DASHBOARD MAIN LAYOUT & CUSTOM HEADER
 # ==========================================
-header_col1, header_col2 = st.columns([2, 1])
-with header_col1:
-    st.markdown("<h1 style='margin-bottom: 0px;'>⚡ 9-EMA Swing trading screener</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: gray; font-size: 1.1rem;'>Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</p>", unsafe_allow_html=True)
+ist = timezone(timedelta(hours=5, minutes=30))
+current_time = datetime.now(ist).strftime('%I:%M:%S %p')
+current_date = datetime.now(ist).strftime('%d %b %Y')
 
-with header_col2:
-    ist = timezone(timedelta(hours=5, minutes=30))
-    current_time = datetime.now(ist).strftime('%I:%M:%S %p')
-    current_date = datetime.now(ist).strftime('%d %b %Y')
-    
-    dot_color = "green"
-    status_text = "LIVE DATA"
-    st.markdown(f"""
-        <div style="text-align: right; margin-top: 5px; color: gray;">
-            <span style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase;">
-                {status_text} <div class="blob {dot_color}"></div><br>
-                <span style="color: #1E88E5; font-size: 1.4rem; font-weight: 800;">{current_time}</span><br>
-                <span style="font-size: 0.85rem;">{current_date}</span>
-            </span>
+# Custom Premium Header Block
+st.markdown(f"""
+    <div class="premium-header">
+        <div class="header-left">
+            <h1>⚡ 9-EMA Swing Screener</h1>
+            <p>Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</p>
         </div>
-        """, unsafe_allow_html=True)
+        <div class="header-right">
+            <div class="live-status">LIVE DATA <div class="blob green"></div></div>
+            <div class="time">{current_time}</div>
+            <div class="date">{current_date}</div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
-st.divider()
 
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
@@ -606,13 +629,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     html += "</tbody></table>"
                     st.markdown(html, unsafe_allow_html=True)
                 
-            # --- 2. UPSTOX PORTFOLIO TRACKER (MOVED HERE AS AN EXPANDER) ---
+            # --- 2. UPSTOX PORTFOLIO TRACKER ---
             with st.expander("📈 Upstox Portfolio Tracker", expanded=False):
                 st.markdown("<span style='color: gray; font-size: 0.9rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
                 
                 col_t1, col_t2 = st.columns([1, 2])
                 with col_t1:
-                    upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhap1ndGV3YXktc2VydmljZSIsImV4cCI6MTgxMzYxNTIwMH0.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
+                    upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
                 with col_t2:
                     input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed", key="tracker_method")
 
