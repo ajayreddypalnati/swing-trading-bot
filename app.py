@@ -58,11 +58,11 @@ st.markdown("""
             z-index: 1;
             box-shadow: -10px 0 20px rgba(0,0,0,0.2);
         }
-        .header-left { position: relative; z-index: 2; color: #F4F1E1; }
-        .header-left h1 { color: #FFFFFF !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
-        .header-left p { color: #FFFFFF !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.9; }
+        .header-left { position: relative; z-index: 2; }
+        .header-title { color: #FFFFFF !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+        .header-subtitle { color: #FFFFFF !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.9; }
         
-        .header-right { position: relative; z-index: 2; text-align: right; color: #0B1D30; padding-right: 15px;}
+        .header-right { position: relative; z-index: 2; text-align: right; padding-right: 15px;}
         .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
         .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
         .header-right .date { font-size: 0.9rem; font-weight: 600; color: #3A4A5A;}
@@ -437,8 +437,8 @@ current_date = datetime.now(ist).strftime('%d %b %Y')
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
-            <h1>⚡ 9-EMA Swing Screener</h1>
-            <p>Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</p>
+            <div class="header-title">⚡ 9-EMA Swing Screener</div>
+            <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
             <div class="live-status">LIVE DATA <div class="blob green"></div></div>
