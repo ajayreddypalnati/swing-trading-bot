@@ -6,7 +6,6 @@ import time
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 import streamlit as st
-import streamlit.components.v1 as components
 import re
 import warnings
 from sqlalchemy import create_engine, text
@@ -19,48 +18,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 0. KEYBOARD SHORTCUT INJECTION (Ctrl+Q = Cache, Fix Ctrl+C)
-# ==========================================
-components.html(
-    """
-    <script>
-    const doc = window.parent.document;
-    
-    doc.addEventListener('keydown', function(e) {
-        if (e.key && e.key.toLowerCase() === 'c') {
-            if (e.ctrlKey || e.metaKey) {
-                e.stopPropagation();
-                return;
-            }
-            const tag = e.target.tagName.toLowerCase();
-            if (tag !== 'input' && tag !== 'textarea') {
-                e.stopPropagation();
-            }
-        }
-        
-        if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === 'q') {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const syntheticEvent = new KeyboardEvent('keydown', {
-                key: 'c',
-                code: 'KeyC',
-                bubbles: true,
-                cancelable: true,
-                ctrlKey: false, 
-                metaKey: false
-            });
-            doc.body.dispatchEvent(syntheticEvent);
-        }
-    }, true); 
-    </script>
-    """,
-    height=0,
-    width=0,
-)
-
-# ==========================================
-# 1. CSS INJECTION (Premium Theme & Header)
+# 1. CSS INJECTION (Light Professional Theme)
 # ==========================================
 st.markdown("""
     <style>
@@ -71,9 +29,10 @@ st.markdown("""
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* PREMIUM CUSTOM HEADER */
+        /* PREMIUM CUSTOM HEADER - LIGHT THEME */
         .premium-header {
-            background: #0B1D30; /* Navy Blue from image */
+            background: #FFFFFF; 
+            border: 1px solid rgba(128,128,128,0.15);
             border-radius: 12px;
             padding: 24px 32px;
             display: flex;
@@ -81,10 +40,10 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
             margin-bottom: 25px;
         }
-        /* Geometric Cream Overlay */
+        /* Geometric Light Overlay */
         .premium-header::after {
             content: '';
             position: absolute;
@@ -92,23 +51,23 @@ st.markdown("""
             right: -50px;
             width: 350px;
             height: 200%;
-            background: #F4F1E1; /* Cream from image */
+            background: #F8F9FA; 
             transform: rotate(20deg);
             z-index: 1;
-            box-shadow: -10px 0 20px rgba(0,0,0,0.2);
+            border-left: 1px solid rgba(0,0,0,0.05);
         }
-        .header-left { position: relative; z-index: 2; color: #F4F1E1; }
-        .header-left h1 { color: #F4F1E1 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
-        .header-left p { color: #8B9BB4; margin: 5px 0 0 0; font-size: 1rem; }
+        .header-left { position: relative; z-index: 2; color: #111827; }
+        .header-left h1 { color: #111827 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+        .header-left p { color: #6B7280; margin: 5px 0 0 0; font-size: 1rem; }
         
-        .header-right { position: relative; z-index: 2; text-align: right; color: #0B1D30; padding-right: 15px;}
-        .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
-        .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
-        .header-right .date { font-size: 0.9rem; font-weight: 600; color: #3A4A5A;}
+        .header-right { position: relative; z-index: 2; text-align: right; color: #111827; padding-right: 15px;}
+        .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #374151;}
+        .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #111827; line-height: 1.2;}
+        .header-right .date { font-size: 0.9rem; font-weight: 600; color: #6B7280;}
 
         @media (max-width: 768px) {
             .premium-header { flex-direction: column; align-items: flex-start; padding: 20px; }
-            .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #E5E1CD;}
+            .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #F3F4F6;}
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
@@ -122,9 +81,16 @@ st.markdown("""
         .sleek-table th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center; vertical-align: middle; padding: 10px 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold !important; }
         .sleek-table td { text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
 
-        /* EXPANDER (TOGGLE) STYLING */
+        /* EXPANDER & TAB STYLING */
         [data-testid="stExpander"] { border: 1px solid rgba(128,128,128,0.15) !important; border-radius: 8px !important; margin-bottom: 15px !important; box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important; }
         [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 800 !important; }
+        
+        /* Make Tab Titles Big and Bold */
+        button[data-baseweb="tab"] p, button[role="tab"] p {
+            font-size: 1.3rem !important;
+            font-weight: 800 !important;
+            color: #111827 !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -485,13 +451,13 @@ def render_market_cycle_graph(roc_vals):
     st.plotly_chart(fig, use_container_width=True)
 
 # ==========================================
-# 5. DASHBOARD MAIN LAYOUT & CUSTOM HEADER
+# 5. DASHBOARD MAIN LAYOUT & HEADER
 # ==========================================
 ist = timezone(timedelta(hours=5, minutes=30))
 current_time = datetime.now(ist).strftime('%I:%M:%S %p')
 current_date = datetime.now(ist).strftime('%d %b %Y')
 
-# Custom Premium Header Block
+# Custom Premium Header Block (Light Theme)
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
@@ -506,7 +472,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-
 with st.spinner("Scanning live markets & syncing with Supabase..."):
     data = get_combined_data()
     current_cache_key = get_db_cache_key()
@@ -516,13 +481,46 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
-    default_bg = "rgba(216, 180, 254, 0.3)"
+    
+    # -----------------------------------------------
+    # NEW LOGIC: ROC > 90 Tight Stop Loss Check
+    # -----------------------------------------------
+    if roc_vals:
+        try:
+            current_roc = float(roc_vals[0])
+            if current_roc > 90.0:
+                alloc_val += " - Tight stop loss"
+                alloc_bg = "rgba(254, 202, 202, 0.4)" # Light red
+        except:
+            pass
+
+    # -----------------------------------------------
+    # NEW LOGIC: Last DB Update > 24 Hours Check
+    # -----------------------------------------------
+    last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
+    if str(last_sync) != "Pending Run...":
+        try:
+            # Safely check if sync time is older than 24 hours
+            if isinstance(last_sync, str):
+                try: parsed_sync = datetime.strptime(last_sync.strip(), "%d %b %Y, %I:%M %p")
+                except: parsed_sync = datetime.strptime(last_sync.strip(), "%Y-%m-%d %H:%M:%S")
+            else:
+                parsed_sync = pd.to_datetime(last_sync)
+                
+            ist_now = datetime.now(ist).replace(tzinfo=None)
+            if hasattr(parsed_sync, 'tzinfo') and parsed_sync.tzinfo is not None:
+                parsed_sync = parsed_sync.replace(tzinfo=None)
+                
+            if (ist_now - parsed_sync).total_seconds() > 86400:
+                last_sync_bg = "rgba(254, 202, 202, 0.4)" # Light red warning
+        except Exception:
+            pass
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     with metric_col1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
     with metric_col2: st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_bg), unsafe_allow_html=True)
     with metric_col3: st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
-    with metric_col4: st.markdown(create_metric_card("🔄 Last DB Update", last_sync, default_bg), unsafe_allow_html=True)
+    with metric_col4: st.markdown(create_metric_card("🔄 Last DB Update", last_sync, last_sync_bg), unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
