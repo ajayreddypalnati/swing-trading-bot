@@ -829,29 +829,41 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                     help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock."
                                 )
                                 
+                                unavailable_clean = [str(x).strip().upper() for x in unavailable_tickers]
+                                user_clean = [str(x).strip().upper() for x in user_tickers]
+                                
+                                full_filtered_mom['ticker_clean'] = full_filtered_mom['ticker'].astype(str).str.strip().str.upper()
+                                mom_df['ticker_clean'] = mom_df['ticker'].astype(str).str.strip().str.upper()
+                                
                                 target_pool_size = n_stocks * 2
                                 top_pool = full_filtered_mom.head(target_pool_size)
-                                top_pool_tickers = top_pool['ticker'].tolist()
+                                top_pool_tickers = top_pool['ticker_clean'].tolist()
                                 
                                 valid_reps = full_filtered_mom[
-                                    ~full_filtered_mom['ticker'].isin(user_tickers) & 
-                                    ~full_filtered_mom['ticker'].isin(unavailable_tickers)
+                                    ~full_filtered_mom['ticker_clean'].isin(user_clean) & 
+                                    ~full_filtered_mom['ticker_clean'].isin(unavailable_clean)
                                 ]
                                 replacements_available = valid_reps.to_dict('records')
                                 
                                 rebalance_data = []
                                 for t in user_tickers:
-                                    rank_match = full_filtered_mom[full_filtered_mom['ticker'] == t]
+                                    t_clean = str(t).strip().upper()
+                                    rank_match = full_filtered_mom[full_filtered_mom['ticker_clean'] == t_clean]
+                                    
                                     if not rank_match.empty:
                                         curr_rank = int(rank_match['Rank'].iloc[0])
                                     else:
-                                        fallback_match = mom_df[mom_df['ticker'] == t]
-                                        if not fallback_match.empty and pd.notna(fallback_match['relative_score'].iloc[0]):
-                                            curr_rank = int(fallback_match['relative_score'].iloc[0])
+                                        fallback_match = mom_df[mom_df['ticker_clean'] == t_clean]
+                                        if not fallback_match.empty:
+                                            score = fallback_match['relative_score'].iloc[0]
+                                            if pd.notna(score) and str(score).strip() != "":
+                                                curr_rank = int(float(score))
+                                            else:
+                                                curr_rank = "No Data"
                                         else:
-                                            curr_rank = "-"
+                                            curr_rank = "Not in DB"
                                     
-                                    if t in top_pool_tickers:
+                                    if t_clean in top_pool_tickers:
                                         rebalance_data.append({
                                             "Portfolio Ticker": t,
                                             "Current Rank": curr_rank,
