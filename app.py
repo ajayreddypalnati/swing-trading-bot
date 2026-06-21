@@ -478,7 +478,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     # -----------------------------------------------
     # LOGIC: Last DB Update > 24 Hours Check
     # -----------------------------------------------
-    last_sync_bg = "#FFFFFF" # Default white
+    last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
     if str(last_sync) != "Pending Run...":
         try:
             if isinstance(last_sync, str):
