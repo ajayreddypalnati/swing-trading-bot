@@ -15,10 +15,10 @@ import io
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-st.set_page_config(page_title="9-EMA Momentum Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. CSS INJECTION (Premium Navy & Cream Theme)
+# 1. CSS INJECTION (Premium Navy & Cream Theme + 3D Hover Header)
 # ==========================================
 st.markdown("""
     <style>
@@ -33,19 +33,31 @@ st.markdown("""
         .stApp { background-color: #F4F1E1 !important; }
         h1, h2, h3, h4, h5, h6, p, span { color: #0B1D30; }
         
-        /* PREMIUM CUSTOM HEADER */
+        /* PREMIUM CUSTOM HEADER - IMMERSIVE 3D POPUP */
         .premium-header {
-            background: #0B1D30; 
-            border-radius: 12px;
-            padding: 24px 32px;
+            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%); /* Subtle 3D lighting gradient */
+            border-radius: 16px;
+            padding: 28px 36px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 8px 20px rgba(11,29,48,0.15);
-            margin-bottom: 25px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            /* Layered heavy shadows for massive depth */
+            box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
+            transform: translateY(0);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smooth hover animation */
         }
+        
+        /* Float upward when mouse hovers over it */
+        .premium-header:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2);
+        }
+
+        /* Geometric Light Overlay with deeper drop shadow */
         .premium-header::after {
             content: '';
             position: absolute;
@@ -56,8 +68,11 @@ st.markdown("""
             background: #F4F1E1; 
             transform: rotate(20deg);
             z-index: 1;
-            box-shadow: -10px 0 20px rgba(0,0,0,0.2);
+            /* Projects a dark shadow directly onto the navy blue */
+            box-shadow: -15px 0 35px rgba(0,0,0,0.4); 
+            border-left: 2px solid rgba(255, 255, 255, 0.4);
         }
+        
         .header-left { position: relative; z-index: 2; }
         .header-title { color: #FFFFFF !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
         .header-subtitle { color: #FFFFFF !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.9; }
@@ -437,7 +452,7 @@ current_date = datetime.now(ist).strftime('%d %b %Y')
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
-            <div class="header-title">⚡ 9-EMA Momentum Screener</div>
+            <div class="header-title">⚡ 9-EMA Swing Screener</div>
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
@@ -735,190 +750,4 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     
                     if not etf_df.empty:
                         e_df = etf_df.copy()
-                        if 'Catergory' in e_df.columns: e_df = e_df.rename(columns={'Catergory': 'Category'})
-                            
-                        e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
-                        e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
-                        e_df['Chg %'] = pd.to_numeric(e_df['Chg %'], errors='coerce')
-                        
-                        f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
-                        f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
-                        valid_etfs = e_df[f_ema & f_turn].sort_values('Relative Score', ascending=True)
-                        
-                        final_etfs = []
-                        seen_categories = set()
-                        for _, row in valid_etfs.iterrows():
-                            cat = str(row.get('Category', 'Unknown')).strip()
-                            if cat not in seen_categories and cat != 'nan' and cat != 'Unknown':
-                                seen_categories.add(cat)
-                                final_etfs.append(row)
-                            elif cat == 'Unknown' or cat == 'nan':
-                                if 'Unknown' not in seen_categories:
-                                    seen_categories.add('Unknown')
-                                    final_etfs.append(row)
-                                    
-                        etf_display = pd.DataFrame(final_etfs)
-                        if not etf_display.empty:
-                            etf_display = etf_display.head(10).reset_index(drop=True)
-                            etf_display['Rank'] = etf_display.index + 1
-                            
-                            show_cols = ['Rank', 'Symbol', 'Chg %', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
-                            show_cols = [c for c in show_cols if c in etf_display.columns]
-                            etf_display = etf_display[show_cols]
-                            
-                            top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
-                            top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
-                            avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
-                            
-                            st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            
-                            def style_etf_row(row):
-                                is_top_4 = row.name in top_4_chg_idx
-                                styles = []
-                                for col in row.index:
-                                    cell_style = ""
-                                    if is_top_4:
-                                        cell_style += "font-weight: 700; "
-                                        if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
-                                    styles.append(cell_style)
-                                return styles
-                                
-                            styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:,.2f}", 'Chg %': "{:.2f}%"})
-                            st.markdown(f'<div class="scrollable-table-container">{styled_etf.to_html()}</div>', unsafe_allow_html=True)
-                        else: st.info("No ETFs match the criteria at the moment.")
-                    else: st.warning("ETF data is currently empty or failed to load.")
-                
-                # --- TAB 2: STOCK MOMENTUM SCREENER ---
-                with tab2:
-                    st.markdown("### Minimum Turnover (in Cr)")
-                    min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
-                    
-                    if not main_df.empty:
-                        mom_df = main_df.copy()
-                        mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
-                        mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
-                        mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
-                        mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
-                        mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
-                        
-                        f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
-                        f_turnover = mom_df['turnover'] >= min_turnover
-                        f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
-                        f_ath      = mom_df['down_ath'] <= 20.0
-                        
-                        full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
-                        full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
-                        full_filtered_mom['Rank'] = full_filtered_mom.index + 1
-                        filtered_mom = full_filtered_mom.head(30)
-                        
-                        if not filtered_mom.empty:
-                            top_25_avg = filtered_mom.head(25)['1d_return'].mean()
-                            avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
-                            st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
-                            
-                            display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
-                            display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
-                            display_mom['Band'] = display_mom['Band'].fillna("-")
-                            
-                            styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:,.2f}", 'Turnover (Cr)': "{:,.2f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
-                            st.markdown(f'<div class="scrollable-table-container">{styled_mom.to_html()}</div>', unsafe_allow_html=True)
-                        else: st.info("No stocks match the Momentum Screener criteria at the moment.")
-                            
-                        # --- PORTFOLIO REBALANCER ---
-                        st.divider()
-                        st.markdown("### 🔄 Upload Portfolio Stocks")
-                        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
-                        uploaded_file = st.file_uploader("", type=['csv', 'txt'], label_visibility="collapsed", key="rebal_uploader")
-                        
-                        if uploaded_file is not None:
-                            try:
-                                if uploaded_file.name.endswith('.csv'): user_port_df = pd.read_csv(uploaded_file, header=None)
-                                else: user_port_df = pd.read_csv(uploaded_file, header=None, sep='\t')
-                                
-                                raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-                                user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
-                                user_tickers = list(dict.fromkeys(user_tickers)) 
-                                
-                                n_stocks = len(user_tickers)
-                                if n_stocks > 0:
-                                    st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
-                                    st.markdown("#### 🚫 Exclude Unavailable Stocks")
-                                    unavailable_tickers = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=full_filtered_mom['ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.")
-                                    
-                                    unavailable_clean = [str(x).strip().upper() for x in unavailable_tickers]
-                                    user_clean = [str(x).strip().upper() for x in user_tickers]
-                                    full_filtered_mom['ticker_clean'] = full_filtered_mom['ticker'].astype(str).str.strip().str.upper()
-                                    mom_df['ticker_clean'] = mom_df['ticker'].astype(str).str.strip().str.upper()
-                                    
-                                    target_pool_size = n_stocks * 2
-                                    top_pool = full_filtered_mom.head(target_pool_size)
-                                    top_pool_tickers = top_pool['ticker_clean'].tolist()
-                                    
-                                    valid_reps = full_filtered_mom[~full_filtered_mom['ticker_clean'].isin(user_clean) & ~full_filtered_mom['ticker_clean'].isin(unavailable_clean)]
-                                    replacements_available = valid_reps.to_dict('records')
-                                    
-                                    rebalance_data = []
-                                    for t in user_tickers:
-                                        t_clean = str(t).strip().upper()
-                                        rank_match = full_filtered_mom[full_filtered_mom['ticker_clean'] == t_clean]
-                                        
-                                        if not rank_match.empty: curr_rank = int(rank_match['Rank'].iloc[0])
-                                        else:
-                                            fallback_match = mom_df[mom_df['ticker_clean'] == t_clean]
-                                            if not fallback_match.empty:
-                                                score = fallback_match['relative_score'].iloc[0]
-                                                curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
-                                            else: curr_rank = "Not in DB"
-                                        
-                                        if t_clean in top_pool_tickers:
-                                            rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
-                                        else:
-                                            if replacements_available:
-                                                rep = replacements_available.pop(0) 
-                                                rep_ticker = rep['ticker']
-                                                rep_rank = rep['Rank']
-                                            else:
-                                                rep_ticker = "No valid replacements left"
-                                                rep_rank = "-"
-                                            rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "Out of Range (Rebalance)", "Suggested Replacement": rep_ticker, "Replacement Rank": rep_rank})
-                                    
-                                    rebal_df = pd.DataFrame(rebalance_data)
-                                    def color_status(row):
-                                        if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
-                                        elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
-                                        return [''] * len(row)
-                                    
-                                    styled_rebal = rebal_df.style.apply(color_status, axis=1).hide(axis="index")
-                                    st.markdown(f'<div class="scrollable-table-container">{styled_rebal.to_html()}</div>', unsafe_allow_html=True)
-                                else: st.warning("Could not find any valid tickers in the uploaded file.")
-                            except Exception as e: st.error(f"Error reading file: {e}")
-                    else: st.warning("Database data is currently empty or failed to load.")
-            
-        def highlight_main_table(row):
-            styles = []
-            for col in row.index:
-                style = ""
-                if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "":
-                    try:
-                        if float(str(row['Priority']).replace("Tier ", "")) > 0: style += 'background-color: rgba(39, 174, 96, 0.15); '
-                    except: pass
-                if col == 'Band' and str(row['Band']).strip() == '5': style += 'background-color: rgba(254, 202, 202, 0.4); '
-                styles.append(style)
-            return styles
-        
-        def safe_int(val, prefix="", suffix=""):
-            if val == "" or pd.isna(val): return ""
-            try: return f"{prefix}{int(float(val))}{suffix}"
-            except: return ""
-
-        styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
-            "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: safe_int(x, "Tier "),
-            "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
-        })
-        st.markdown(f'<div class="scrollable-table-container">{styled_df.to_html()}</div>', unsafe_allow_html=True)
-    else: st.info("No stocks matching criteria right now. Waiting for momentum...")
-
-time.sleep(60)
-st.rerun()
+                        if 'Catergory' in e_
