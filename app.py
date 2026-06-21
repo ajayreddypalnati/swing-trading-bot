@@ -18,7 +18,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. CSS INJECTION (Light Professional Theme)
+# 1. CSS INJECTION (Premium Navy & Cream Theme)
 # ==========================================
 st.markdown("""
     <style>
@@ -29,10 +29,13 @@ st.markdown("""
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* PREMIUM CUSTOM HEADER - LIGHT THEME */
+        /* GLOBAL THEME BACKGROUND (Cream) */
+        .stApp { background-color: #F4F1E1 !important; }
+        h1, h2, h3, h4, h5, h6, p, span { color: #0B1D30; }
+        
+        /* PREMIUM CUSTOM HEADER */
         .premium-header {
-            background: #FFFFFF; 
-            border: 1px solid rgba(128,128,128,0.15);
+            background: #0B1D30; 
             border-radius: 12px;
             padding: 24px 32px;
             display: flex;
@@ -40,10 +43,9 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            box-shadow: 0 8px 20px rgba(11,29,48,0.15);
             margin-bottom: 25px;
         }
-        /* Geometric Light Overlay */
         .premium-header::after {
             content: '';
             position: absolute;
@@ -51,46 +53,43 @@ st.markdown("""
             right: -50px;
             width: 350px;
             height: 200%;
-            background: #F8F9FA; 
+            background: #F4F1E1; 
             transform: rotate(20deg);
             z-index: 1;
-            border-left: 1px solid rgba(0,0,0,0.05);
+            box-shadow: -10px 0 20px rgba(0,0,0,0.2);
         }
-        .header-left { position: relative; z-index: 2; color: #111827; }
-        .header-left h1 { color: #111827 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
-        .header-left p { color: #6B7280; margin: 5px 0 0 0; font-size: 1rem; }
+        .header-left { position: relative; z-index: 2; color: #F4F1E1; }
+        .header-left h1 { color: #F4F1E1 !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
+        .header-left p { color: #A0B2C6 !important; margin: 5px 0 0 0; font-size: 1rem; }
         
-        .header-right { position: relative; z-index: 2; text-align: right; color: #111827; padding-right: 15px;}
-        .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #374151;}
-        .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #111827; line-height: 1.2;}
-        .header-right .date { font-size: 0.9rem; font-weight: 600; color: #6B7280;}
+        .header-right { position: relative; z-index: 2; text-align: right; color: #0B1D30; padding-right: 15px;}
+        .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
+        .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
+        .header-right .date { font-size: 0.9rem; font-weight: 600; color: #3A4A5A;}
 
         @media (max-width: 768px) {
             .premium-header { flex-direction: column; align-items: flex-start; padding: 20px; }
-            .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #F3F4F6;}
+            .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #E5E1CD;}
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
         /* TABLE STYLING */
         .scrollable-table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.5rem; }
-        .scrollable-table-container table { width: 100%; min-width: 900px; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .scrollable-table-container th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center !important; vertical-align: middle !important; font-size: 0.85rem; padding: 15px !important; white-space: nowrap; }
-        .scrollable-table-container td { text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(128, 128, 128, 0.1) !important; white-space: nowrap; }
+        .scrollable-table-container table { width: 100%; min-width: 900px; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: #FFFFFF; border: 2px solid #0B1D30;}
+        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 0.9rem; padding: 15px !important; white-space: nowrap; font-weight: 700 !important;}
+        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; white-space: nowrap; }
         
-        .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        .sleek-table th { background-color: rgba(128, 128, 128, 0.08) !important; text-align: center; vertical-align: middle; padding: 10px 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.2); font-weight: bold !important; }
-        .sleek-table td { text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
+        .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: #FFFFFF; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden;}
+        .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; }
+        .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); }
 
         /* EXPANDER & TAB STYLING */
-        [data-testid="stExpander"] { border: 1px solid rgba(128,128,128,0.15) !important; border-radius: 8px !important; margin-bottom: 15px !important; box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important; }
-        [data-testid="stExpander"] summary p { font-size: 1.15rem !important; font-weight: 800 !important; }
+        [data-testid="stExpander"] { background: #FFFFFF !important; border: 2px solid #0B1D30 !important; border-radius: 8px !important; margin-bottom: 15px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.04) !important; }
+        [data-testid="stExpander"] summary { background: #FFFFFF !important; border-radius: 8px !important; }
+        [data-testid="stExpander"] summary p { font-size: 1.3rem !important; font-weight: 800 !important; color: #0B1D30 !important;}
         
         /* Make Tab Titles Big and Bold */
-        button[data-baseweb="tab"] p, button[role="tab"] p {
-            font-size: 1.3rem !important;
-            font-weight: 800 !important;
-            color: #111827 !important;
-        }
+        button[data-baseweb="tab"] p, button[role="tab"] p { font-size: 1.4rem !important; font-weight: 800 !important; color: #0B1D30 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -115,10 +114,8 @@ TV_PAYLOAD = {
 def get_db_cache_key():
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
-    if 9 <= now.hour < 21:
-        return f"locked_{now.strftime('%Y-%m-%d_%H')}"
-    else:
-        return f"active_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
+    if 9 <= now.hour < 21: return f"locked_{now.strftime('%Y-%m-%d_%H')}"
+    else: return f"active_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
 
 @st.cache_data(ttl=86400)
 def fetch_database_reference(cache_key):
@@ -151,7 +148,6 @@ def fetch_database_reference(cache_key):
 
             raw_sec = pd.read_sql(text('SELECT * FROM "ATH_Sector_Analysis"'), conn)
             raw_ind = pd.read_sql(text('SELECT * FROM "ATH_Industry_Analysis"'), conn)
-            
             sec_rank_df = raw_sec[['Sector', 'Rank']].rename(columns={'Sector': 'sector', 'Rank': 'sec_rank'})
             ind_rank_df = raw_ind[['Broad Industry', 'Rank']].rename(columns={'Broad Industry': 'broad_industry', 'Rank': 'ind_rank'})
             
@@ -173,7 +169,6 @@ def fetch_database_reference(cache_key):
                         return float(match.group(1)) if match else None
                     vals = mood_df['Market Breadth'].apply(extract_pct).dropna().tolist()
                     current_val = extract_pct(market_trend_summary_val)
-                    
                     if len(vals) > 0 and current_val is not None:
                         avg_5d = sum(vals) / len(vals)
                         diff = avg_5d - current_val
@@ -313,9 +308,9 @@ def get_breadth_color(breadth_str):
             elif val <= 50.0: return "rgba(253, 230, 138, 0.4)"  
             elif val <= 60.0: return "rgba(187, 247, 208, 0.4)"  
             else: return "rgba(134, 239, 172, 0.4)"  
-        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+        return "#FFFFFF"
     except:
-        return "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+        return "#FFFFFF"
 
 def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
     try:
@@ -344,15 +339,15 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
 
             if action_suffix != " - Trade": color = "rgba(252, 165, 165, 0.4)" 
             return alloc_str, color
-        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+        return "N/A", "#FFFFFF"
     except:
-        return "N/A", "linear-gradient(145deg, rgba(128,128,128,0.05) 0%, rgba(128,128,128,0.02) 100%)"
+        return "N/A", "#FFFFFF"
 
 def create_metric_card(title, value, bg_color):
     return f"""
-    <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 1px solid rgba(128, 128, 128, 0.15); box-shadow: 0 4px 6px rgba(0,0,0,0.02); height: 100%;">
-        <span style="font-size: 0.875rem; color: #4B5563; font-weight: 500; font-family: 'Inter', sans-serif;">{title}</span><br>
-        <span style="color: #000000; font-size: 1.7rem; font-weight: 600; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif;">{value}</span>
+    <div style="background: {bg_color}; border-radius: 12px; padding: 1.5rem; text-align: left; border: 2px solid #0B1D30; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 100%;">
+        <span style="font-size: 0.85rem; color: #0B1D30; font-weight: 700; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span><br>
+        <span style="color: #0B1D30; font-size: 1.7rem; font-weight: 800; display: block; margin-top: 0.4rem; font-family: 'Inter', sans-serif;">{value}</span>
     </div>
     """
 
@@ -367,20 +362,30 @@ def render_market_cycle_graph(roc_vals):
         lookback_index = 20 if len(roc_vals) > 20 else len(roc_vals) - 1
         if roc_val < float(roc_vals[lookback_index]): trend_dir = "down"
 
+    curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+    curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
+
+    # SMOOTH CONTINUOUS DOT LOGIC
     if trend_dir == "up":
-        if roc_val <= 0: stage, note, dot_x, dot_y = "Disbelief", "This rally will fail like the others.", 0, 2
-        elif roc_val <= 20: stage, note, dot_x, dot_y = "Hope", "A recovery is possible.", 4, 5
-        elif roc_val <= 40: stage, note, dot_x, dot_y = "Optimism", "This rally is real.", 8, 15
-        elif roc_val <= 60: stage, note, dot_x, dot_y = "Belief", "Time to get fully invested.", 12, 33
-        elif roc_val <= 100: stage, note, dot_x, dot_y = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!", 16, 66
-        else: stage, note, dot_x, dot_y = "Euphoria", "I am a genius! We're all going to be rich!", 20, 100
+        dot_x = np.interp(roc_val, [0, 20, 40, 60, 100, 150], [0, 4, 8, 12, 16, 20])
+        if roc_val <= 0: stage, note = "Disbelief", "This rally will fail like the others."
+        elif roc_val <= 20: stage, note = "Hope", "A recovery is possible."
+        elif roc_val <= 40: stage, note = "Optimism", "This rally is real."
+        elif roc_val <= 60: stage, note = "Belief", "Time to get fully invested."
+        elif roc_val <= 100: stage, note = "Thrill", "I will buy more on margin. Gotta tell everyone to buy!"
+        else: stage, note = "Euphoria", "I am a genius! We're all going to be rich!"
     else:
-        if roc_val >= 90: stage, note, dot_x, dot_y = "Complacency", "We just need to cool off for the next rally.", 24, 90
-        elif roc_val >= 80: stage, note, dot_x, dot_y = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected.", 28, 66
-        elif roc_val >= 70: stage, note, dot_x, dot_y = "Denial", "My investments are with great companies. They will come back.", 32, 33
-        elif roc_val >= 60: stage, note, dot_x, dot_y = "Panic", "Shit! Everyone is selling. I need to get out!", 36, 15
-        elif roc_val > 20: stage, note, dot_x, dot_y = "Anger", "Who shorted the market?? Why did the government allow this to happen??", 40, 5
-        else: stage, note, dot_x, dot_y = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot.", 44, 2
+        xp = [-20, 0, 20, 60, 70, 80, 90, 100]
+        fp = [48, 44, 40, 36, 32, 28, 24, 20]
+        dot_x = np.interp(roc_val, xp, fp)
+        if roc_val >= 90: stage, note = "Complacency", "We just need to cool off for the next rally."
+        elif roc_val >= 80: stage, note = "Anxiety", "Why am I getting margin calls? This dip is taking longer than expected."
+        elif roc_val >= 70: stage, note = "Denial", "My investments are with great companies. They will come back."
+        elif roc_val >= 60: stage, note = "Panic", "Shit! Everyone is selling. I need to get out!"
+        elif roc_val > 20: stage, note = "Anger", "Who shorted the market?? Why did the government allow this to happen??"
+        else: stage, note = "Depression", "My retirement money is lost. How can we pay for all this new stuff? I am an idiot."
+
+    dot_y = np.interp(dot_x, curve_x, curve_y)
 
     red_stages = ["Euphoria", "Complacency", "Anxiety", "Denial", "Panic", "Anger", "Depression"]
     if stage in red_stages:
@@ -392,60 +397,31 @@ def render_market_cycle_graph(roc_vals):
         bg_theme_start = 'rgba(39, 174, 96, 0.1)'
         bg_theme_end = 'rgba(39, 174, 96, 0.02)'
 
-    curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
-    curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
-    stage_names = [
-        "<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", 
-        "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", 
-        "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"
-    ]
+    stage_names = ["<b>Disbelief</b>", "<b>Hope</b>", "<b>Optimism</b>", "<b>Belief</b>", "<b>Thrill</b>", "<b>Euphoria</b>", "<b>Complacency</b>", "<b>Anxiety</b>", "<b>Denial</b>", "<b>Panic</b>", "<b>Anger</b>", "<b>Depression</b>", "<b>Disbelief</b>"]
     text_colors = ['#111827'] * 13 
     text_colors[5] = '#EF4444' 
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=curve_x, y=curve_y, mode='lines+text', text=stage_names, textposition="top center", 
-        textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), 
-        line=dict(shape='spline', smoothing=1.3, color='#6366F1', width=4), 
-        fill='tozeroy', fillcolor='rgba(99, 102, 241, 0.08)', hoverinfo='none', name='Market Cycle'
-    ))
-    fig.add_trace(go.Scatter(
-        x=[dot_x], y=[dot_y], mode='markers', 
-        marker=dict(color=theme_color, size=22, line=dict(color='#FFFFFF', width=4)), hoverinfo='none', name='Current Stage'
-    ))
-    fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="black", width=3))
-    fig.add_annotation(
-        x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color,
-        font=dict(family="Inter, sans-serif", size=14, color=theme_color),
-        bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0
-    )
+    fig.add_trace(go.Scatter(x=curve_x, y=curve_y, mode='lines+text', text=stage_names, textposition="top center", textfont=dict(family="Inter, sans-serif", size=20, color=text_colors), line=dict(shape='spline', smoothing=1.3, color='#0B1D30', width=4), fill='tozeroy', fillcolor='rgba(11, 29, 48, 0.05)', hoverinfo='none', name='Market Cycle'))
+    fig.add_trace(go.Scatter(x=[dot_x], y=[dot_y], mode='markers', marker=dict(color=theme_color, size=24, line=dict(color='#0B1D30', width=4)), hoverinfo='none', name='Current Stage'))
+    fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
+    fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
     fig.update_layout(
-        xaxis=dict(
-            title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="black")),
-            showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False,
-            showticklabels=True, tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black', dtick=2, range=[-2, 50] 
-        ),
-        yaxis=dict(
-            title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="black")),
-            showgrid=True, gridcolor='rgba(128,128,128,0.2)', zeroline=False,
-            showticklabels=True, tickfont=dict(size=14, color="black", family="Inter"),
-            showline=True, linewidth=3, linecolor='black', range=[-5, 125]
-        ),
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
+        xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
+        yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
-                border-left: 4px solid {theme_color}; padding: 12px 18px; border-radius: 6px; 
-                margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-        <h4 style="margin: 0; color: #000000; font-family: 'Inter', sans-serif;">
+                border-left: 5px solid {theme_color}; padding: 15px 20px; border-radius: 8px; 
+                margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 1px solid rgba(0,0,0,0.05); border-right: 1px solid rgba(0,0,0,0.05); border-bottom: 1px solid rgba(0,0,0,0.05);">
+        <h4 style="margin: 0; color: #0B1D30; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 1.2rem;">
             Current Stage: <span style="color: {theme_color};">{stage}</span> 
-            <span style="color: #6B7280; font-size: 0.9rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
+            <span style="color: #6B7280; font-size: 0.95rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
         </h4>
-        <p style="margin: 6px 0 0 0; font-size: 0.95rem; color: #6B7280; font-style: italic;">"{note}"</p>
+        <p style="margin: 8px 0 0 0; font-size: 1rem; color: #374151; font-style: italic;">"{note}"</p>
     </div>
     """, unsafe_allow_html=True)
     st.plotly_chart(fig, use_container_width=True)
@@ -483,24 +459,28 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
     
     # -----------------------------------------------
-    # NEW LOGIC: ROC > 90 Tight Stop Loss Check
+    # LOGIC: ROC > 90 Tight Stop Loss Check
     # -----------------------------------------------
     if roc_vals:
         try:
             current_roc = float(roc_vals[0])
             if current_roc > 90.0:
-                alloc_val += " - Tight stop loss"
+                if " - Trade" in alloc_val:
+                    alloc_val = alloc_val.replace(" - Trade", " - Tight stop loss")
+                elif " - Stop Trading" in alloc_val:
+                    alloc_val = alloc_val.replace(" - Stop Trading", " - Tight stop loss")
+                else:
+                    alloc_val += " - Tight stop loss"
                 alloc_bg = "rgba(254, 202, 202, 0.4)" # Light red
         except:
             pass
 
     # -----------------------------------------------
-    # NEW LOGIC: Last DB Update > 24 Hours Check
+    # LOGIC: Last DB Update > 24 Hours Check
     # -----------------------------------------------
-    last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
+    last_sync_bg = "#FFFFFF" # Default white
     if str(last_sync) != "Pending Run...":
         try:
-            # Safely check if sync time is older than 24 hours
             if isinstance(last_sync, str):
                 try: parsed_sync = datetime.strptime(last_sync.strip(), "%d %b %Y, %I:%M %p")
                 except: parsed_sync = datetime.strptime(last_sync.strip(), "%Y-%m-%d %H:%M:%S")
@@ -517,6 +497,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             pass
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    if live_bg == "#FFFFFF" or "linear-gradient" in live_bg: live_bg = "#FFFFFF"
+    if nse_bg == "#FFFFFF" or "linear-gradient" in nse_bg: nse_bg = "#FFFFFF"
+    if alloc_bg == "#FFFFFF" or "linear-gradient" in alloc_bg: alloc_bg = "#FFFFFF"
+
     with metric_col1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
     with metric_col2: st.markdown(create_metric_card("⚖️ Market Breadth (NSE)", trend_regime, nse_bg), unsafe_allow_html=True)
     with metric_col3: st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
@@ -629,7 +613,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
             # --- 2. UPSTOX PORTFOLIO TRACKER ---
             with st.expander("📈 Upstox Portfolio Tracker", expanded=False):
-                st.markdown("<span style='color: gray; font-size: 0.9rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
+                st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
                 
                 col_t1, col_t2 = st.columns([1, 2])
                 with col_t1:
@@ -844,7 +828,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         # --- PORTFOLIO REBALANCER ---
                         st.divider()
                         st.markdown("### 🔄 Upload Portfolio Stocks")
-                        st.markdown("<span style='color: gray; font-size: 0.9rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
+                        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
                         uploaded_file = st.file_uploader("", type=['csv', 'txt'], label_visibility="collapsed", key="rebal_uploader")
                         
                         if uploaded_file is not None:
