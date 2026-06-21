@@ -842,7 +842,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 rebalance_data = []
                                 for t in user_tickers:
                                     rank_match = full_filtered_mom[full_filtered_mom['ticker'] == t]
-                                    curr_rank = rank_match['Rank'].iloc[0] if not rank_match.empty else "Out of Range"
+                                    if not rank_match.empty:
+                                        curr_rank = int(rank_match['Rank'].iloc[0])
+                                    else:
+                                        fallback_match = mom_df[mom_df['ticker'] == t]
+                                        if not fallback_match.empty and pd.notna(fallback_match['relative_score'].iloc[0]):
+                                            curr_rank = int(fallback_match['relative_score'].iloc[0])
+                                        else:
+                                            curr_rank = "-"
                                     
                                     if t in top_pool_tickers:
                                         rebalance_data.append({
