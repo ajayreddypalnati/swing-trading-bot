@@ -1116,7 +1116,11 @@ if upstox_file is not None and upstox_token:
                         ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
                         
                         if trading_days >= 10:
-                            ten_day_rule = "EXIT" if return_pct < 5 else "PASS"
+                            required_return = (trading_days // 10) * 5.0
+                            if return_pct < required_return:
+                                ten_day_rule = "EXIT"
+                            else:
+                                ten_day_rule = "PASS"
                         else:
                             ten_day_rule = f"PENDING ({trading_days}/10)"
                             
