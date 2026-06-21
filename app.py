@@ -1051,13 +1051,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 # ==========================================
 st.divider()
 st.markdown("### 📈 Upstox Portfolio Tracker")
-st.markdown("<span style='color: gray; font-size: 0.9rem;'>Track your portfolio via CSV upload or Google Sheets. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
+st.markdown("<span style='color: gray; font-size: 0.9rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
 
 col_t1, col_t2 = st.columns([1, 2])
 with col_t1:
     upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
 with col_t2:
-    input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets URL"], horizontal=True, label_visibility="collapsed")
+    # Set default index to 1, which selects 'Google Sheets'
+    input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
 
 port_df = pd.DataFrame()
 
@@ -1069,9 +1070,20 @@ if input_method == "Upload CSV":
         except Exception as e:
             st.error(f"Error reading file: {e}")
 
-elif input_method == "Google Sheets URL":
-    gsheet_url = st.text_input("Paste Public Google Sheets URL:")
-    if st.button("🔄 Load / Refresh Sheet") and gsheet_url:
+elif input_method == "Google Sheets":
+    col_gs1, col_gs2 = st.columns([3, 1])
+    with col_gs1:
+        # Hardcode your actual sheet URL as the default value here
+        gsheet_url = st.text_input(
+            "Google Sheets URL:", 
+            value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0",
+            label_visibility="collapsed"
+        )
+    with col_gs2:
+        # Wrap the load in a button to prevent automatic re-renders
+        load_clicked = st.button("🔄 Load / Refresh Sheet")
+        
+    if load_clicked and gsheet_url:
         try:
             if "docs.google.com/spreadsheets" in gsheet_url:
                 sheet_id_match = re.search(r"/d/([a-zA-Z0-9-_]+)", gsheet_url)
