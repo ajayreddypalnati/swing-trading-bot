@@ -15,7 +15,7 @@ import io
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-st.set_page_config(page_title="9-EMA Swing Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
 # 1. CSS INJECTION (Premium Navy & Cream Theme + 3D Hover Header)
@@ -452,7 +452,7 @@ current_date = datetime.now(ist).strftime('%d %b %Y')
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
-            <div class="header-title">⚡ 9-EMA Swing Screener</div>
+            <div class="header-title">⚡ 9-EMA Screener</div>
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
