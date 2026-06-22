@@ -98,9 +98,9 @@ st.markdown("""
         div.stPlotlyChart { 
             background-color: #FFFFFF !important; 
             border: 2px solid #0B1D30 !important; 
-            border-radius: 8px !important; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important; 
-            padding: 10px !important; 
+            border-radius: 12px !important; 
+            box-shadow: 0 8px 20px rgba(11, 29, 48, 0.08) !important; 
+            padding: 15px !important; 
         }
 
         /* PROFESSIONAL FULL-WIDTH SAAS TABS */
@@ -169,6 +169,13 @@ st.markdown("""
         /* Remove default Streamlit tab active line */
         div[data-baseweb="tab-highlight"] { 
             display: none !important; 
+        }
+        
+        /* Make Number Input values (like 3.00) massive and bold */
+        div[data-testid="stNumberInput"] input {
+            font-size: 1.5rem !important;
+            font-weight: 800 !important;
+            color: #0B1D30 !important;
         }
 
     </style>
@@ -486,6 +493,7 @@ def render_market_cycle_graph(roc_vals):
     fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
     fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
+    # Cream background around the chart, white grid inside, matching the rest of the UI
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
@@ -736,7 +744,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     # --- 4. ETF SCREENER TAB ---
     with tab_etf:
-        st.markdown("<h2 style='font-size: 1.8rem; font-weight: 800; color: #0B1D30; margin-bottom: 10px;'>Minimum Turnover (in Cr)</h2>", unsafe_allow_html=True)
+        st.markdown("### Minimum Turnover (in Cr)")
         etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
         
         if not etf_df.empty:
@@ -797,7 +805,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     # --- 5. MOMENTUM SCREENER TAB ---
     with tab_mom:
-        st.markdown("<h2 style='font-size: 1.8rem; font-weight: 800; color: #0B1D30; margin-bottom: 10px;'>Minimum Turnover (in Cr)</h2>", unsafe_allow_html=True)
+        st.markdown("### Minimum Turnover (in Cr)")
         min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
         
         if not main_df.empty:
