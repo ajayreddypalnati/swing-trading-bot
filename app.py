@@ -18,7 +18,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
-# 1. CSS INJECTION (Premium Navy & Cream Theme + 3D Hover Header)
+# 1. CSS INJECTION (Premium Navy & Cream Theme + Immersive Tabs)
 # ==========================================
 st.markdown("""
     <style>
@@ -50,13 +50,11 @@ st.markdown("""
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
         }
         
-        /* Float upward when mouse hovers over it */
         .premium-header:hover {
             transform: translateY(-5px);
             box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2);
         }
 
-        /* Geometric Light Overlay with deeper drop shadow */
         .premium-header::after {
             content: '';
             position: absolute;
@@ -103,6 +101,7 @@ st.markdown("""
             gap: 15px !important;
             border-bottom: none !important;
             margin-bottom: 25px !important;
+            padding-top: 10px !important; /* Space for hover pop */
         }
         
         div[data-baseweb="tab"] { 
@@ -116,27 +115,30 @@ st.markdown("""
             width: 100% !important;
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
             border-radius: 12px !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
             box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
             padding: 20px 10px !important;
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
+            transform: translateY(0) !important;
         }
         
-        /* Hover Effect for Tabs */
+        /* IMMERSIVE POPUP - Hover Effect for Tabs */
         button[role="tab"]:hover {
-            transform: translateY(-5px) !important;
-            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.3) !important;
+            transform: translateY(-6px) !important;
+            box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
+            background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
         }
         
-        /* Selected Tab State */
+        /* Selected Tab State (The White Layer with Thick Navy Line) */
         button[role="tab"][aria-selected="true"] {
             background: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 10px rgba(11,29,48,0.1) !important;
+            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
+            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
         
         /* Tab Text Sizing */
@@ -145,6 +147,7 @@ st.markdown("""
             font-weight: 800 !important; 
             color: #FFFFFF !important; 
             margin: 0 !important;
+            transition: color 0.3s ease !important;
         }
         
         /* Selected Tab Text Color */
@@ -476,7 +479,7 @@ def render_market_cycle_graph(roc_vals):
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
-        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
     st.markdown(f"""
@@ -499,7 +502,7 @@ ist = timezone(timedelta(hours=5, minutes=30))
 current_time = datetime.now(ist).strftime('%I:%M:%S %p')
 current_date = datetime.now(ist).strftime('%d %b %Y')
 
-# Custom Premium Header Block (Light Theme)
+# Custom Premium Header Block
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
