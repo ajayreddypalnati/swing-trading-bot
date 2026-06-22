@@ -35,7 +35,7 @@ st.markdown("""
         
         /* PREMIUM CUSTOM HEADER - IMMERSIVE 3D POPUP */
         .premium-header {
-            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%); /* Subtle 3D lighting gradient */
+            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%); 
             border-radius: 16px;
             padding: 28px 36px;
             display: flex;
@@ -45,10 +45,9 @@ st.markdown("""
             overflow: hidden;
             margin-bottom: 30px;
             border: 1px solid rgba(255, 255, 255, 0.08);
-            /* Layered heavy shadows for massive depth */
             box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
             transform: translateY(0);
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smooth hover animation */
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); 
         }
         
         /* Float upward when mouse hovers over it */
@@ -68,7 +67,6 @@ st.markdown("""
             background: #F4F1E1; 
             transform: rotate(20deg);
             z-index: 1;
-            /* Projects a dark shadow directly onto the navy blue */
             box-shadow: -15px 0 35px rgba(0,0,0,0.4); 
             border-left: 2px solid rgba(255, 255, 255, 0.4);
         }
@@ -98,13 +96,67 @@ st.markdown("""
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); }
 
-        /* EXPANDER & TAB STYLING */
-        [data-testid="stExpander"] { background: #FFFFFF !important; border: 2px solid #0B1D30 !important; border-radius: 8px !important; margin-bottom: 15px !important; box-shadow: 0 4px 10px rgba(0,0,0,0.04) !important; }
-        [data-testid="stExpander"] summary { background: #FFFFFF !important; border-radius: 8px !important; }
-        [data-testid="stExpander"] summary p { font-size: 1.3rem !important; font-weight: 800 !important; color: #0B1D30 !important;}
+        /* PROFESSIONAL FULL-WIDTH SAAS TABS (REPLACING EXPANDERS) */
+        div[data-baseweb="tab-list"] { 
+            display: flex !important;
+            width: 100% !important;
+            gap: 15px !important;
+            border-bottom: none !important;
+            margin-bottom: 25px !important;
+        }
         
-        /* Make Tab Titles Big and Bold */
-        button[data-baseweb="tab"] p, button[role="tab"] p { font-size: 1.4rem !important; font-weight: 800 !important; color: #0B1D30 !important; }
+        div[data-baseweb="tab"] { 
+            padding: 0 !important;
+            background: transparent !important;
+            flex: 1 !important;
+        }
+        
+        /* Tab Button Physics & Styling */
+        button[role="tab"] {
+            width: 100% !important;
+            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
+            border-radius: 12px !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            padding: 20px 10px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        
+        /* Hover Effect for Tabs */
+        button[role="tab"]:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.3) !important;
+        }
+        
+        /* Selected Tab State */
+        button[role="tab"][aria-selected="true"] {
+            background: #FFFFFF !important;
+            border: 2px solid #0B1D30 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 10px rgba(11,29,48,0.1) !important;
+        }
+        
+        /* Tab Text Sizing */
+        button[role="tab"] p { 
+            font-size: 1.15rem !important; 
+            font-weight: 800 !important; 
+            color: #FFFFFF !important; 
+            margin: 0 !important;
+        }
+        
+        /* Selected Tab Text Color */
+        button[role="tab"][aria-selected="true"] p {
+            color: #0B1D30 !important;
+        }
+        
+        /* Remove default Streamlit tab active line */
+        div[data-baseweb="tab-highlight"] { 
+            display: none !important; 
+        }
+
     </style>
 """, unsafe_allow_html=True)
 
@@ -380,7 +432,6 @@ def render_market_cycle_graph(roc_vals):
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
 
-    # SMOOTH CONTINUOUS DOT LOGIC
     if trend_dir == "up":
         dot_x = np.interp(roc_val, [0, 20, 40, 60, 100, 150], [0, 4, 8, 12, 16, 20])
         if roc_val <= 0: stage, note = "Disbelief", "This rally will fail like the others."
@@ -425,13 +476,13 @@ def render_market_cycle_graph(roc_vals):
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
+        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
     st.markdown(f"""
     <div style="background: linear-gradient(145deg, {bg_theme_start} 0%, {bg_theme_end} 100%); 
                 border-left: 5px solid {theme_color}; padding: 15px 20px; border-radius: 8px; 
-                margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 1px solid rgba(0,0,0,0.05); border-right: 1px solid rgba(0,0,0,0.05); border-bottom: 1px solid rgba(0,0,0,0.05);">
+                margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.05); border-right: 1px solid rgba(0,0,0,0.05); border-bottom: 1px solid rgba(0,0,0,0.05);">
         <h4 style="margin: 0; color: #0B1D30; font-family: 'Inter', sans-serif; font-weight: 800; font-size: 1.2rem;">
             Current Stage: <span style="color: {theme_color};">{stage}</span> 
             <span style="color: #6B7280; font-size: 0.95rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
@@ -473,26 +524,18 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     nse_bg = get_breadth_color(trend_regime)
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
     
-    # -----------------------------------------------
     # LOGIC: ROC > 90 Tight Stop Loss Check
-    # -----------------------------------------------
     if roc_vals:
         try:
             current_roc = float(roc_vals[0])
             if current_roc > 90.0:
-                if " - Trade" in alloc_val:
-                    alloc_val = alloc_val.replace(" - Trade", " - Tight stop loss")
-                elif " - Stop Trading" in alloc_val:
-                    alloc_val = alloc_val.replace(" - Stop Trading", " - Tight stop loss")
-                else:
-                    alloc_val += " - Tight stop loss"
+                if " - Trade" in alloc_val: alloc_val = alloc_val.replace(" - Trade", " - Tight stop loss")
+                elif " - Stop Trading" in alloc_val: alloc_val = alloc_val.replace(" - Stop Trading", " - Tight stop loss")
+                else: alloc_val += " - Tight stop loss"
                 alloc_bg = "rgba(254, 202, 202, 0.4)" # Light red
-        except:
-            pass
+        except: pass
 
-    # -----------------------------------------------
     # LOGIC: Last DB Update > 24 Hours Check
-    # -----------------------------------------------
     last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
     if str(last_sync) != "Pending Run...":
         try:
@@ -508,8 +551,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 
             if (ist_now - parsed_sync).total_seconds() > 86400:
                 last_sync_bg = "rgba(254, 202, 202, 0.4)" # Light red warning
-        except Exception:
-            pass
+        except Exception: pass
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     if live_bg == "#FFFFFF" or "linear-gradient" in live_bg: live_bg = "#FFFFFF"
@@ -523,8 +565,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
-    # LIVE STOCKS TABLE (MAIN VIEW)
+    # DATA PROCESSING FOR TABS
     # ==========================================
+    display_df = pd.DataFrame()
     if data:
         df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
         df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
@@ -552,7 +595,6 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
             p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
             p5 = (df['ind_rank'] <= 15) & (df['sec_rank'] >= 6) & ~p1 & ~p2 & ~p3 & ~p4
-
             df.loc[p1, 'Priority'] = 1
             df.loc[p2, 'Priority'] = 2
             df.loc[p3, 'Priority'] = 3
@@ -563,377 +605,385 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         display_df = df[[c for c in display_cols if c in df.columns]].copy()
         display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
         display_df = display_df.rename(columns={"band": "Band", "sector": "Sector", "sec_rank": "Sector Rank", "broad_industry": "Industry", "ind_rank": "Ind. Rank", "relative_score": "Momentum Rank"})
-        
         if 'Band' in display_df.columns: display_df['Band'] = display_df['Band'].replace("", "-").fillna("-")
-        
+
+    def highlight_main_table(row):
+        styles = []
+        for col in row.index:
+            style = ""
+            if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "":
+                try:
+                    if float(str(row['Priority']).replace("Tier ", "")) > 0: style += 'background-color: rgba(39, 174, 96, 0.15); '
+                except: pass
+            if col == 'Band' and str(row['Band']).strip() == '5': style += 'background-color: rgba(254, 202, 202, 0.4); '
+            styles.append(style)
+        return styles
+    
+    def safe_int(val, prefix="", suffix=""):
+        if val == "" or pd.isna(val): return ""
+        try: return f"{prefix}{int(float(val))}{suffix}"
+        except: return ""
+
+    # ==========================================
+    # SAAS NAVIGATION TABS (Replacing Expanders)
+    # ==========================================
+    tab_main, tab_cycle, tab_etf, tab_mom, tab_port = st.tabs([
+        "⚡ 9-EMA Screener", 
+        "🎢 Market Cycle", 
+        "📊 ETF Screener", 
+        "🚀 Momentum Screener", 
+        "📈 Portfolio Tracker"
+    ])
+
+    # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
+    with tab_main:
+        if not display_df.empty:
+            styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
+                "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
+                "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: safe_int(x, "Tier "),
+                "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
+            })
+            st.markdown(f'<div class="scrollable-table-container">{styled_df.to_html()}</div>', unsafe_allow_html=True)
+        else: 
+            st.info("No stocks matching criteria right now. Waiting for momentum...")
+
+    # --- 2. MARKET CYCLE & LEADERS TAB ---
+    with tab_cycle:
         if not raw_sec.empty and not raw_ind.empty:
+            render_market_cycle_graph(roc_vals)
+            st.divider()
             
-            # --- 1. COMBINED MARKET CYCLE & LEADERS ---
-            with st.expander("🎢 Market Cycle & Current Market Leaders (Top Sectors & Industry)", expanded=False):
-                render_market_cycle_graph(roc_vals)
-                st.divider()
+            lead_col1, lead_col2 = st.columns(2)
+            with lead_col1:
+                st.markdown("##### 🔥 Top 5 Sectors")
+                sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                sec_cols = [c for c in sec_cols if c in raw_sec.columns]
+                top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
                 
-                lead_col1, lead_col2 = st.columns(2)
-                with lead_col1:
-                    st.markdown("##### 🔥 Top 5 Sectors")
-                    sec_cols = ['Rank', 'Sector', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
-                    sec_cols = [c for c in sec_cols if c in raw_sec.columns]
-                    top_sec = raw_sec.nsmallest(5, 'Rank')[sec_cols]
-                    
-                    top_2_sec_idx = []
-                    if 'Avg 1D Return %' in top_sec.columns: top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
-                    if 'ATH %' in top_sec.columns: top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
-                    if 'Avg 1D Return %' in top_sec.columns: top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
-                    
-                    top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    html = "<table class='sleek-table'><thead><tr>"
-                    for col in top_sec.columns: html += f"<th>{col}</th>"
-                    html += "</tr></thead><tbody>"
-                    for idx, row in top_sec.iterrows():
-                        html += "<tr>"
-                        for c in top_sec.columns:
-                            val = row[c]
-                            if idx in top_2_sec_idx and c == '1D Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
-                            elif idx in top_2_sec_idx and c == 'Sector': html += f"<td><b>{val}</b></td>"
-                            else: html += f"<td>{val}</td>"
-                        html += "</tr>"
-                    html += "</tbody></table>"
-                    st.markdown(html, unsafe_allow_html=True)
-                    
-                with lead_col2:
-                    st.markdown("##### 🚀 Top 15 Industries")
-                    ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
-                    ind_cols = [c for c in ind_cols if c in raw_ind.columns]
-                    top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
-                    
-                    top_4_ind_idx = []
-                    if 'Avg 1D Return %' in top_ind.columns: top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
-                    if 'ATH %' in top_ind.columns: top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
-                    if 'Avg 1D Return %' in top_ind.columns: top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
-                    
-                    top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-                    html = "<table class='sleek-table'><thead><tr>"
-                    for col in top_ind.columns: html += f"<th>{col}</th>"
-                    html += "</tr></thead><tbody>"
-                    for idx, row in top_ind.iterrows():
-                        html += "<tr>"
-                        for c in top_ind.columns:
-                            val = row[c]
-                            if idx in top_4_ind_idx and c == '1D Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
-                            elif idx in top_4_ind_idx and c == 'Broad Industry': html += f"<td><b>{val}</b></td>"
-                            else: html += f"<td>{val}</td>"
-                        html += "</tr>"
-                    html += "</tbody></table>"
-                    st.markdown(html, unsafe_allow_html=True)
+                top_2_sec_idx = []
+                if 'Avg 1D Return %' in top_sec.columns: top_2_sec_idx = top_sec['Avg 1D Return %'].astype(float).nlargest(2).index.tolist()
+                if 'ATH %' in top_sec.columns: top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                if 'Avg 1D Return %' in top_sec.columns: top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
                 
-            # --- 2. UPSTOX PORTFOLIO TRACKER ---
-            with st.expander("📈 Upstox Portfolio Tracker", expanded=False):
-                st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
+                top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                html = "<table class='sleek-table'><thead><tr>"
+                for col in top_sec.columns: html += f"<th>{col}</th>"
+                html += "</tr></thead><tbody>"
+                for idx, row in top_sec.iterrows():
+                    html += "<tr>"
+                    for c in top_sec.columns:
+                        val = row[c]
+                        if idx in top_2_sec_idx and c == '1D Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                        elif idx in top_2_sec_idx and c == 'Sector': html += f"<td><b>{val}</b></td>"
+                        else: html += f"<td>{val}</td>"
+                    html += "</tr>"
+                html += "</tbody></table>"
+                st.markdown(html, unsafe_allow_html=True)
                 
-                col_t1, col_t2 = st.columns([1, 2])
-                with col_t1:
-                    upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
-                with col_t2:
-                    input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed", key="tracker_method")
-
-                port_df = pd.DataFrame()
-
-                if input_method == "Upload CSV":
-                    upstox_file = st.file_uploader("Upload Portfolio (CSV)", type=['csv'])
-                    if upstox_file is not None:
-                        try: port_df = pd.read_csv(upstox_file)
-                        except Exception as e: st.error(f"Error reading file: {e}")
-
-                elif input_method == "Google Sheets":
-                    col_gs1, col_gs2 = st.columns([3, 1])
-                    with col_gs1:
-                        gsheet_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed", key="tracker_url")
-                    with col_gs2:
-                        load_clicked = st.button("🔄 Load / Refresh Sheet")
-                        
-                    if load_clicked and gsheet_url:
-                        try:
-                            if "docs.google.com/spreadsheets" in gsheet_url:
-                                sheet_id_match = re.search(r"/d/([a-zA-Z0-9-_]+)", gsheet_url)
-                                if sheet_id_match:
-                                    sheet_id = sheet_id_match.group(1)
-                                    gid_match = re.search(r"[#&]gid=([0-9]+)", gsheet_url)
-                                    gid = gid_match.group(1) if gid_match else "0"
-                                    
-                                    export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-                                    port_df = pd.read_csv(export_url, usecols=[0, 1, 2])
-                                    port_df.columns = ['Stock Ticker', 'Entry date', 'Entry Price']
-                                    port_df = port_df.dropna(how='all')
-                                else: st.error("Could not extract Sheet ID.")
-                            else: st.error("Invalid Google Sheets URL format.")
-                        except Exception as e: st.error(f"Error loading Google Sheet: {e}. Check if the link is public.")
-
-                if not port_df.empty and upstox_token:
-                    try:
-                        col_stock = next((c for c in port_df.columns if 'stock' in c.lower() or 'symbol' in c.lower() or 'ticker' in c.lower()), None)
-                        col_date = next((c for c in port_df.columns if 'entry' in c.lower() and 'date' in c.lower()), None)
-                        col_price = next((c for c in port_df.columns if 'price' in c.lower()), None)
-                        
-                        if not col_stock or not col_date or not col_price:
-                            st.error("Data must contain columns for Stock Ticker, Entry Date, and Entry Price.")
-                        else:
-                            with st.spinner("Fetching data from Upstox API..."):
-                                inst_dict = get_instrument_mapping()
-                                if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
-                                else:
-                                    results = []
-                                    today_str = datetime.now().strftime("%Y-%m-%d")
-                                    api_failed = False
-                                    
-                                    for _, row in port_df.iterrows():
-                                        symbol = str(row[col_stock]).strip().upper()
-                                        if symbol in ['NAN', 'NONE', '']: continue
-                                        try:
-                                            entry_date = pd.to_datetime(row[col_date], dayfirst=True).tz_localize(None)
-                                            entry_price = float(row[col_price])
-                                        except: continue
-                                            
-                                        if symbol not in inst_dict: continue
-                                            
-                                        inst_key = inst_dict[symbol]
-                                        start_fetch_date = (entry_date - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
-                                        df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
-                                        
-                                        if status_code != 200:
-                                            api_failed = True
-                                            st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
-                                            break
-                                            
-                                        if df_hist.empty: continue
-                                            
-                                        df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
-                                        future_data = df_hist[df_hist.index >= entry_date]
-                                        if future_data.empty: continue
-                                        
-                                        current_price = float(df_hist.iloc[-1]["Close"])
-                                        ema21 = float(df_hist.iloc[-1]["EMA21"])
-                                        trading_days = len(future_data)
-                                        
-                                        return_pct = ((current_price - entry_price) / entry_price) * 100
-                                        ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
-                                        
-                                        if trading_days >= 10:
-                                            required_return = (trading_days // 10) * 5.0
-                                            ten_day_rule = "EXIT" if return_pct < required_return else "PASS"
-                                        else: ten_day_rule = f"PENDING ({trading_days}/10)"
-                                            
-                                        results.append({
-                                            "Symbol": symbol, "Entry Date": entry_date.strftime("%d-%m-%Y"),
-                                            "Entry Price": entry_price, "Current Price": current_price,
-                                            "Return %": return_pct, "Trading Days": trading_days,
-                                            "EMA21": ema21, "EMA Status": ema_status, "10 Day Rule": ten_day_rule
-                                        })
-                                        
-                                    if not api_failed and results:
-                                        res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
-                                        def highlight_upstox(row):
-                                            if row['EMA Status'] == 'BELOW EMA21' or row['10 Day Rule'] == 'EXIT': return ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
-                                            return [''] * len(row)
-                                        styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({"Entry Price": "₹{:.2f}", "Current Price": "₹{:.2f}", "Return %": "{:.2f}%", "EMA21": "₹{:.2f}"})
-                                        st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
-                                    elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
-                    except Exception as e: st.error(f"Error parsing portfolio file: {e}")
-
-            # --- 3. MOMENTUM SCREENER (PARENT WITH TABS) ---
-            with st.expander("🚀 Momentum Screener", expanded=False):
-                tab1, tab2 = st.tabs(["📊 ETF Screener", "🚀 Stock momentum screener"])
+            with lead_col2:
+                st.markdown("##### 🚀 Top 15 Industries")
+                ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
+                ind_cols = [c for c in ind_cols if c in raw_ind.columns]
+                top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
                 
-                # --- TAB 1: ETF SCREENER ---
-                with tab1:
-                    st.markdown("### ETF Minimum Turnover (in Cr)")
-                    etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
-                    
-                    if not etf_df.empty:
-                        e_df = etf_df.copy()
-                        if 'Catergory' in e_df.columns: e_df = e_df.rename(columns={'Catergory': 'Category'})
-                            
-                        e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
-                        e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
-                        e_df['Chg %'] = pd.to_numeric(e_df['Chg %'], errors='coerce')
-                        
-                        f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
-                        f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
-                        valid_etfs = e_df[f_ema & f_turn].sort_values('Relative Score', ascending=True)
-                        
-                        final_etfs = []
-                        seen_categories = set()
-                        for _, row in valid_etfs.iterrows():
-                            cat = str(row.get('Category', 'Unknown')).strip()
-                            if cat not in seen_categories and cat != 'nan' and cat != 'Unknown':
-                                seen_categories.add(cat)
-                                final_etfs.append(row)
-                            elif cat == 'Unknown' or cat == 'nan':
-                                if 'Unknown' not in seen_categories:
-                                    seen_categories.add('Unknown')
-                                    final_etfs.append(row)
-                                    
-                        etf_display = pd.DataFrame(final_etfs)
-                        if not etf_display.empty:
-                            etf_display = etf_display.head(10).reset_index(drop=True)
-                            etf_display['Rank'] = etf_display.index + 1
-                            
-                            show_cols = ['Rank', 'Symbol', 'Chg %', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
-                            show_cols = [c for c in show_cols if c in etf_display.columns]
-                            etf_display = etf_display[show_cols]
-                            
-                            top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
-                            top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
-                            avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
-                            
-                            st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            
-                            def style_etf_row(row):
-                                is_top_4 = row.name in top_4_chg_idx
-                                styles = []
-                                for col in row.index:
-                                    cell_style = ""
-                                    if is_top_4:
-                                        cell_style += "font-weight: 700; "
-                                        if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
-                                    styles.append(cell_style)
-                                return styles
-                                
-                            styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:,.2f}", 'Chg %': "{:.2f}%"})
-                            st.markdown(f'<div class="scrollable-table-container">{styled_etf.to_html()}</div>', unsafe_allow_html=True)
-                        else: st.info("No ETFs match the criteria at the moment.")
-                    else: st.warning("ETF data is currently empty or failed to load.")
+                top_4_ind_idx = []
+                if 'Avg 1D Return %' in top_ind.columns: top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
+                if 'ATH %' in top_ind.columns: top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                if 'Avg 1D Return %' in top_ind.columns: top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
                 
-                # --- TAB 2: STOCK MOMENTUM SCREENER ---
-                with tab2:
-                    st.markdown("### Minimum Turnover (in Cr)")
-                    min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
-                    
-                    if not main_df.empty:
-                        mom_df = main_df.copy()
-                        mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
-                        mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
-                        mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
-                        mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
-                        mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
-                        
-                        f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
-                        f_turnover = mom_df['turnover'] >= min_turnover
-                        f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
-                        f_ath      = mom_df['down_ath'] <= 20.0
-                        
-                        full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
-                        full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
-                        full_filtered_mom['Rank'] = full_filtered_mom.index + 1
-                        filtered_mom = full_filtered_mom.head(30)
-                        
-                        if not filtered_mom.empty:
-                            top_25_avg = filtered_mom.head(25)['1d_return'].mean()
-                            avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
-                            st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
-                            
-                            display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
-                            display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
-                            display_mom['Band'] = display_mom['Band'].fillna("-")
-                            
-                            styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:,.2f}", 'Turnover (Cr)': "{:,.2f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
-                            st.markdown(f'<div class="scrollable-table-container">{styled_mom.to_html()}</div>', unsafe_allow_html=True)
-                        else: st.info("No stocks match the Momentum Screener criteria at the moment.")
-                            
-                        # --- PORTFOLIO REBALANCER ---
-                        st.divider()
-                        st.markdown("### 🔄 Upload Portfolio Stocks")
-                        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
-                        uploaded_file = st.file_uploader("", type=['csv', 'txt'], label_visibility="collapsed", key="rebal_uploader")
-                        
-                        if uploaded_file is not None:
-                            try:
-                                if uploaded_file.name.endswith('.csv'): user_port_df = pd.read_csv(uploaded_file, header=None)
-                                else: user_port_df = pd.read_csv(uploaded_file, header=None, sep='\t')
-                                
-                                raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-                                user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
-                                user_tickers = list(dict.fromkeys(user_tickers)) 
-                                
-                                n_stocks = len(user_tickers)
-                                if n_stocks > 0:
-                                    st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
-                                    st.markdown("#### 🚫 Exclude Unavailable Stocks")
-                                    unavailable_tickers = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=full_filtered_mom['ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.")
-                                    
-                                    unavailable_clean = [str(x).strip().upper() for x in unavailable_tickers]
-                                    user_clean = [str(x).strip().upper() for x in user_tickers]
-                                    full_filtered_mom['ticker_clean'] = full_filtered_mom['ticker'].astype(str).str.strip().str.upper()
-                                    mom_df['ticker_clean'] = mom_df['ticker'].astype(str).str.strip().str.upper()
-                                    
-                                    target_pool_size = n_stocks * 2
-                                    top_pool = full_filtered_mom.head(target_pool_size)
-                                    top_pool_tickers = top_pool['ticker_clean'].tolist()
-                                    
-                                    valid_reps = full_filtered_mom[~full_filtered_mom['ticker_clean'].isin(user_clean) & ~full_filtered_mom['ticker_clean'].isin(unavailable_clean)]
-                                    replacements_available = valid_reps.to_dict('records')
-                                    
-                                    rebalance_data = []
-                                    for t in user_tickers:
-                                        t_clean = str(t).strip().upper()
-                                        rank_match = full_filtered_mom[full_filtered_mom['ticker_clean'] == t_clean]
-                                        
-                                        if not rank_match.empty: curr_rank = int(rank_match['Rank'].iloc[0])
-                                        else:
-                                            fallback_match = mom_df[mom_df['ticker_clean'] == t_clean]
-                                            if not fallback_match.empty:
-                                                score = fallback_match['relative_score'].iloc[0]
-                                                curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
-                                            else: curr_rank = "Not in DB"
-                                        
-                                        if t_clean in top_pool_tickers:
-                                            rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
-                                        else:
-                                            if replacements_available:
-                                                rep = replacements_available.pop(0) 
-                                                rep_ticker = rep['ticker']
-                                                rep_rank = rep['Rank']
-                                            else:
-                                                rep_ticker = "No valid replacements left"
-                                                rep_rank = "-"
-                                            rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "Out of Range (Rebalance)", "Suggested Replacement": rep_ticker, "Replacement Rank": rep_rank})
-                                    
-                                    rebal_df = pd.DataFrame(rebalance_data)
-                                    def color_status(row):
-                                        if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
-                                        elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
-                                        return [''] * len(row)
-                                    
-                                    styled_rebal = rebal_df.style.apply(color_status, axis=1).hide(axis="index")
-                                    st.markdown(f'<div class="scrollable-table-container">{styled_rebal.to_html()}</div>', unsafe_allow_html=True)
-                                else: st.warning("Could not find any valid tickers in the uploaded file.")
-                            except Exception as e: st.error(f"Error reading file: {e}")
-                    else: st.warning("Database data is currently empty or failed to load.")
-            
-        def highlight_main_table(row):
-            styles = []
-            for col in row.index:
-                style = ""
-                if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "":
-                    try:
-                        if float(str(row['Priority']).replace("Tier ", "")) > 0: style += 'background-color: rgba(39, 174, 96, 0.15); '
-                    except: pass
-                if col == 'Band' and str(row['Band']).strip() == '5': style += 'background-color: rgba(254, 202, 202, 0.4); '
-                styles.append(style)
-            return styles
+                top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
+                html = "<table class='sleek-table'><thead><tr>"
+                for col in top_ind.columns: html += f"<th>{col}</th>"
+                html += "</tr></thead><tbody>"
+                for idx, row in top_ind.iterrows():
+                    html += "<tr>"
+                    for c in top_ind.columns:
+                        val = row[c]
+                        if idx in top_4_ind_idx and c == '1D Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                        elif idx in top_4_ind_idx and c == 'Broad Industry': html += f"<td><b>{val}</b></td>"
+                        else: html += f"<td>{val}</td>"
+                    html += "</tr>"
+                html += "</tbody></table>"
+                st.markdown(html, unsafe_allow_html=True)
+
+    # --- 3. ETF SCREENER TAB ---
+    with tab_etf:
+        st.markdown("### ETF Minimum Turnover (in Cr)")
+        etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
         
-        def safe_int(val, prefix="", suffix=""):
-            if val == "" or pd.isna(val): return ""
-            try: return f"{prefix}{int(float(val))}{suffix}"
-            except: return ""
+        if not etf_df.empty:
+            e_df = etf_df.copy()
+            if 'Catergory' in e_df.columns: e_df = e_df.rename(columns={'Catergory': 'Category'})
+                
+            e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
+            e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
+            e_df['Chg %'] = pd.to_numeric(e_df['Chg %'], errors='coerce')
+            
+            f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
+            f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
+            valid_etfs = e_df[f_ema & f_turn].sort_values('Relative Score', ascending=True)
+            
+            final_etfs = []
+            seen_categories = set()
+            for _, row in valid_etfs.iterrows():
+                cat = str(row.get('Category', 'Unknown')).strip()
+                if cat not in seen_categories and cat != 'nan' and cat != 'Unknown':
+                    seen_categories.add(cat)
+                    final_etfs.append(row)
+                elif cat == 'Unknown' or cat == 'nan':
+                    if 'Unknown' not in seen_categories:
+                        seen_categories.add('Unknown')
+                        final_etfs.append(row)
+                        
+            etf_display = pd.DataFrame(final_etfs)
+            if not etf_display.empty:
+                etf_display = etf_display.head(10).reset_index(drop=True)
+                etf_display['Rank'] = etf_display.index + 1
+                
+                show_cols = ['Rank', 'Symbol', 'Chg %', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
+                show_cols = [c for c in show_cols if c in etf_display.columns]
+                etf_display = etf_display[show_cols]
+                
+                top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
+                top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
+                avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
+                
+                st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                def style_etf_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+                    for col in row.index:
+                        cell_style = ""
+                        if is_top_4:
+                            cell_style += "font-weight: 700; "
+                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
+                        styles.append(cell_style)
+                    return styles
+                    
+                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:,.2f}", 'Chg %': "{:.2f}%"})
+                st.markdown(f'<div class="scrollable-table-container">{styled_etf.to_html()}</div>', unsafe_allow_html=True)
+            else: st.info("No ETFs match the criteria at the moment.")
+        else: st.warning("ETF data is currently empty or failed to load.")
 
-        styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
-            "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: safe_int(x, "Tier "),
-            "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
-        })
-        st.markdown(f'<div class="scrollable-table-container">{styled_df.to_html()}</div>', unsafe_allow_html=True)
-    else: st.info("No stocks matching criteria right now. Waiting for momentum...")
+    # --- 4. MOMENTUM SCREENER TAB ---
+    with tab_mom:
+        st.markdown("### Minimum Turnover (in Cr)")
+        min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
+        
+        if not main_df.empty:
+            mom_df = main_df.copy()
+            mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
+            mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
+            mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
+            mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
+            mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
+            
+            f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
+            f_turnover = mom_df['turnover'] >= min_turnover
+            f_band     = ~mom_df['band'].astype(str).str.strip().isin(['2', '5', '2.0', '5.0'])
+            f_ath      = mom_df['down_ath'] <= 20.0
+            
+            full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
+            full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
+            full_filtered_mom['Rank'] = full_filtered_mom.index + 1
+            filtered_mom = full_filtered_mom.head(30)
+            
+            if not filtered_mom.empty:
+                top_25_avg = filtered_mom.head(25)['1d_return'].mean()
+                avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
+                st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
+                
+                display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
+                display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
+                display_mom['Band'] = display_mom['Band'].fillna("-")
+                
+                styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:,.2f}", 'Turnover (Cr)': "{:,.2f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
+                st.markdown(f'<div class="scrollable-table-container">{styled_mom.to_html()}</div>', unsafe_allow_html=True)
+            else: st.info("No stocks match the Momentum Screener criteria at the moment.")
+                
+            # --- PORTFOLIO REBALANCER ---
+            st.divider()
+            st.markdown("### 🔄 Upload Portfolio Stocks")
+            st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("", type=['csv', 'txt'], label_visibility="collapsed", key="rebal_uploader")
+            
+            if uploaded_file is not None:
+                try:
+                    if uploaded_file.name.endswith('.csv'): user_port_df = pd.read_csv(uploaded_file, header=None)
+                    else: user_port_df = pd.read_csv(uploaded_file, header=None, sep='\t')
+                    
+                    raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
+                    user_tickers = list(dict.fromkeys(user_tickers)) 
+                    
+                    n_stocks = len(user_tickers)
+                    if n_stocks > 0:
+                        st.info(f"Loaded **{n_stocks}** unique tickers from your portfolio.")
+                        st.markdown("#### 🚫 Exclude Unavailable Stocks")
+                        unavailable_tickers = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=full_filtered_mom['ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.")
+                        
+                        unavailable_clean = [str(x).strip().upper() for x in unavailable_tickers]
+                        user_clean = [str(x).strip().upper() for x in user_tickers]
+                        full_filtered_mom['ticker_clean'] = full_filtered_mom['ticker'].astype(str).str.strip().str.upper()
+                        mom_df['ticker_clean'] = mom_df['ticker'].astype(str).str.strip().str.upper()
+                        
+                        target_pool_size = n_stocks * 2
+                        top_pool = full_filtered_mom.head(target_pool_size)
+                        top_pool_tickers = top_pool['ticker_clean'].tolist()
+                        
+                        valid_reps = full_filtered_mom[~full_filtered_mom['ticker_clean'].isin(user_clean) & ~full_filtered_mom['ticker_clean'].isin(unavailable_clean)]
+                        replacements_available = valid_reps.to_dict('records')
+                        
+                        rebalance_data = []
+                        for t in user_tickers:
+                            t_clean = str(t).strip().upper()
+                            rank_match = full_filtered_mom[full_filtered_mom['ticker_clean'] == t_clean]
+                            
+                            if not rank_match.empty: curr_rank = int(rank_match['Rank'].iloc[0])
+                            else:
+                                fallback_match = mom_df[mom_df['ticker_clean'] == t_clean]
+                                if not fallback_match.empty:
+                                    score = fallback_match['relative_score'].iloc[0]
+                                    curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
+                                else: curr_rank = "Not in DB"
+                            
+                            if t_clean in top_pool_tickers:
+                                rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
+                            else:
+                                if replacements_available:
+                                    rep = replacements_available.pop(0) 
+                                    rep_ticker = rep['ticker']
+                                    rep_rank = rep['Rank']
+                                else:
+                                    rep_ticker = "No valid replacements left"
+                                    rep_rank = "-"
+                                rebalance_data.append({"Portfolio Ticker": t, "Current Rank": curr_rank, "Status": "Out of Range (Rebalance)", "Suggested Replacement": rep_ticker, "Replacement Rank": rep_rank})
+                        
+                        rebal_df = pd.DataFrame(rebalance_data)
+                        def color_status(row):
+                            if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
+                            elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
+                            return [''] * len(row)
+                        
+                        styled_rebal = rebal_df.style.apply(color_status, axis=1).hide(axis="index")
+                        st.markdown(f'<div class="scrollable-table-container">{styled_rebal.to_html()}</div>', unsafe_allow_html=True)
+                    else: st.warning("Could not find any valid tickers in the uploaded file.")
+                except Exception as e: st.error(f"Error reading file: {e}")
+
+    # --- 5. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
+    with tab_port:
+        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
+        
+        col_t1, col_t2 = st.columns([1, 2])
+        with col_t1:
+            upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
+        with col_t2:
+            input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed", key="tracker_method")
+
+        port_df = pd.DataFrame()
+
+        if input_method == "Upload CSV":
+            upstox_file = st.file_uploader("Upload Portfolio (CSV)", type=['csv'])
+            if upstox_file is not None:
+                try: port_df = pd.read_csv(upstox_file)
+                except Exception as e: st.error(f"Error reading file: {e}")
+
+        elif input_method == "Google Sheets":
+            col_gs1, col_gs2 = st.columns([3, 1])
+            with col_gs1:
+                gsheet_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed", key="tracker_url")
+            with col_gs2:
+                load_clicked = st.button("🔄 Load / Refresh Sheet")
+                
+            if load_clicked and gsheet_url:
+                try:
+                    if "docs.google.com/spreadsheets" in gsheet_url:
+                        sheet_id_match = re.search(r"/d/([a-zA-Z0-9-_]+)", gsheet_url)
+                        if sheet_id_match:
+                            sheet_id = sheet_id_match.group(1)
+                            gid_match = re.search(r"[#&]gid=([0-9]+)", gsheet_url)
+                            gid = gid_match.group(1) if gid_match else "0"
+                            
+                            export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+                            port_df = pd.read_csv(export_url, usecols=[0, 1, 2])
+                            port_df.columns = ['Stock Ticker', 'Entry date', 'Entry Price']
+                            port_df = port_df.dropna(how='all')
+                        else: st.error("Could not extract Sheet ID.")
+                    else: st.error("Invalid Google Sheets URL format.")
+                except Exception as e: st.error(f"Error loading Google Sheet: {e}. Check if the link is public.")
+
+        if not port_df.empty and upstox_token:
+            try:
+                col_stock = next((c for c in port_df.columns if 'stock' in c.lower() or 'symbol' in c.lower() or 'ticker' in c.lower()), None)
+                col_date = next((c for c in port_df.columns if 'entry' in c.lower() and 'date' in c.lower()), None)
+                col_price = next((c for c in port_df.columns if 'price' in c.lower()), None)
+                
+                if not col_stock or not col_date or not col_price:
+                    st.error("Data must contain columns for Stock Ticker, Entry Date, and Entry Price.")
+                else:
+                    with st.spinner("Fetching data from Upstox API..."):
+                        inst_dict = get_instrument_mapping()
+                        if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
+                        else:
+                            results = []
+                            today_str = datetime.now().strftime("%Y-%m-%d")
+                            api_failed = False
+                            
+                            for _, row in port_df.iterrows():
+                                symbol = str(row[col_stock]).strip().upper()
+                                if symbol in ['NAN', 'NONE', '']: continue
+                                try:
+                                    entry_date = pd.to_datetime(row[col_date], dayfirst=True).tz_localize(None)
+                                    entry_price = float(row[col_price])
+                                except: continue
+                                    
+                                if symbol not in inst_dict: continue
+                                    
+                                inst_key = inst_dict[symbol]
+                                start_fetch_date = (entry_date - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+                                df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
+                                
+                                if status_code != 200:
+                                    api_failed = True
+                                    st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
+                                    break
+                                    
+                                if df_hist.empty: continue
+                                    
+                                df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
+                                future_data = df_hist[df_hist.index >= entry_date]
+                                if future_data.empty: continue
+                                
+                                current_price = float(df_hist.iloc[-1]["Close"])
+                                ema21 = float(df_hist.iloc[-1]["EMA21"])
+                                trading_days = len(future_data)
+                                
+                                return_pct = ((current_price - entry_price) / entry_price) * 100
+                                ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
+                                
+                                if trading_days >= 10:
+                                    required_return = (trading_days // 10) * 5.0
+                                    ten_day_rule = "EXIT" if return_pct < required_return else "PASS"
+                                else: ten_day_rule = f"PENDING ({trading_days}/10)"
+                                    
+                                results.append({
+                                    "Symbol": symbol, "Entry Date": entry_date.strftime("%d-%m-%Y"),
+                                    "Entry Price": entry_price, "Current Price": current_price,
+                                    "Return %": return_pct, "Trading Days": trading_days,
+                                    "EMA21": ema21, "EMA Status": ema_status, "10 Day Rule": ten_day_rule
+                                })
+                                
+                            if not api_failed and results:
+                                res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
+                                def highlight_upstox(row):
+                                    if row['EMA Status'] == 'BELOW EMA21' or row['10 Day Rule'] == 'EXIT': return ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
+                                    return [''] * len(row)
+                                styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({"Entry Price": "₹{:.2f}", "Current Price": "₹{:.2f}", "Return %": "{:.2f}%", "EMA21": "₹{:.2f}"})
+                                st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
+                            elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
+            except Exception as e: st.error(f"Error parsing portfolio file: {e}")
 
 time.sleep(60)
 st.rerun()
