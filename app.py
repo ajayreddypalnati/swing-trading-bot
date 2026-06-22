@@ -195,8 +195,7 @@ TV_PAYLOAD = {
 def get_db_cache_key():
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
-    if 9 <= now.hour < 21: return f"locked_{now.strftime('%Y-%m-%d_%H')}"
-    else: return f"active_{now.strftime('%Y-%m-%d_%H')}_{now.minute // 10}"
+    return f"daily_cache_{now.strftime('%Y-%m-%d')}"
 
 @st.cache_data(ttl=86400)
 def fetch_database_reference(cache_key):
@@ -487,11 +486,10 @@ def render_market_cycle_graph(roc_vals):
     fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
     fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
-    # Added white paper and plot background to ensure popup visibility over cream theme
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
-        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
+        plot_bgcolor='#FFFFFF', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
     st.markdown(f"""
@@ -632,7 +630,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             style = ""
             if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "":
                 try:
-                    if float(str(row['Priority']).replace("Tier ", "")) > 0: style += 'background-color: rgba(39, 174, 96, 0.15); '
+                    if float(row['Priority']) > 0: style += 'background-color: rgba(39, 174, 96, 0.15); '
                 except: pass
             if col == 'Band' and str(row['Band']).strip() == '5': style += 'background-color: rgba(254, 202, 202, 0.4); '
             styles.append(style)
@@ -641,6 +639,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     def safe_int(val, prefix="", suffix=""):
         if val == "" or pd.isna(val): return ""
         try: return f"{prefix}{int(float(val))}{suffix}"
+        except: return ""
+
+    def format_stars(val):
+        if val == "" or pd.isna(val): return ""
+        try:
+            stars = 6 - int(float(val))
+            if 1 <= stars <= 5: return "⭐" * stars
+            return ""
         except: return ""
 
     # ==========================================
@@ -660,7 +666,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         if not display_df.empty:
             styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
                 "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
-                "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: safe_int(x, "Tier "),
+                "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
                 "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
             })
             st.markdown(f'<div class="scrollable-table-container">{styled_df.to_html()}</div>', unsafe_allow_html=True)
@@ -730,7 +736,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     # --- 4. ETF SCREENER TAB ---
     with tab_etf:
-        st.markdown("### ETF Minimum Turnover (in Cr)")
+        st.markdown("<h2 style='font-size: 1.8rem; font-weight: 800; color: #0B1D30; margin-bottom: 10px;'>Minimum Turnover (in Cr)</h2>", unsafe_allow_html=True)
         etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
         
         if not etf_df.empty:
@@ -791,7 +797,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     # --- 5. MOMENTUM SCREENER TAB ---
     with tab_mom:
-        st.markdown("### Minimum Turnover (in Cr)")
+        st.markdown("<h2 style='font-size: 1.8rem; font-weight: 800; color: #0B1D30; margin-bottom: 10px;'>Minimum Turnover (in Cr)</h2>", unsafe_allow_html=True)
         min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
         
         if not main_df.empty:
