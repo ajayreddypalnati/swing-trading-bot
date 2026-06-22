@@ -972,7 +972,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                         if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
                         else:
                             results = []
-                            today_str = datetime.now().strftime("%Y-%m-%d")
+                            today_str = datetime.now(ist).strftime("%Y-%m-%d")
                             api_failed = False
                             
                             for _, row in port_df.iterrows():
@@ -986,7 +986,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 if symbol not in inst_dict: continue
                                     
                                 inst_key = inst_dict[symbol]
-                                start_fetch_date = (entry_date - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+                                start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
                                 df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
                                 
                                 if status_code != 200:
@@ -1007,9 +1007,17 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
                                 
                                 if trading_days >= 10:
-                                    required_return = (trading_days // 10) * 5.0
-                                    ten_day_rule = "EXIT" if return_pct < required_return else "PASS"
-                                else: ten_day_rule = f"PENDING ({trading_days}/10)"
+                                    try:
+                                        day10_close = float(future_data.iloc[9]["Close"])
+                                        day10_return = ((day10_close - entry_price) / entry_price) * 100
+                                        if day10_return >= 5:
+                                            ten_day_rule = f"PASS ({day10_return:.2f}%)"
+                                        else:
+                                            ten_day_rule = f"EXIT ({day10_return:.2f}%)"
+                                    except IndexError:
+                                        ten_day_rule = f"PENDING ({trading_days}/10)"
+                                else:
+                                    ten_day_rule = f"PENDING ({trading_days}/10)"
                                     
                                 results.append({
                                     "Symbol": symbol, "Entry Date": entry_date.strftime("%d-%m-%Y"),
@@ -1023,7 +1031,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 
                                 def highlight_upstox(row):
                                     styles = [''] * len(row)
-                                    if row['EMA Status'] == 'BELOW EMA21' or row['10 Day Rule'] == 'EXIT':
+                                    if row['EMA Status'] == 'BELOW EMA21' or 'EXIT' in str(row['10 Day Rule']):
                                         styles = ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
                                     
                                     try:
