@@ -986,15 +986,12 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                     st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
                                     break
                                     
-                                if df_hist.empty: continue
-                                    
                                 df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
                                 future_data = df_hist[df_hist.index >= entry_date]
-                                if future_data.empty: continue
                                 
                                 current_price = float(df_hist.iloc[-1]["Close"])
                                 ema21 = float(df_hist.iloc[-1]["EMA21"])
-                                trading_days = len(future_data)
+                                trading_days = len(future_data) if not future_data.empty else 1
                                 
                                 return_pct = ((current_price - entry_price) / entry_price) * 100
                                 ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
