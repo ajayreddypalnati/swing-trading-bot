@@ -11,6 +11,7 @@ import warnings
 from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
 import io
+import gzip
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -347,14 +348,16 @@ def get_combined_data():
 # ==========================================
 # UPSTOX HELPER FUNCTIONS
 # ==========================================
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=604800) # Exact match: Cache for 1 week (604,800 seconds)
 def get_instrument_mapping():
     try:
-        try:
-            df = pd.read_json("complete.json")
-        except:
-            url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
-            df = pd.read_json(url)
+        url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
+        
+        with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as f:
+            df = pd.read_json(f)
+            
         df = df[df["segment"] == "NSE_EQ"]
         return dict(zip(df["trading_symbol"].astype(str).str.upper(), df["instrument_key"]))
     except Exception as e:
@@ -910,7 +913,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
 
     # --- 6. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
     with tab_port:
-        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app will strictly pull your first three columns, regardless of what the headers are named (e.g. Ticker, Entry Date, Entry Price).</span>", unsafe_allow_html=True)
         
         col_t1, col_t2 = st.columns([1, 2])
         with col_t1:
@@ -923,8 +926,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         if input_method == "Upload CSV":
             upstox_file = st.file_uploader("Upload Portfolio (CSV)", type=['csv'])
             if upstox_file is not None:
-                try: port_df = pd.read_csv(upstox_file)
-                except Exception as e: st.error(f"Error reading file: {e}")
+                try: 
+                    port_df = pd.read_csv(upstox_file)
+                except Exception as e: 
+                    st.error(f"Error reading file: {e}")
 
         elif input_method == "Google Sheets":
             col_gs1, col_gs2 = st.columns([3, 1])
@@ -943,22 +948,25 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                             gid = gid_match.group(1) if gid_match else "0"
                             
                             export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
-                            port_df = pd.read_csv(export_url, usecols=[0, 1, 2])
-                            port_df.columns = ['Stock Ticker', 'Entry date', 'Entry Price']
-                            port_df = port_df.dropna(how='all')
+                            port_df = pd.read_csv(export_url)
                         else: st.error("Could not extract Sheet ID.")
                     else: st.error("Invalid Google Sheets URL format.")
                 except Exception as e: st.error(f"Error loading Google Sheet: {e}. Check if the link is public.")
 
         if not port_df.empty and upstox_token:
             try:
-                col_stock = next((c for c in port_df.columns if 'stock' in c.lower() or 'symbol' in c.lower() or 'ticker' in c.lower()), None)
-                col_date = next((c for c in port_df.columns if 'entry' in c.lower() and 'date' in c.lower()), None)
-                col_price = next((c for c in port_df.columns if 'price' in c.lower()), None)
-                
-                if not col_stock or not col_date or not col_price:
-                    st.error("Data must contain columns for Stock Ticker, Entry Date, and Entry Price.")
+                # STRICLY ENSURE ONLY 3 COLUMNS AND OVERRIDE HEADERS
+                if len(port_df.columns) < 3:
+                    st.error("Data must contain at least 3 columns for Stock Ticker, Entry Date, and Entry Price.")
                 else:
+                    port_df = port_df.iloc[:, :3].copy()
+                    port_df.columns = ['Stock Ticker', 'Entry Date', 'Entry Price']
+                    port_df = port_df.dropna(how='all')
+                    
+                    col_stock = 'Stock Ticker'
+                    col_date = 'Entry Date'
+                    col_price = 'Entry Price'
+                    
                     with st.spinner("Fetching data from Upstox API..."):
                         inst_dict = get_instrument_mapping()
                         if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
@@ -985,6 +993,8 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                     api_failed = True
                                     st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
                                     break
+                                    
+                                if df_hist.empty: continue
                                     
                                 df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
                                 future_data = df_hist[df_hist.index >= entry_date]
