@@ -693,9 +693,9 @@ def run_daily_scraper():
                         
                         if not is_nse_holiday:
                             if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
-                            elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
-                            elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
-                            elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
+                            elif score <= 35: mood_label = f"Negative 🔻 {pct_str}"
+                            elif score <= 50: mood_label = f"Neutral ⚖️ {pct_str}"
+                            elif score <= 65: mood_label = f"Positive 💚 {pct_str}"
                             else: mood_label = f"Super Positive 🚀 {pct_str}"
                                 
                             historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
