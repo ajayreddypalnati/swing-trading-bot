@@ -93,6 +93,15 @@ st.markdown("""
         .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: #FFFFFF; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden;}
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); }
+        
+        /* PLOTLY GRAPH STYLING TO POP UP */
+        div.stPlotlyChart { 
+            background-color: #FFFFFF !important; 
+            border: 2px solid #0B1D30 !important; 
+            border-radius: 8px !important; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important; 
+            padding: 10px !important; 
+        }
 
         /* PROFESSIONAL FULL-WIDTH SAAS TABS */
         div[data-baseweb="tab-list"] { 
@@ -478,10 +487,11 @@ def render_market_cycle_graph(roc_vals):
     fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
     fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
+    # Added white paper and plot background to ensure popup visibility over cream theme
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
+        plot_bgcolor='#FFFFFF', paper_bgcolor='#FFFFFF', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
     st.markdown(f"""
@@ -636,9 +646,10 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     # ==========================================
     # SAAS NAVIGATION TABS (Replacing Expanders)
     # ==========================================
-    tab_main, tab_cycle, tab_etf, tab_mom, tab_port = st.tabs([
+    tab_main, tab_cycle, tab_leaders, tab_etf, tab_mom, tab_port = st.tabs([
         "⚡ 9-EMA Screener", 
         "🎢 Market Cycle", 
+        "🏆 Market Leaders",
         "📊 ETF Screener", 
         "🚀 Momentum Screener", 
         "📈 Portfolio Tracker"
@@ -656,12 +667,14 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
         else: 
             st.info("No stocks matching criteria right now. Waiting for momentum...")
 
-    # --- 2. MARKET CYCLE & LEADERS TAB ---
+    # --- 2. MARKET CYCLE TAB ---
     with tab_cycle:
         if not raw_sec.empty and not raw_ind.empty:
             render_market_cycle_graph(roc_vals)
-            st.divider()
-            
+
+    # --- 3. MARKET LEADERS TAB ---
+    with tab_leaders:
+        if not raw_sec.empty and not raw_ind.empty:
             lead_col1, lead_col2 = st.columns(2)
             with lead_col1:
                 st.markdown("##### 🔥 Top 5 Sectors")
@@ -715,7 +728,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 html += "</tbody></table>"
                 st.markdown(html, unsafe_allow_html=True)
 
-    # --- 3. ETF SCREENER TAB ---
+    # --- 4. ETF SCREENER TAB ---
     with tab_etf:
         st.markdown("### ETF Minimum Turnover (in Cr)")
         etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
@@ -776,7 +789,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
             else: st.info("No ETFs match the criteria at the moment.")
         else: st.warning("ETF data is currently empty or failed to load.")
 
-    # --- 4. MOMENTUM SCREENER TAB ---
+    # --- 5. MOMENTUM SCREENER TAB ---
     with tab_mom:
         st.markdown("### Minimum Turnover (in Cr)")
         min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
@@ -881,7 +894,7 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                     else: st.warning("Could not find any valid tickers in the uploaded file.")
                 except Exception as e: st.error(f"Error reading file: {e}")
 
-    # --- 5. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
+    # --- 6. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
     with tab_port:
         st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. Required columns: <b>Stock Ticker</b>, <b>Entry date</b>, <b>Entry Price</b>.</span>", unsafe_allow_html=True)
         
@@ -986,9 +999,23 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 
                             if not api_failed and results:
                                 res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
+                                
                                 def highlight_upstox(row):
-                                    if row['EMA Status'] == 'BELOW EMA21' or row['10 Day Rule'] == 'EXIT': return ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
-                                    return [''] * len(row)
+                                    styles = [''] * len(row)
+                                    if row['EMA Status'] == 'BELOW EMA21' or row['10 Day Rule'] == 'EXIT':
+                                        styles = ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
+                                    
+                                    try:
+                                        ret_idx = list(row.index).index('Return %')
+                                        if float(row['Return %']) > 0:
+                                            styles[ret_idx] = 'background-color: rgba(187, 247, 208, 0.6); font-weight: 800;'
+                                        elif float(row['Return %']) < 0:
+                                            styles[ret_idx] = 'background-color: rgba(254, 202, 202, 0.6); font-weight: 800;'
+                                    except:
+                                        pass
+                                        
+                                    return styles
+
                                 styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({"Entry Price": "₹{:.2f}", "Current Price": "₹{:.2f}", "Return %": "{:.2f}%", "EMA21": "₹{:.2f}"})
                                 st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
                             elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
