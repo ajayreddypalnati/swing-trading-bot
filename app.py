@@ -94,7 +94,7 @@ st.markdown("""
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); }
 
-        /* PROFESSIONAL FULL-WIDTH SAAS TABS (REPLACING EXPANDERS) */
+        /* PROFESSIONAL FULL-WIDTH SAAS TABS */
         div[data-baseweb="tab-list"] { 
             display: flex !important;
             width: 100% !important;
@@ -107,7 +107,8 @@ st.markdown("""
         div[data-baseweb="tab"] { 
             padding: 0 !important;
             background: transparent !important;
-            flex: 1 !important;
+            flex: 1 !important; /* Forces all tabs to be equal width and span entire screen */
+            min-width: 0 !important;
         }
         
         /* Tab Button Physics & Styling */
@@ -141,13 +142,14 @@ st.markdown("""
             box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
         
-        /* Tab Text Sizing */
+        /* Tab Text Sizing - Restored to large 1.4rem size */
         button[role="tab"] p { 
-            font-size: 1.15rem !important; 
+            font-size: 1.4rem !important; 
             font-weight: 800 !important; 
             color: #FFFFFF !important; 
             margin: 0 !important;
             transition: color 0.3s ease !important;
+            white-space: nowrap !important;
         }
         
         /* Selected Tab Text Color */
@@ -502,7 +504,7 @@ ist = timezone(timedelta(hours=5, minutes=30))
 current_time = datetime.now(ist).strftime('%I:%M:%S %p')
 current_date = datetime.now(ist).strftime('%d %b %Y')
 
-# Custom Premium Header Block
+# Custom Premium Header Block (Light Theme)
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
@@ -527,7 +529,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
     nse_bg = get_breadth_color(trend_regime)
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
     
+    # -----------------------------------------------
     # LOGIC: ROC > 90 Tight Stop Loss Check
+    # -----------------------------------------------
     if roc_vals:
         try:
             current_roc = float(roc_vals[0])
@@ -538,7 +542,9 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                 alloc_bg = "rgba(254, 202, 202, 0.4)" # Light red
         except: pass
 
+    # -----------------------------------------------
     # LOGIC: Last DB Update > 24 Hours Check
+    # -----------------------------------------------
     last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
     if str(last_sync) != "Pending Run...":
         try:
