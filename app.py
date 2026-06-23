@@ -85,15 +85,15 @@ st.markdown("""
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* TABLE STYLING */
+        /* TABLE STYLING - Increased Font Size */
         .scrollable-table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.5rem; }
         .scrollable-table-container table { width: 100%; min-width: 900px; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: #FFFFFF; border: 2px solid #0B1D30;}
-        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 0.9rem; padding: 15px !important; white-space: nowrap; font-weight: 700 !important;}
-        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; white-space: nowrap; }
+        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 1.05rem !important; padding: 15px !important; white-space: nowrap; font-weight: 700 !important;}
+        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; white-space: nowrap; font-size: 1.0rem !important; }
         
-        .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: #FFFFFF; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden;}
-        .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; }
-        .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); }
+        .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: #FFFFFF; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden;}
+        .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; font-size: 1.05rem !important; }
+        .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); font-size: 1.0rem !important; }
         
         /* PLOTLY GRAPH STYLING TO POP UP */
         div.stPlotlyChart { 
@@ -102,6 +102,13 @@ st.markdown("""
             border-radius: 12px !important; 
             box-shadow: 0 8px 20px rgba(11, 29, 48, 0.08) !important; 
             padding: 15px !important; 
+        }
+
+        /* MOBILE GRAPH RESPONSIVENESS */
+        @media (max-width: 768px) {
+            div.stPlotlyChart svg text {
+                font-size: 10px !important;
+            }
         }
 
         /* PROFESSIONAL FULL-WIDTH SAAS TABS */
@@ -177,6 +184,32 @@ st.markdown("""
             font-size: 1.5rem !important;
             font-weight: 800 !important;
             color: #0B1D30 !important;
+        }
+
+        /* UPLOAD BUTTON VISIBILITY ON MOBILE */
+        div[data-testid="stFileUploader"] {
+            background-color: #FFFFFF !important;
+            border: 2px dashed #0B1D30 !important;
+            border-radius: 8px !important;
+            padding: 15px !important;
+        }
+        div[data-testid="stFileUploader"] section {
+            background-color: transparent !important;
+        }
+        div[data-testid="stFileUploader"] span, 
+        div[data-testid="stFileUploader"] p, 
+        div[data-testid="stFileUploader"] small {
+            color: #0B1D30 !important;
+            font-weight: 600 !important;
+        }
+        div[data-testid="stFileUploader"] button {
+            background-color: #0B1D30 !important;
+            color: #FFFFFF !important;
+            border-radius: 6px !important;
+            font-weight: 700 !important;
+        }
+        div[data-testid="stFileUploader"] button:hover {
+            background-color: #162C46 !important;
         }
 
     </style>
@@ -384,6 +417,28 @@ def fetch_upstox_history(instrument_key, start_date, end_date, token):
         return df, 200
     except Exception as e:
         return pd.DataFrame(), 500
+
+def get_live_price(instrument_key, token):
+    url = "https://api.upstox.com/v2/market-quote/ltp"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+    params = {
+        "instrument_key": instrument_key
+    }
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        quotes = data.get("data", {})
+        if not quotes:
+            return None
+        first_quote = list(quotes.values())[0]
+        return float(first_quote["last_price"])
+    except Exception:
+        return None
 
 # ==========================================
 # 4. UI COMPONENTS & GRAPHS 
@@ -999,10 +1054,16 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                 df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
                                 future_data = df_hist[df_hist.index >= entry_date]
                                 
-                                current_price = float(df_hist.iloc[-1]["Close"])
+                                live_price = get_live_price(inst_key, upstox_token)
+                                if live_price is not None:
+                                    current_price = live_price
+                                else:
+                                    current_price = float(df_hist.iloc[-1]["Close"])
+                                    
                                 ema21 = float(df_hist.iloc[-1]["EMA21"])
                                 trading_days = len(future_data) if not future_data.empty else 1
                                 
+                                profit_loss = current_price - entry_price
                                 return_pct = ((current_price - entry_price) / entry_price) * 100
                                 ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
                                 
@@ -1020,14 +1081,23 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                     ten_day_rule = f"PENDING ({trading_days}/10)"
                                     
                                 results.append({
-                                    "Symbol": symbol, "Entry Date": entry_date.strftime("%d-%m-%Y"),
-                                    "Entry Price": entry_price, "Current Price": current_price,
-                                    "Return %": return_pct, "Trading Days": trading_days,
-                                    "EMA21": ema21, "EMA Status": ema_status, "10 Day Rule": ten_day_rule
+                                    "Symbol": symbol, 
+                                    "Entry Date": entry_date.strftime("%d-%m-%Y"),
+                                    "Entry Price": entry_price, 
+                                    "Current Price": current_price,
+                                    "Profit/Loss": profit_loss,
+                                    "Return %": return_pct, 
+                                    "Trading Days": trading_days,
+                                    "EMA21": ema21, 
+                                    "EMA Status": ema_status, 
+                                    "10 Day Rule": ten_day_rule
                                 })
                                 
                             if not api_failed and results:
                                 res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
+                                
+                                # Enforce specific column order as requested
+                                res_df = res_df[["Symbol", "Entry Date", "Entry Price", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
                                 
                                 def highlight_upstox(row):
                                     styles = [''] * len(row)
@@ -1045,7 +1115,13 @@ with st.spinner("Scanning live markets & syncing with Supabase..."):
                                         
                                     return styles
 
-                                styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({"Entry Price": "₹{:.2f}", "Current Price": "₹{:.2f}", "Return %": "{:.2f}%", "EMA21": "₹{:.2f}"})
+                                styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
+                                    "Entry Price": "₹{:.2f}", 
+                                    "Current Price": "₹{:.2f}", 
+                                    "Profit/Loss": "₹{:.2f}",
+                                    "Return %": "{:.2f}%", 
+                                    "EMA21": "₹{:.2f}"
+                                })
                                 st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
                             elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
             except Exception as e: st.error(f"Error parsing portfolio file: {e}")
