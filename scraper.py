@@ -742,9 +742,9 @@ def run_daily_scraper():
                 pct_str = f"{final_score:.2f}%"
                 
                 if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
-                elif final_score <= 40: trend_label = f"Negative 🔻 {pct_str}"
-                elif final_score <= 60: trend_label = f"Neutral ⚖️ {pct_str}"
-                elif final_score <= 80: trend_label = f"Positive 💚 {pct_str}"
+                elif final_score <= 35: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 50: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 65: trend_label = f"Positive 💚 {pct_str}"
                 else: trend_label = f"Super Positive 🚀 {pct_str}"
                 
                 print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
