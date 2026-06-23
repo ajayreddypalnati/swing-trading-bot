@@ -26,6 +26,10 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700;800&display=swap');
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+        
+        /* HIDE NATIVE STREAMLIT RUNNING INDICATOR */
+        div[data-testid="stStatusWidget"] { visibility: hidden; }
+        
         .block-container { padding-top: 1.5rem; padding-bottom: 0rem; max-width: 98%; }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
@@ -179,11 +183,37 @@ st.markdown("""
             display: none !important; 
         }
         
+        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
+        div[data-testid="stButton"] button {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 2px solid #0B1D30 !important;
+            border-radius: 8px !important;
+            font-weight: 800 !important;
+        }
+        div[data-testid="stButton"] button:hover {
+            background-color: #F4F1E1 !important;
+            color: #0B1D30 !important;
+        }
+        
+        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
+        div[data-testid="stTextInput"] input {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 1px solid #0B1D30 !important;
+        }
+        
         /* Make Number Input values (like 3.00) massive and bold and white background */
         div[data-testid="stNumberInput"] input {
             background-color: #FFFFFF !important;
             font-size: 1.5rem !important;
             font-weight: 800 !important;
+            color: #0B1D30 !important;
+            border: 1px solid #0B1D30 !important;
+        }
+        
+        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
+        div[role="radiogroup"] label {
             color: #0B1D30 !important;
         }
 
@@ -614,9 +644,8 @@ st.markdown(f"""
 # Professional Syncing Loader
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
-    <div style="display: flex; justify-content: center; align-items: center; height: 250px; flex-direction: column;">
-        <div style="font-size: 5rem; animation: pulse-logo 1.5s infinite ease-in-out;">⚡</div>
-        <div style="color: #0B1D30; font-weight: 800; font-size: 1.2rem; margin-top: 15px; letter-spacing: 2px;">SYNCING LIVE DATA</div>
+    <div style="display: flex; justify-content: center; align-items: center; height: 60vh;">
+        <div style="font-size: 8rem; animation: pulse-logo 1.5s infinite ease-in-out;">⚡</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -1002,8 +1031,15 @@ with tab_mom:
 
 # --- 6. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
 with tab_port:
-    st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app will strictly pull your first three columns, regardless of what the headers are named (e.g. Ticker, Entry Date, Entry Price).</span>", unsafe_allow_html=True)
-    
+    port_header_col1, port_header_col2 = st.columns([4, 1])
+    with port_header_col1:
+        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app will strictly pull your first three columns, regardless of what the headers are named (e.g. Ticker, Entry Date, Entry Price).</span>", unsafe_allow_html=True)
+    with port_header_col2:
+        if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.clear()
+            st.rerun()
+            
     col_t1, col_t2 = st.columns([1, 2])
     with col_t1:
         upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
@@ -1164,14 +1200,6 @@ with tab_port:
                         st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
                     elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
         except Exception as e: st.error(f"Error parsing portfolio file: {e}")
-        
-    st.divider()
-    col_btn1, col_btn2 = st.columns([1, 5])
-    with col_btn1:
-        if st.button("🧹 Clear Cache & Reset Data"):
-            st.cache_data.clear()
-            st.session_state.clear()
-            st.rerun()
 
 time.sleep(60)
 st.rerun()
