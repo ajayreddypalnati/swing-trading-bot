@@ -18,23 +18,32 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
+# Initialize portfolio refresh time in session state
+if 'port_refresh_time' not in st.session_state:
+    st.session_state['port_refresh_time'] = "Never"
+
 # ==========================================
 # 1. CSS INJECTION (Premium Navy & Cream Theme + Immersive Tabs)
 # ==========================================
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700;800&display=swap');
+        
+        /* FORCE 80% ZOOM AESTHETIC AND CENTER ALIGNMENT BY DEFAULT */
+        html { zoom: 0.85; } 
+        
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         
         /* HIDE NATIVE STREAMLIT RUNNING INDICATOR */
         div[data-testid="stStatusWidget"] { visibility: hidden; }
         
-        /* 80% ZOOM ALIGNMENT & PADDING */
+        /* RESTORED CENTERED ALIGNMENT CAP */
         .block-container { 
             padding-top: 1.5rem; 
-            padding-bottom: 0rem;  
-            max-width: 98% !important; 
+            padding-bottom: 0rem; 
+            max-width: 1550px !important; 
+            margin: 0 auto !important; 
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
@@ -116,7 +125,7 @@ st.markdown("""
         /* MOBILE GRAPH RESPONSIVENESS */
         @media (max-width: 768px) {
             div.stPlotlyChart svg text {
-                font-size: 9px !important;
+                font-size: 10px !important;
             }
             /* Shift text labels up on mobile to prevent clipping the curve */
             div.stPlotlyChart svg g.textpoint {
@@ -617,7 +626,7 @@ def render_market_cycle_graph(roc_vals):
     # Cream background around the chart, white grid inside, matching the rest of the UI
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
-        yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-10, 135]),
+        yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
         plot_bgcolor='#FFFFFF', paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=60, r=40, t=30, b=60), showlegend=False, height=550 
     )
     
@@ -978,8 +987,10 @@ with tab_leaders:
             
             if uploaded_file is not None:
                 try:
-                    if uploaded_file.name.endswith('.csv'): st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None)
-                    else: st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None, sep='\t')
+                    if uploaded_file.name.endswith('.csv'): 
+                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None)
+                    else: 
+                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
                     
             if 'rebal_port_df' in st.session_state:
@@ -1045,8 +1056,16 @@ with tab_leaders:
 
     # --- 6. UPSTOX PORTFOLIO TRACKER TAB (LAST) ---
     with tab_port:
-        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app will strictly pull your first three columns, regardless of what the headers are named (e.g. Ticker, Entry Date, Entry Price).</span>", unsafe_allow_html=True)
-        
+        port_header_col1, port_header_col2 = st.columns([4, 1])
+        with port_header_col1:
+            st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app will strictly pull your first three columns, regardless of what the headers are named (e.g. Ticker, Entry Date, Entry Price).</span>", unsafe_allow_html=True)
+        with port_header_col2:
+            if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
+                st.cache_data.clear()
+                st.session_state.clear()
+                st.rerun()
+            st.markdown(f"<div style='text-align: right; margin-top: 5px; color: #6B7280; font-size: 0.85rem; font-weight: 600;'>Last Refreshed: {st.session_state.get('port_refresh_time', 'Never')}</div>", unsafe_allow_html=True)
+            
         col_t1, col_t2 = st.columns([1, 2])
         with col_t1:
             upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4")
@@ -1060,6 +1079,7 @@ with tab_leaders:
             if upstox_file is not None:
                 try: 
                     st.session_state['upstox_df'] = pd.read_csv(upstox_file)
+                    st.session_state['port_refresh_time'] = datetime.now(ist).strftime('%m/%y %H:%M')
                 except Exception as e: 
                     st.error(f"Error reading file: {e}")
                     
@@ -1072,7 +1092,6 @@ with tab_leaders:
                 gsheet_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed", key="tracker_url")
             with col_gs2:
                 load_clicked = st.button("🔄 Load / Refresh Sheet")
-                st.markdown(f"<div style='margin-top: 5px; color: #6B7280; font-size: 0.85rem; font-weight: 600;'>Last Refreshed: {datetime.now(ist).strftime('%m/%y %H:%M')}</div>", unsafe_allow_html=True)
                 
             if load_clicked and gsheet_url:
                 try:
@@ -1085,6 +1104,7 @@ with tab_leaders:
                             
                             export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
                             st.session_state['upstox_sheet_df'] = pd.read_csv(export_url)
+                            st.session_state['port_refresh_time'] = datetime.now(ist).strftime('%m/%y %H:%M')
                         else: st.error("Could not extract Sheet ID.")
                     else: st.error("Invalid Google Sheets URL format.")
                 except Exception as e: st.error(f"Error loading Google Sheet: {e}. Check if the link is public.")
@@ -1106,105 +1126,109 @@ with tab_leaders:
                     col_date = 'Entry Date'
                     col_price = 'Entry Price'
                     
-                    inst_dict = get_instrument_mapping()
-                    if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
-                    else:
-                        results = []
-                        today_str = datetime.now(ist).strftime("%Y-%m-%d")
-                        api_failed = False
-                        
-                        for _, row in port_df.iterrows():
-                            symbol = str(row[col_stock]).strip().upper()
-                            if symbol in ['NAN', 'NONE', '']: continue
-                            try:
-                                entry_date = pd.to_datetime(row[col_date], dayfirst=True).tz_localize(None)
-                                entry_price = float(row[col_price])
-                            except: continue
-                                
-                            if symbol not in inst_dict: continue
-                                
-                            inst_key = inst_dict[symbol]
-                            start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
-                            df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
+                    with st.spinner("Fetching data from Upstox API..."):
+                        inst_dict = get_instrument_mapping()
+                        if "error" in inst_dict: st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
+                        else:
+                            results = []
+                            today_str = datetime.now(ist).strftime("%Y-%m-%d")
+                            api_failed = False
                             
-                            if status_code != 200:
-                                api_failed = True
-                                st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
-                                break
-                                
-                            if df_hist.empty: continue
-                                
-                            df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
-                            future_data = df_hist[df_hist.index >= entry_date]
-                            
-                            current_price = float(df_hist.iloc[-1]["Close"])
-                            ema21 = float(df_hist.iloc[-1]["EMA21"])
-                            trading_days = len(future_data) if not future_data.empty else 1
-                            
-                            profit_loss = current_price - entry_price
-                            return_pct = ((current_price - entry_price) / entry_price) * 100
-                            ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
-                            
-                            if trading_days >= 10:
+                            for _, row in port_df.iterrows():
+                                symbol = str(row[col_stock]).strip().upper()
+                                if symbol in ['NAN', 'NONE', '']: continue
                                 try:
-                                    day10_close = float(future_data.iloc[9]["Close"])
-                                    day10_return = ((day10_close - entry_price) / entry_price) * 100
-                                    if day10_return >= 5:
-                                        ten_day_rule = f"PASS ({day10_return:.2f}%)"
-                                    else:
-                                        ten_day_rule = f"EXIT ({day10_return:.2f}%)"
-                                except IndexError:
-                                    ten_day_rule = f"PENDING ({trading_days}/10)"
-                            else:
-                                ten_day_rule = f"PENDING ({trading_days}/10)"
-                                
-                            results.append({
-                                "Symbol": symbol, "Entry Date": entry_date.strftime("%d-%m-%Y"),
-                                "Entry Price": entry_price, "Current Price": current_price,
-                                "Profit/Loss": profit_loss, "Return %": return_pct, "Trading Days": trading_days,
-                                "EMA21": ema21, "EMA Status": ema_status, "10 Day Rule": ten_day_rule
-                            })
-                            
-                        if not api_failed and results:
-                            res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
-                            
-                            # Enforce specific column order as requested
-                            res_df = res_df[["Symbol", "Entry Date", "Entry Price", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
-                            
-                            def highlight_upstox(row):
-                                styles = [''] * len(row)
-                                if row['EMA Status'] == 'BELOW EMA21' or 'EXIT' in str(row['10 Day Rule']):
-                                    styles = ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
-                                
-                                try:
-                                    ret_idx = list(row.index).index('Return %')
-                                    if float(row['Return %']) > 0:
-                                        styles[ret_idx] = 'background-color: rgba(187, 247, 208, 0.6); font-weight: 800;'
-                                    elif float(row['Return %']) < 0:
-                                        styles[ret_idx] = 'background-color: rgba(254, 202, 202, 0.6); font-weight: 800;'
-                                except:
-                                    pass
+                                    entry_date = pd.to_datetime(row[col_date], dayfirst=True).tz_localize(None)
+                                    entry_price = float(row[col_price])
+                                except: continue
                                     
-                                return styles
+                                if symbol not in inst_dict: continue
+                                    
+                                inst_key = inst_dict[symbol]
+                                start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
+                                df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
+                                
+                                if status_code != 200:
+                                    api_failed = True
+                                    st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
+                                    break
+                                    
+                                if df_hist.empty: continue
+                                    
+                                df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
+                                future_data = df_hist[df_hist.index >= entry_date]
+                                
+                                live_price = get_live_price(inst_key, upstox_token)
+                                if live_price is not None:
+                                    current_price = live_price
+                                else:
+                                    current_price = float(df_hist.iloc[-1]["Close"])
+                                    
+                                ema21 = float(df_hist.iloc[-1]["EMA21"])
+                                trading_days = len(future_data) if not future_data.empty else 1
+                                
+                                profit_loss = current_price - entry_price
+                                return_pct = ((current_price - entry_price) / entry_price) * 100
+                                ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
+                                
+                                if trading_days >= 10:
+                                    try:
+                                        day10_close = float(future_data.iloc[9]["Close"])
+                                        day10_return = ((day10_close - entry_price) / entry_price) * 100
+                                        if day10_return >= 5:
+                                            ten_day_rule = f"PASS ({day10_return:.2f}%)"
+                                        else:
+                                            ten_day_rule = f"EXIT ({day10_return:.2f}%)"
+                                    except IndexError:
+                                        ten_day_rule = f"PENDING ({trading_days}/10)"
+                                else:
+                                    ten_day_rule = f"PENDING ({trading_days}/10)"
+                                    
+                                results.append({
+                                    "Symbol": symbol, 
+                                    "Entry Date": entry_date.strftime("%d-%m-%Y"),
+                                    "Entry Price": entry_price, 
+                                    "Current Price": current_price,
+                                    "Profit/Loss": profit_loss,
+                                    "Return %": return_pct, 
+                                    "Trading Days": trading_days,
+                                    "EMA21": ema21, 
+                                    "EMA Status": ema_status, 
+                                    "10 Day Rule": ten_day_rule
+                                })
+                                
+                            if not api_failed and results:
+                                res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
+                                
+                                # Enforce specific column order as requested
+                                res_df = res_df[["Symbol", "Entry Date", "Entry Price", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
+                                
+                                def highlight_upstox(row):
+                                    styles = [''] * len(row)
+                                    if row['EMA Status'] == 'BELOW EMA21' or 'EXIT' in str(row['10 Day Rule']):
+                                        styles = ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
+                                    
+                                    try:
+                                        ret_idx = list(row.index).index('Return %')
+                                        if float(row['Return %']) > 0:
+                                            styles[ret_idx] = 'background-color: rgba(187, 247, 208, 0.6); font-weight: 800;'
+                                        elif float(row['Return %']) < 0:
+                                            styles[ret_idx] = 'background-color: rgba(254, 202, 202, 0.6); font-weight: 800;'
+                                    except:
+                                        pass
+                                        
+                                    return styles
 
-                            styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
-                                "Entry Price": "₹{:.2f}", 
-                                "Current Price": "₹{:.2f}", 
-                                "Profit/Loss": "₹{:.2f}",
-                                "Return %": "{:.2f}%", 
-                                "EMA21": "₹{:.2f}"
-                            })
-                            st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
-                        elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
+                                styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
+                                    "Entry Price": "₹{:.2f}", 
+                                    "Current Price": "₹{:.2f}", 
+                                    "Profit/Loss": "₹{:.2f}",
+                                    "Return %": "{:.2f}%", 
+                                    "EMA21": "₹{:.2f}"
+                                })
+                                st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
+                            elif not api_failed: st.info("No valid data processed. Check if tickers match NSE format.")
             except Exception as e: st.error(f"Error parsing portfolio file: {e}")
-            
-        st.divider()
-        col_btn1, col_btn2 = st.columns([1, 5])
-        with col_btn1:
-            if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
-                st.cache_data.clear()
-                st.session_state.clear()
-                st.rerun()
 
 time.sleep(60)
 st.rerun()
