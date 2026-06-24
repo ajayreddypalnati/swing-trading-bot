@@ -533,7 +533,7 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
 
             # NEW LOGIC: Strict Emoji Rules first
             if "📉" in str(nse_breadth_str):
-                action_suffix = " - Stop Trading"
+                action_suffix = " - No Trading"
             elif "📈" in str(nse_breadth_str):
                 action_suffix = " - Trade"
             else:
@@ -541,7 +541,7 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
                 if live_val > 50.0:
                     action_suffix = " - Trade"
                 else:
-                    action_suffix = " - Stop Trading"
+                    action_suffix = " - No Trading"
 
             # Allocate % based purely on NSE Base percentage
             if val <= 20.0: alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
