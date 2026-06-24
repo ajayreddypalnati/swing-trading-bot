@@ -30,7 +30,7 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700;800&display=swap');
         
         /* FORCE 80% ZOOM AESTHETIC AND CENTER ALIGNMENT BY DEFAULT */
-        html { zoom: 0.85; } 
+        html { zoom: 1; } 
         
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
@@ -42,8 +42,7 @@ st.markdown("""
         .block-container { 
             padding-top: 1.5rem; 
             padding-bottom: 0rem; 
-            max-width: 1550px !important; 
-            margin: 0 auto !important; 
+            max-width: 98%; 
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
