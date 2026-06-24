@@ -33,9 +33,8 @@ st.markdown("""
         /* 80% ZOOM ALIGNMENT & PADDING */
         .block-container { 
             padding-top: 1.5rem; 
-            padding-bottom: 0rem; 
-            max-width: 1600px !important; 
-            margin: 0 auto !important; 
+            padding-bottom: 0rem;  
+            max-width: 98% !important; 
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
