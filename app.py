@@ -30,7 +30,7 @@ st.markdown("""
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght=400;600;700;800&display=swap');
         
         /* FORCE 80% ZOOM AESTHETIC AND CENTER ALIGNMENT BY DEFAULT */
-        html { zoom: 1; } 
+        html { zoom: 0.85; } 
         
         html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
@@ -42,7 +42,8 @@ st.markdown("""
         .block-container { 
             padding-top: 1.5rem; 
             padding-bottom: 0rem; 
-            max-width: 98%; 
+            max-width: 1550px !important; 
+            margin: 0 auto !important; 
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
@@ -667,14 +668,10 @@ st.markdown(f"""
 # Professional Syncing Loader (Fixed Overlay to prevent shifting layout)
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
-    loader_placeholder.markdown("""
-<div style="display:flex;
-justify-content:center;
-align-items:center;
-height:60vh;">
-    <div style="font-size:8rem;
-    animation:pulse-logo 1.5s infinite ease-in-out;">⚡</div>
-</div>
+    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(244, 241, 225, 0.85); backdrop-filter: blur(8px); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+        <div style="font-size: 5rem; animation: pulse-logo 1.5s infinite ease-in-out;">⚡</div>
+        <div style="color: #0B1D30; font-weight: 800; font-size: 1.2rem; margin-top: 15px; letter-spacing: 2px;">SYNCING LIVE DATA</div>
+    </div>
 """, unsafe_allow_html=True)
 
 data = get_combined_data()
