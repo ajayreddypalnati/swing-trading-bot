@@ -389,7 +389,7 @@ def fetch_market_breadth_from_gsheets():
         ts = int(time.time())
         url = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv&t={ts}"
         df = pd.read_csv(url, header=None)
-        market_breadth_value = df.iloc[5, 7] 
+        market_breadth_value = df.iloc[5, 21] 
         return "N/A" if pd.isna(market_breadth_value) else str(market_breadth_value)
     except Exception:
         return "N/A"
