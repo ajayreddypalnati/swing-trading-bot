@@ -102,13 +102,14 @@ st.markdown("""
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* TABLE STYLING - Increased Font Size */
-        .scrollable-table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.5rem; }
-        .scrollable-table-container table { width: 100%; min-width: 900px; border-collapse: collapse; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: #FFFFFF; border: 2px solid #0B1D30;}
-        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 1.05rem !important; padding: 15px !important; white-space: nowrap; font-weight: 700 !important;}
-        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; white-space: nowrap; font-size: 1.0rem !important; }
+        /* TABLE STYLING */
+        .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow: hidden; border-radius: 8px;}
+        .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 2px solid #0B1D30; overflow: hidden;}
+        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 1.05rem !important; padding: 15px !important; font-weight: 700 !important;}
+        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; font-size: 1.0rem !important; }
         
-        .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: #FFFFFF; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden;}
+        .sleek-table-wrapper { width: 100%; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden; background: #FFFFFF; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: transparent; }
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; font-size: 1.05rem !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); font-size: 1.0rem !important; }
         
@@ -670,7 +671,7 @@ st.markdown(f"""
 # Professional Syncing Loader (Fixed Overlay to prevent shifting layout)
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
-    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(244, 241, 225, 0.85); backdrop-filter: blur(8px); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(244, 241, 225, 0.65); backdrop-filter: blur(3px); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;">
         <div style="font-size: 5rem; animation: pulse-logo 1.5s infinite ease-in-out;">⚡</div>
         <div style="color: #0B1D30; font-weight: 800; font-size: 1.2rem; margin-top: 15px; letter-spacing: 2px;">SYNCING LIVE DATA</div>
     </div>
@@ -844,7 +845,7 @@ with tab_leaders:
             if 'Avg 1D Return %' in top_sec.columns: top_sec['Avg 1D Return %'] = top_sec['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
             
             top_sec = top_sec.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-            html = "<table class='sleek-table'><thead><tr>"
+            html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
             for col in top_sec.columns: html += f"<th>{col}</th>"
             html += "</tr></thead><tbody>"
             for idx, row in top_sec.iterrows():
@@ -855,7 +856,7 @@ with tab_leaders:
                     elif idx in top_2_sec_idx and c == 'Sector': html += f"<td><b>{val}</b></td>"
                     else: html += f"<td>{val}</td>"
                 html += "</tr>"
-            html += "</tbody></table>"
+            html += "</tbody></table></div>"
             st.markdown(html, unsafe_allow_html=True)
             
         with lead_col2:
@@ -870,7 +871,7 @@ with tab_leaders:
             if 'Avg 1D Return %' in top_ind.columns: top_ind['Avg 1D Return %'] = top_ind['Avg 1D Return %'].astype(float).map("{:.2f}%".format)
             
             top_ind = top_ind.rename(columns={'ATH_Stocks': 'ATH Count', 'Avg 1D Return %': '1D Avg %'})
-            html = "<table class='sleek-table'><thead><tr>"
+            html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
             for col in top_ind.columns: html += f"<th>{col}</th>"
             html += "</tr></thead><tbody>"
             for idx, row in top_ind.iterrows():
@@ -881,7 +882,7 @@ with tab_leaders:
                     elif idx in top_4_ind_idx and c == 'Broad Industry': html += f"<td><b>{val}</b></td>"
                     else: html += f"<td>{val}</td>"
                 html += "</tr>"
-            html += "</tbody></table>"
+            html += "</tbody></table></div>"
             st.markdown(html, unsafe_allow_html=True)
 
 # --- 4. ETF SCREENER TAB ---
