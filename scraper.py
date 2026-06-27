@@ -682,12 +682,38 @@ def run_daily_scraper():
                                     today_rounded_pct = round(score, 2)
                                     
                                     if today_rounded_pct == last_logged_pct:
-                                        return_variance = float(valid_returns[col_chg].var())
+                                        print("   ⚠️ Breadth match detected. Initiating deep cross-verification on individual stock prices...")
                                         
-                                        if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
+                                        try:
+                                            # 1. Pull current prices for a sample of stocks from the existing database
+                                            query_verify = text(f'SELECT "Name", "{cmp_col}" FROM stock_master WHERE "{cmp_col}" IS NOT NULL LIMIT 15')
+                                            with engine.connect() as conn:
+                                                db_sample = pd.read_sql(query_verify, conn)
+                                            
+                                            if not db_sample.empty and cmp_col:
+                                                # 2. Match database values with today's live scraped dataframe
+                                                verify_df = pd.merge(db_sample, merged_df[['Name', cmp_col]], on='Name', suffixes=('_db', '_live'))
+                                                
+                                                # 3. Count how many stocks show absolutely zero price movement
+                                                identical_prices = (verify_df[f'{cmp_col}_db'] == verify_df[f'{cmp_col}_live']).sum()
+                                                total_samples = len(verify_df)
+                                                
+                                                # If more than 90% of the sample group shows identical pricing down to the paisa
+                                                if total_samples > 0 and (identical_prices / total_samples) >= 0.90:
+                                                    is_nse_holiday = True
+                                                    print(f"   🛑 HOLIDAY CONFIRMED: Checked {total_samples} stocks; {identical_prices} have completely identical prices.")
+                                                    print("      🔕 Stale data validated. Skipping timeline insertion.")
+                                                else:
+                                                    print(f"   🚀 FALSE POSITIVE OVERRIDDEN: Market Breadth matched perfectly, but {total_samples - identical_prices}/{total_samples} sampled stocks show price changes. Proceeding to log...")
+                                            else:
+                                                # If the DB sample cannot be pulled, default to True to protect data integrity
+                                                is_nse_holiday = True
+                                                print("   ⚠️ Verification sample empty. Defaulting to holiday lock to protect data integrity.")
+                                                
+                                        except Exception as verify_err:
+                                            # Safeguard: if the check fails due to an unexpected DB issue, assume holiday to avoid bad logs
                                             is_nse_holiday = True
-                                            print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
-                                            print("      🔕 Return analysis confirms 0% market variance. Skipping timeline insertion.")
+                                            print(f"   ⚠️ Secondary verification failed ({verify_err}). Defaulting to holiday lock.")
                         except Exception as e:
                             print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
                         
