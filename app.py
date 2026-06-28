@@ -102,13 +102,13 @@ st.markdown("""
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* TABLE STYLING */
-        .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow: hidden; border-radius: 8px;}
+        /* TABLE STYLING - UPDATED FOR MOBILE SCROLLING */
+        .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;}
         .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 2px solid #0B1D30; overflow: hidden;}
         .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 1.05rem !important; padding: 15px !important; font-weight: 700 !important;}
         .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; font-size: 1.0rem !important; }
         
-        .sleek-table-wrapper { width: 100%; border: 2px solid #0B1D30; border-radius: 8px; overflow: hidden; background: #FFFFFF; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .sleek-table-wrapper { width: 100%; border: 2px solid #0B1D30; border-radius: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; background: #FFFFFF; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: transparent; }
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; font-size: 1.05rem !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); font-size: 1.0rem !important; }
@@ -657,7 +657,7 @@ current_date = datetime.now(ist).strftime('%d %b %Y')
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
-            <div class="header-title">⚡ 9-EMA Screener</div>
+            <div class="header-title"><a href="/" target="_self" style="text-decoration: none; color: inherit; cursor: pointer;">⚡ 9-EMA Screener</a></div>
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
