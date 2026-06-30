@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
 from st_aggrid import AgGrid, GridOptionsBuilder
 from st_copy_to_clipboard import st_copy_to_clipboard
+import streamlit.components.v1 as components
 import io
 import gzip
 
@@ -817,23 +818,9 @@ tab_main, tab_cycle, tab_leaders, tab_etf, tab_mom, tab_port = st.tabs([
 
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
+
     if not display_df.empty:
 
-        # ==========================================
-        # COPY ALL SYMBOLS
-        # ==========================================
-        copy_str = ",".join(display_df["Symbol"].astype(str).tolist())
-
-        st_copy_to_clipboard(
-            copy_str,
-            "📋 Copy All Symbols (TradingView)"
-        )
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ==========================================
-        # TABLE FORMATTING
-        # ==========================================
         styled_df = (
             display_df.style
             .hide(axis="index")
@@ -853,9 +840,35 @@ with tab_main:
 
         html_table = styled_df.to_html()
 
-        # ==========================================
-        # CONVERT SYMBOLS TO TRADINGVIEW LINKS
-        # ==========================================
+        # ---------------------------------------
+        # COPY BUTTON IN HEADER
+        # ---------------------------------------
+        copy_str = ",".join(display_df["Symbol"].astype(str).tolist())
+
+        new_header = """
+        Symbol
+        <span id="copySymbols"
+              title="Copy all symbols"
+              style="
+                    cursor:pointer;
+                    margin-left:5px;
+                    font-size:15px;
+                    user-select:none;
+              ">
+            📋
+        </span>
+        """
+
+        html_table = re.sub(
+            r'(<th[^>]*>)(Symbol)(</th>)',
+            rf'\1{new_header}\3',
+            html_table,
+            count=1
+        )
+
+        # ---------------------------------------
+        # TradingView Links
+        # ---------------------------------------
         for _, r in display_df.iterrows():
 
             sym = str(r["Symbol"])
@@ -868,8 +881,10 @@ with tab_main:
 
             link = (
                 f'<a href="{url}" target="_blank" '
-                f'style="color: inherit; text-decoration: none; '
-                f'border-bottom: 1px dashed #0B1D30; font-weight: 600;">'
+                f'style="color:inherit;'
+                f'text-decoration:none;'
+                f'border-bottom:1px dashed #0B1D30;'
+                f'font-weight:600;">'
                 f'{sym}</a>'
             )
 
@@ -879,12 +894,74 @@ with tab_main:
                 html_table
             )
 
-        # ==========================================
-        # DISPLAY TABLE
-        # ==========================================
-        st.markdown(
-            f'<div class="scrollable-table-container">{html_table}</div>',
-            unsafe_allow_html=True
+        components.html(
+            f"""
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<style>
+
+body {{
+    margin:0;
+    background:transparent;
+}}
+
+.scrollable-table-container {{
+    overflow-x:auto;
+}}
+
+table {{
+    width:100%;
+}}
+
+#copySymbols:hover {{
+    transform:scale(1.15);
+}}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="scrollable-table-container">
+
+{html_table}
+
+</div>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function() {{
+
+    const btn=document.getElementById("copySymbols");
+
+    if(btn){{
+        btn.onclick=function(){{
+            navigator.clipboard.writeText("{copy_str}");
+
+            btn.innerHTML="✅";
+
+            setTimeout(function(){{
+                btn.innerHTML="📋";
+            }},1000);
+        }};
+    }}
+
+}});
+
+</script>
+
+</body>
+
+</html>
+
+""",
+            height=720,
+            scrolling=True,
         )
 
     else:
