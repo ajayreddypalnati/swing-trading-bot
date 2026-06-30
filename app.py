@@ -816,18 +816,24 @@ tab_main, tab_cycle, tab_leaders, tab_etf, tab_mom, tab_port = st.tabs([
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
     if not display_df.empty:
-        # Added formatting for Mar Cap (Cr)
+        # UPDATED FORMATTING: Removed decimals and 'Cr' extension
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "{:.0f}", "Turnover (Cr)": "{:.0f}", "Volume": "{:,.0f}",
-            "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
-            "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
+            "Close": "₹{:.2f}", 
+            "% Change": "{:.2f}%", 
+            "Mar Cap (Cr)": "{:.0f}", 
+            "Turnover (Cr)": "{:.0f}", 
+            "Volume": "{:,.0f}",
+            "Momentum Rank": lambda x: safe_int(x), 
+            "Priority": lambda x: format_stars(x),
+            "Sector Rank": lambda x: safe_int(x, "#"), 
+            "Ind. Rank": lambda x: safe_int(x, "#"),
         })
         
         html_table = styled_df.to_html()
         
-        # 1. Inject Copy Button in Header
+        # 1. Inject One-Click Notepad Copy Button in Header
         copy_str = ",".join(display_df['Symbol'].tolist())
-        new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
+        new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\').then(() => alert(\'Symbols copied to clipboard!\'))" style="cursor:pointer; font-size: 1.2em; margin-left: 8px;" title="Copy all symbols for TradingView">📋</span>'
         html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
         
         # 2. Convert Symbols to TradingView Links
@@ -839,7 +845,6 @@ with tab_main:
             else:
                 url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
             link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-            # Strict replacement of exact cell contents to prevent matching accidental substrings
             html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
             
         st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
