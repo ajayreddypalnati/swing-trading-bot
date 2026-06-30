@@ -102,11 +102,11 @@ st.markdown("""
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* TABLE STYLING - UPDATED FOR MOBILE SCROLLING */
+        /* TABLE STYLING - MODIFIED TO ABSORB NEW COLUMN AND AVOID SCROLLING */
         .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;}
         .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 2px solid #0B1D30; overflow: hidden;}
-        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 1.05rem !important; padding: 15px !important; font-weight: 700 !important;}
-        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 12px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; font-size: 1.0rem !important; }
+        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 0.95rem !important; padding: 10px 5px !important; font-weight: 700 !important;}
+        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 8px 5px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; font-size: 0.95rem !important; }
         
         .sleek-table-wrapper { width: 100%; border: 2px solid #0B1D30; border-radius: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; background: #FFFFFF; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: transparent; }
@@ -753,7 +753,7 @@ if data:
     df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
     df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
 
-    for col in ['sec_rank', 'ind_rank', 'relative_score']:
+    for col in ['market_cap', 'sec_rank', 'ind_rank', 'relative_score']:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
 
     df['Priority'] = np.nan
@@ -769,10 +769,11 @@ if data:
         df.loc[p4, 'Priority'] = 4
         df.loc[p5, 'Priority'] = 5
 
-    display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+    # Added market_cap exactly after % Change
+    display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "market_cap", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
     display_df = df[[c for c in display_cols if c in df.columns]].copy()
     display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
-    display_df = display_df.rename(columns={"band": "Band", "sector": "Sector", "sec_rank": "Sector Rank", "broad_industry": "Industry", "ind_rank": "Ind. Rank", "relative_score": "Momentum Rank"})
+    display_df = display_df.rename(columns={"band": "Band", "market_cap": "Mar Cap (Cr)", "sector": "Sector", "sec_rank": "Sector Rank", "broad_industry": "Industry", "ind_rank": "Ind. Rank", "relative_score": "Momentum Rank"})
     if 'Band' in display_df.columns: display_df['Band'] = display_df['Band'].replace("", "-").fillna("-")
 
 def highlight_main_table(row):
@@ -815,12 +816,33 @@ tab_main, tab_cycle, tab_leaders, tab_etf, tab_mom, tab_port = st.tabs([
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
     if not display_df.empty:
+        # Added formatting for Mar Cap (Cr)
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
+            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "₹{:,.2f} Cr", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
             "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
             "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
         })
-        st.markdown(f'<div class="scrollable-table-container">{styled_df.to_html()}</div>', unsafe_allow_html=True)
+        
+        html_table = styled_df.to_html()
+        
+        # 1. Inject Copy Button in Header
+        copy_str = ", ".join(display_df['Symbol'].tolist())
+        new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
+        html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
+        
+        # 2. Convert Symbols to TradingView Links
+        for _, r in display_df.iterrows():
+            sym = str(r['Symbol'])
+            exch = str(r['Exchange']).upper()
+            if 'NSE' in exch:
+                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+            else:
+                url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
+            link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+            # Strict replacement of exact cell contents to prevent matching accidental substrings
+            html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
+            
+        st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
     else: 
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
