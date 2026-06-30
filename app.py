@@ -11,6 +11,7 @@ import warnings
 from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
 from st_aggrid import AgGrid, GridOptionsBuilder
+from st_copy_to_clipboard import st_copy_to_clipboard
 import io
 import gzip
 
