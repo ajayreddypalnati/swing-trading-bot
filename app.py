@@ -10,9 +10,6 @@ import re
 import warnings
 from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
-from st_aggrid import AgGrid, GridOptionsBuilder
-from st_copy_to_clipboard import st_copy_to_clipboard
-import streamlit.components.v1 as components
 import io
 import gzip
 
@@ -818,153 +815,35 @@ tab_main, tab_cycle, tab_leaders, tab_etf, tab_mom, tab_port = st.tabs([
 
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
-
     if not display_df.empty:
-
-        styled_df = (
-            display_df.style
-            .hide(axis="index")
-            .apply(highlight_main_table, axis=1)
-            .format({
-                "Close": "₹{:.2f}",
-                "% Change": "{:.2f}%",
-                "Mar Cap (Cr)": "{:.0f}",
-                "Turnover (Cr)": "{:.0f}",
-                "Volume": "{:,.0f}",
-                "Momentum Rank": lambda x: safe_int(x),
-                "Priority": lambda x: format_stars(x),
-                "Sector Rank": lambda x: safe_int(x, "#"),
-                "Ind. Rank": lambda x: safe_int(x, "#"),
-            })
-        )
-
+        # Added formatting for Mar Cap (Cr)
+        styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
+            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "{:.0f}", "Turnover (Cr)": "{:.0f}", "Volume": "{:,.0f}",
+            "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
+            "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
+        })
+        
         html_table = styled_df.to_html()
-
-        # ---------------------------------------
-        # COPY BUTTON IN HEADER
-        # ---------------------------------------
-        copy_str = ",".join(display_df["Symbol"].astype(str).tolist())
-
-        new_header = """
-        Symbol
-        <span id="copySymbols"
-              title="Copy all symbols"
-              style="
-                    cursor:pointer;
-                    margin-left:5px;
-                    font-size:15px;
-                    user-select:none;
-              ">
-            📋
-        </span>
-        """
-
-        html_table = re.sub(
-            r'(<th[^>]*>)(Symbol)(</th>)',
-            rf'\1{new_header}\3',
-            html_table,
-            count=1
-        )
-
-        # ---------------------------------------
-        # TradingView Links
-        # ---------------------------------------
+        
+        # 1. Inject Copy Button in Header
+        copy_str = ",".join(display_df['Symbol'].tolist())
+        new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
+        html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
+        
+        # 2. Convert Symbols to TradingView Links
         for _, r in display_df.iterrows():
-
-            sym = str(r["Symbol"])
-            exch = str(r["Exchange"]).upper()
-
-            if "NSE" in exch:
+            sym = str(r['Symbol'])
+            exch = str(r['Exchange']).upper()
+            if 'NSE' in exch:
                 url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
             else:
                 url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
-
-            link = (
-                f'<a href="{url}" target="_blank" '
-                f'style="color:inherit;'
-                f'text-decoration:none;'
-                f'border-bottom:1px dashed #0B1D30;'
-                f'font-weight:600;">'
-                f'{sym}</a>'
-            )
-
-            html_table = re.sub(
-                rf'(<td[^>]*>)({re.escape(sym)})(</td>)',
-                rf'\1{link}\3',
-                html_table
-            )
-
-        components.html(
-            f"""
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<style>
-
-body {{
-    margin:0;
-    background:transparent;
-}}
-
-.scrollable-table-container {{
-    overflow-x:auto;
-}}
-
-table {{
-    width:100%;
-}}
-
-#copySymbols:hover {{
-    transform:scale(1.15);
-}}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="scrollable-table-container">
-
-{html_table}
-
-</div>
-
-<script>
-
-document.addEventListener("DOMContentLoaded", function() {{
-
-    const btn=document.getElementById("copySymbols");
-
-    if(btn){{
-        btn.onclick=function(){{
-            navigator.clipboard.writeText("{copy_str}");
-
-            btn.innerHTML="✅";
-
-            setTimeout(function(){{
-                btn.innerHTML="📋";
-            }},1000);
-        }};
-    }}
-
-}});
-
-</script>
-
-</body>
-
-</html>
-
-""",
-            height=720,
-            scrolling=True,
-        )
-
-    else:
+            link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+            # Strict replacement of exact cell contents to prevent matching accidental substrings
+            html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
+            
+        st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
+    else: 
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
 # --- 2. MARKET CYCLE TAB ---
