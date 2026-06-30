@@ -818,7 +818,7 @@ with tab_main:
     if not display_df.empty:
         # Added formatting for Mar Cap (Cr)
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "₹{:,.2f} Cr", "Turnover (Cr)": "₹{:.2f} Cr", "Volume": "{:,.0f}",
+            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "{:.0f}", "Turnover (Cr)": "{:.0f}", "Volume": "{:,.0f}",
             "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
             "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
         })
@@ -826,7 +826,7 @@ with tab_main:
         html_table = styled_df.to_html()
         
         # 1. Inject Copy Button in Header
-        copy_str = ", ".join(display_df['Symbol'].tolist())
+        copy_str = ",".join(display_df['Symbol'].tolist())
         new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
         html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
         
@@ -963,7 +963,7 @@ with tab_etf:
                     styles.append(cell_style)
                 return styles
                 
-            styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:,.2f}", 'Chg %': "{:.2f}%"})
+            styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:.0f}", 'Chg %': "{:.2f}%"})
             st.markdown(f'<div class="scrollable-table-container">{styled_etf.to_html()}</div>', unsafe_allow_html=True)
         else: st.info("No ETFs match the criteria at the moment.")
     else: st.warning("ETF data is currently empty or failed to load.")
@@ -1000,7 +1000,7 @@ with tab_mom:
             display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
             display_mom['Band'] = display_mom['Band'].fillna("-")
             
-            styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:,.2f}", 'Turnover (Cr)': "{:,.2f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
+            styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:.0f}", 'Turnover (Cr)': "{:.0f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
             st.markdown(f'<div class="scrollable-table-container">{styled_mom.to_html()}</div>', unsafe_allow_html=True)
         else: st.info("No stocks match the Momentum Screener criteria at the moment.")
             
