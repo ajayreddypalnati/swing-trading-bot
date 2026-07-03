@@ -192,6 +192,27 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
             
             microcap_df = pd.merge(microcap_df, stock_master_df[existing_cols], on='Name', how='left')
             print("   ✅ VLOOKUP completed for Microcap data.")
+
+            # Calculate Value Score rankings
+            print("   🧮 Calculating Value Score rankings...")
+            col_div = next((c for c in microcap_df.columns if 'div' in str(c).lower() and 'yld' in str(c).lower()), None)
+            col_roce = next((c for c in microcap_df.columns if 'roce' in str(c).lower()), None)
+            col_ey = next((c for c in microcap_df.columns if 'earnings yield' in str(c).lower()), None)
+            col_cmpbv = next((c for c in microcap_df.columns if 'cmp' in str(c).lower() and 'bv' in str(c).lower()), None)
+
+            cols_to_rank = [col for col in [col_div, col_roce, col_ey, col_cmpbv] if col is not None]
+            
+            if cols_to_rank:
+                value_score_series = pd.Series(0.0, index=microcap_df.index)
+                for col in cols_to_rank:
+                    microcap_df[col] = pd.to_numeric(microcap_df[col], errors='coerce')
+                    # Highest value = Rank 1
+                    col_rank = microcap_df[col].rank(ascending=False, method='min', na_option='bottom')
+                    value_score_series += (col_rank * 0.25)
+                
+                microcap_df['Value score'] = value_score_series
+                microcap_df = microcap_df.sort_values(by='Value score', ascending=True)
+                print("   ✅ Value Score computed and sheet sorted by Lowest Score.")
             
             save_db_with_retry(microcap_df, "Nifty_Microcap_250_Index", engine, if_exists="replace", index=False)
             print("   ☁️ Successfully pushed 'Nifty_Microcap_250_Index' to Supabase.")
