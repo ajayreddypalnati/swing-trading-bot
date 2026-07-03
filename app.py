@@ -375,7 +375,6 @@ def fetch_database_reference(cache_key):
                 st.warning(f"⚠️ SQL Error fetching ETF Screener: {e}")
                 etf_df = pd.DataFrame()
                 
-            # NEW: US ETF and Value Screener DB pulls
             try:
                 us_etf_df = pd.read_sql(text('SELECT * FROM "USA_ETF_Screener"'), conn)
             except Exception:
@@ -572,7 +571,6 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
         return "N/A", "#FFFFFF"
 
 def create_metric_card(title, value, bg_color):
-    # Dynamically scales down the font size if the text is long, and enforces equal rigid heights across all 4 boxes
     val_size = "1.35rem" if len(str(value)) > 20 else "1.65rem"
     return f"""
     <div style="background: {bg_color}; border-radius: 12px; padding: 1.2rem 1.5rem; text-align: left; border: 2px solid #0B1D30; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 115px; display: flex; flex-direction: column; justify-content: center;">
@@ -595,7 +593,6 @@ def render_market_cycle_graph(roc_vals):
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
 
-    # Evaluates proximity to the stage using strict midpoints 
     if trend_dir == "up":
         dot_x = np.interp(roc_val, [0, 20, 40, 60, 100, 150], [0, 4, 8, 12, 16, 20])
         if roc_val <= 10: stage, note = "Disbelief", "This rally will fail like the others."
@@ -637,7 +634,6 @@ def render_market_cycle_graph(roc_vals):
     fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
     fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
-    # Cream background around the chart, white grid inside, matching the rest of the UI
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
@@ -1147,8 +1143,32 @@ with tab_screeners:
     with sub_val:
         if not micro_df.empty:
             m_df = micro_df.copy()
-            m_df['Value score'] = pd.to_numeric(m_df['Value score'], errors='coerce')
-            m_df['Band'] = m_df['Band'].astype(str).str.strip()
+            
+            # 1. DYNAMICALLY RENAME COLUMNS IMMEDIATELY to prevent invisible whitespace KeyErrors
+            c_tick = next((c for c in m_df.columns if 'ticker' in str(c).lower()), None)
+            c_price = next((c for c in m_df.columns if 'cmp' in str(c).lower() and 'rs' in str(c).lower()), None)
+            c_ret = next((c for c in m_df.columns if '1day' in str(c).lower() or 'return' in str(c).lower()), None)
+            c_sec = next((c for c in m_df.columns if 'sector' in str(c).lower()), None)
+            c_turn = next((c for c in m_df.columns if 'turnover' in str(c).lower()), None)
+            
+            rename_map = {}
+            if c_tick: rename_map[c_tick] = 'Symbol'
+            if c_price: rename_map[c_price] = 'Price'
+            if c_ret: rename_map[c_ret] = 'chg%'
+            if c_sec: rename_map[c_sec] = 'Category'
+            if c_turn: rename_map[c_turn] = 'Turnover'
+            
+            m_df = m_df.rename(columns=rename_map)
+            
+            # Fallbacks just in case screener completely failed to pull a column
+            if 'Symbol' not in m_df.columns: m_df['Symbol'] = "UNKNOWN"
+            if 'Price' not in m_df.columns: m_df['Price'] = 0.0
+            if 'chg%' not in m_df.columns: m_df['chg%'] = 0.0
+            if 'Category' not in m_df.columns: m_df['Category'] = "N/A"
+            if 'Turnover' not in m_df.columns: m_df['Turnover'] = 0.0
+            
+            m_df['Value score'] = pd.to_numeric(m_df.get('Value score', 0), errors='coerce')
+            m_df['Band'] = m_df.get('Band', '').astype(str).str.strip()
             
             # Exclude Band <= 5
             f_band = ~m_df['Band'].isin(['2', '5', '2.0', '5.0'])
@@ -1159,14 +1179,6 @@ with tab_screeners:
             top_val = val_filtered.head(50).copy()
             
             if not top_val.empty:
-                # Requested Columns: Rank Symbol Name Category Price chg% EMA 21 status Turnover Expense ratio
-                top_val = top_val.rename(columns={
-                    'Ticker': 'Symbol', 
-                    'CMP Rs.': 'Price', 
-                    '1day return %': 'chg%', 
-                    'Sector': 'Category'
-                })
-                
                 # Add Missing Columns as requested placeholders
                 top_val['EMA 21 status'] = "N/A"
                 top_val['Expense ratio'] = "N/A"
