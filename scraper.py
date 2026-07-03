@@ -189,9 +189,20 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
             # Map required columns from stock_master_df
             cols_to_pull = ['Name', 'Sector', 'Broad Industry', 'Band', 'Down %_ATH', 'Turnover']
             existing_cols = [c for c in cols_to_pull if c in stock_master_df.columns]
-            
             microcap_df = pd.merge(microcap_df, stock_master_df[existing_cols], on='Name', how='left')
-            print("   ✅ VLOOKUP completed for Microcap data.")
+            
+            # EXPLICITLY MAP TICKER TO GUARANTEE IT EXISTS
+            if 'Ticker' in stock_master_df.columns:
+                ticker_map = stock_master_df.set_index('Name')['Ticker'].to_dict()
+                microcap_df['Ticker'] = microcap_df['Name'].map(ticker_map)
+            else:
+                microcap_df['Ticker'] = np.nan
+                
+            print("   ✅ VLOOKUP completed for Microcap data (Including Ticker).")
+
+            # Rearrange columns to put Ticker before Name
+            cols = ['Ticker', 'Name'] + [c for c in microcap_df.columns if c not in ['Ticker', 'Name']]
+            microcap_df = microcap_df[cols]
 
             # Calculate Value Score rankings
             print("   🧮 Calculating Value Score rankings...")
@@ -931,14 +942,22 @@ def run_daily_scraper():
                     save_db_with_retry(trend_summary_df, "market_trend_summary", engine, if_exists="replace", index=False)
                     
                     # ----------------------------------------
-                    # NEW: Historical Market Breadth NSE Append
+                    # NEW: Historical Market Breadth NSE Append (WITH OVERRIDE LOGIC)
                     # ----------------------------------------
                     breadth_tracker_df = pd.DataFrame([{
                         "Date": today_date_str,
                         "trend_regime": trend_label
                     }])
+                    
+                    print("     🧹 Cleaning any existing duplicate date rows in Historical Market breadth NSE...")
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text(f'DELETE FROM "Historical Market breadth NSE" WHERE "Date" = \'{today_date_str}\''))
+                    except Exception:
+                        pass # Table might not exist yet
+                        
                     save_db_with_retry(breadth_tracker_df, "Historical Market breadth NSE", engine, if_exists="append", index=False)
-                    print("     ✅ Appended today's regime to 'Historical Market breadth NSE'.")
+                    print("     ✅ Appended today's regime to 'Historical Market breadth NSE' (overriding duplicates).")
 
                 else:
                     print("     ⚠️ Not enough history to calculate rolling averages yet.")
@@ -972,7 +991,7 @@ def run_daily_scraper():
             print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
 
         # ----------------------------------------
-        # NEW: ATH Historical Tracker (NSE Stocks)
+        # NEW: ATH Historical Tracker (NSE Stocks) (WITH OVERRIDE LOGIC)
         # ----------------------------------------
         if is_weekday and not is_time_locked and not is_nse_holiday:
             print("\n📈 STEP 6.1: Calculating and Saving ATH % to Tracker...")
@@ -988,8 +1007,16 @@ def run_daily_scraper():
                 "Date": today_date_str,
                 "ATH_Percent": ath_percent
             }])
+            
+            print("   🧹 Cleaning any existing duplicate date rows in ATH_historical_Tracker...")
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(f'DELETE FROM "ATH_historical_Tracker" WHERE "Date" = \'{today_date_str}\''))
+            except Exception:
+                pass
+                
             save_db_with_retry(ath_tracker_df, "ATH_historical_Tracker", engine, if_exists="append", index=False)
-            print(f"   ✅ Appended ATH % ({ath_percent}%) to 'ATH_historical_Tracker'.")
+            print(f"   ✅ Appended ATH % ({ath_percent}%) to 'ATH_historical_Tracker' (overriding duplicates).")
 
         # ==========================================
         # STEP 7: PULL EXACT 20-MONTH CNXSMALLCAP ROC
