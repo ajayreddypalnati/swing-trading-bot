@@ -24,6 +24,10 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 SCREENER_EMAIL = "ajayreddypalnati@gmail.com"
 SCREENER_PASSWORD = "sunnyreddi999@AA"
 
+# Microcap Screener Credentials
+MICROCAP_EMAIL = "ajayreddy5654@gmail.com"
+MICROCAP_PASSWORD = "ajayreddi999@AA"
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
     print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing on this machine.")
@@ -44,10 +48,11 @@ except Exception as e:
     sys.exit(1)
 
 SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
+MICROCAP_URL = "https://www.screener.in/company/NFMICRO250/"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 # ==========================================
-# HELPER FUNCTIONS (WITH RETRY & LOGGING LOGIC)
+# HELPER FUNCTIONS
 # ==========================================
 def random_sleep(min_ms=800, max_ms=2000):
     time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
@@ -106,7 +111,7 @@ def log_sync_status(engine, status="SUCCESS", failed_module="None"):
 # 1. AUTO-LOGIN FUNCTION (PLAYWRIGHT)
 # ==========================================
 def get_fresh_screener_cookies(email, password):
-    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate with Screener...")
+    print(f"\n🤖 AUTO-LOGIN: Authenticating with Screener as {email}...")
     
     for attempt in range(1, 4):
         try:
@@ -141,10 +146,64 @@ def get_fresh_screener_cookies(email, password):
     raise Exception("Playwright Login Module completely failed after 3 attempts.")
 
 # ==========================================
-# NEW: ETF DOWNLOAD & RANK ENGINE
+# NEW: NIFTY MICROCAP 250 SCRAPER
+# ==========================================
+def scrape_nifty_microcap_250(engine, stock_master_df):
+    print("\n🔬 STEP: Scraping Nifty Microcap 250 Index (Alternate Account)...")
+    try:
+        fresh_cookies = get_fresh_screener_cookies(MICROCAP_EMAIL, MICROCAP_PASSWORD)
+        session = requests.Session()
+        session.screener_cookies = fresh_cookies
+        
+        first_page = fetch_with_retry(session, MICROCAP_URL)
+        if not first_page:
+            print("   ❌ ERROR: Failed to fetch Microcap page.")
+            return
+
+        page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
+        total_pages = int(page_match.group(1)) if page_match else 1
+        print(f"   📋 Found {total_pages} pages for Nifty Microcap 250. Downloading...")
+        
+        all_dfs = []
+        for page in range(1, total_pages + 1):
+            page_url = MICROCAP_URL if page == 1 else f"{MICROCAP_URL}?page={page}"
+            html_content = first_page if page == 1 else fetch_with_retry(session, page_url)
+            
+            if html_content:
+                try:
+                    tables = pd.read_html(io.StringIO(html_content), thousands=',')
+                    if tables:
+                        df = tables[0]
+                        # Remove redundant headers
+                        df = df[df['Name'] != 'Name'].copy()
+                        df['Name'] = df['Name'].astype(str).str.strip()
+                        all_dfs.append(df)
+                except Exception as e:
+                    print(f"     ⚠️ ERROR parsing microcap page {page}: {e}")
+            random_sleep(800, 1500)
+            
+        if all_dfs:
+            microcap_df = pd.concat(all_dfs, ignore_index=True)
+            print(f"   ✅ Collected {len(microcap_df)} Microcap companies.")
+            
+            # Map required columns from stock_master_df
+            cols_to_pull = ['Name', 'Sector', 'Broad Industry', 'Band', 'Down %_ATH', 'Turnover']
+            existing_cols = [c for c in cols_to_pull if c in stock_master_df.columns]
+            
+            microcap_df = pd.merge(microcap_df, stock_master_df[existing_cols], on='Name', how='left')
+            print("   ✅ VLOOKUP completed for Microcap data.")
+            
+            save_db_with_retry(microcap_df, "Nifty_Microcap_250_Index", engine, if_exists="replace", index=False)
+            print("   ☁️ Successfully pushed 'Nifty_Microcap_250_Index' to Supabase.")
+            
+    except Exception as e:
+        print(f"   ❌ Failed to scrape Nifty Microcap 250: {e}")
+
+# ==========================================
+# ETF ENGINES
 # ==========================================
 def download_and_rank_etfs():
-    print("\n📈 STEP 8: Fetching and Ranking NSE ETFs...")
+    print("\n📈 STEP: Fetching and Ranking NSE ETFs...")
     url = "https://scanner.tradingview.com/india/scan"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -155,7 +214,7 @@ def download_and_rank_etfs():
         "columns": [
             "name", "description", "close", "change", 
             "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", "exchange",
-            "EMA21", "average_volume_30d_calc"
+            "EMA21", "average_volume_30d_calc", "expense_ratio"
         ],
         "filter": [
             {"left": "exchange", "operation": "equal", "right": "NSE"},
@@ -192,7 +251,7 @@ def download_and_rank_etfs():
     df.columns = [
         "Symbol", "Name", "Price (INR)", "Chg %", 
         "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %", "Exchange",
-        "EMA 21", "Avg Vol 30D"
+        "EMA 21", "Avg Vol 30D", "Expense Ratio"
     ]
 
     df['EMA 21 Status'] = df.apply(
@@ -213,13 +272,12 @@ def download_and_rank_etfs():
 
     cols = [
         "Final Rank", "Relative Score", "Symbol", "Name", "Exchange", 
-        "Price (INR)", "EMA 21", "EMA 21 Status", "Chg %", "Turnover (Cr)", "Avg Vol 30D",
+        "Price (INR)", "EMA 21", "EMA 21 Status", "Chg %", "Turnover (Cr)", "Avg Vol 30D", "Expense Ratio",
         "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
     ]
     
     df = df[cols].sort_values('Final Rank')
 
-    # VLOOKUP LOGIC: Pulling Category from Supabase
     print("   🔗 VLOOKUP: Mapping ETF Categories from Supabase 'ETF Category' table...")
     try:
         with engine.connect() as conn:
@@ -234,6 +292,74 @@ def download_and_rank_etfs():
     print(f"   ☁️ Saving {len(df)} ranked ETFs directly to Supabase...")
     save_db_with_retry(df, "ETF Screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
     print("   ✅ 'ETF Screener' table overwritten successfully.")
+
+
+def download_usa_etfs(engine):
+    print("\n🇺🇸 STEP: Fetching and Ranking USA ETFs...")
+    url = "https://scanner.tradingview.com/america/scan"
+    payload = {
+        "columns": [
+            "name", "close", "change", 
+            "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", 
+            "exchange", "average_volume_30d_calc", "EMA21", "expense_ratio"
+        ],
+        "filter": [
+            {"left": "type", "operation": "equal", "right": "fund"},
+            {"left": "Value.Traded", "operation": "greater", "right": 5000000}
+        ],
+        "markets": ["america"],
+        "options": {"lang": "en"},
+        "range": [0, 4000], 
+        "sort": {"sortBy": "Perf.10Y", "sortOrder": "desc"}
+    }
+
+    try:
+        response = requests.post(url, headers={"User-Agent": USER_AGENT, "Content-Type": "application/json"}, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        rows = [item["d"] for item in data.get("data", [])]
+        df = pd.DataFrame(rows, columns=[
+            "Symbol", "Price (USD)", "Chg %", 
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", 
+            "Perf 1Y %", "Exchange", "Avg Vol 30D", "EMA 21", "Expense Ratio"
+        ])
+        df["Symbol"] = df["Symbol"].str.upper().str.strip()
+        print(f"   📋 Retrieved {len(df)} USA ETFs from TradingView.")
+
+        # VLOOKUP Logic from USA_ETF_Catagory
+        with engine.connect() as conn:
+            cat_df = pd.read_sql(text('SELECT "Symbol", "Category", "Index" FROM "USA_ETF_Catagory"'), conn)
+        
+        cat_df["Symbol"] = cat_df["Symbol"].astype(str).str.upper().str.strip()
+        df = df.merge(cat_df, on="Symbol", how="inner")
+        print(f"   🔗 Matched {len(df)} USA ETFs against Supabase category map.")
+
+        df["EMA 21 Status"] = df.apply(
+            lambda r: "Above 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) and r["Price (USD)"] > r["EMA 21"]
+            else ("Below 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) else "N/A"), axis=1
+        )
+        df["Turnover (M USD)"] = (df["Price (USD)"] * df["Avg Vol 30D"] / 1_000_000).round(2)
+
+        r1 = df["Perf 1M %"].rank(ascending=False, method="min", na_option="bottom")
+        r3 = df["Perf 3M %"].rank(ascending=False, method="min", na_option="bottom")
+        r6 = df["Perf 6M %"].rank(ascending=False, method="min", na_option="bottom")
+        df["Relative Score"] = r1 * 2 + r3 * 4 + r6 * 4
+        df["Final Rank"] = df["Relative Score"].rank(ascending=True, method="min").astype(int)
+        
+        cols = [
+            "Final Rank", "Relative Score", "Symbol", "Category", "Index",
+            "Exchange", "Price (USD)", "EMA 21", "EMA 21 Status", "Chg %", 
+            "Turnover (M USD)", "Avg Vol 30D", "Expense Ratio",
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
+        ]
+        df = df[[c for c in cols if c in df.columns]].sort_values("Final Rank")
+        
+        save_db_with_retry(df, "USA_ETF_Screener", engine, if_exists="replace", index=False)
+        print("   ☁️ Successfully pushed 'USA_ETF_Screener' to Supabase.")
+
+    except Exception as e:
+        print(f"   ❌ Failed to scrape and rank USA ETFs: {e}")
 
 # ==========================================
 # MAIN PIPELINE
@@ -329,13 +455,13 @@ def run_daily_scraper():
                         df['live_ticker_slug'] = codes 
                         all_dataframes.append(df)
                     else:
-                        print(f"      ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                        print(f"     ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
                         
             except Exception as e:
-                print(f"      ⚠️ ERROR parsing page {page}: {e}")
+                print(f"     ⚠️ ERROR parsing page {page}: {e}")
                 
             if page % 10 == 0 or page == total_pages:
-                print(f"      -> Processed {page}/{total_pages} pages...")
+                print(f"     -> Processed {page}/{total_pages} pages...")
                 
             if page < total_pages: random_sleep(800, 1500)
 
@@ -368,10 +494,10 @@ def run_daily_scraper():
                 
                 if current_count > 1 and current_count % 25 == 0:
                     cooldown = random.randint(6, 12)
-                    print(f"      💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
+                    print(f"     💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
                     time.sleep(cooldown)
 
-                print(f"      -> [{current_count}/{total_missing}] Investigating: {stock_name}")
+                print(f"     -> [{current_count}/{total_missing}] Investigating: {stock_name}")
                 page_html = fetch_with_retry(session, url, referer_url=SCREENER_URL)
                 
                 sector, industry, exchange_class = "Unknown", "Unknown", ""
@@ -555,10 +681,10 @@ def run_daily_scraper():
                             df['Name'] = df['Name'].astype(str).str.strip()
                             ath_dataframes.append(df)
                     except Exception as e:
-                        print(f"      ⚠️ ERROR parsing page {p}: {e}")
+                        print(f"     ⚠️ ERROR parsing page {p}: {e}")
                         
                 if p % 5 == 0 or p == ath_total_pages:
-                    print(f"      -> Scraped {p}/{ath_total_pages} ATH pages...")
+                    print(f"     -> Scraped {p}/{ath_total_pages} ATH pages...")
                     
                 if p < ath_total_pages:
                     random_sleep(800, 1500)
@@ -725,11 +851,11 @@ def run_daily_scraper():
                                 else: mood_label = f"Super Positive 🚀 {pct_str}"
                                     
                                 historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
-                                print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
-                                print(f"      🚦 Today's Mood: {mood_label}")
+                                print(f"     📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
+                                print(f"     🚦 Today's Mood: {mood_label}")
                                 
                                 save_db_with_retry(historical_mood_df, "historical_market_mood", engine, if_exists="append", index=False)
-                                print("      ✅ Market Mood successfully logged to history.")
+                                print("     ✅ Market Mood successfully logged to history.")
                 else:
                     print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
         else:
@@ -770,8 +896,8 @@ def run_daily_scraper():
                     elif final_score <= 65: trend_label = f"Positive 💚 {pct_str}"
                     else: trend_label = f"Super Positive 🚀 {pct_str}"
                     
-                    print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
-                    print(f"      🏆 Final Market Regime: {trend_label}")
+                    print(f"     🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                    print(f"     🏆 Final Market Regime: {trend_label}")
                     
                     trend_summary_df = pd.DataFrame([{
                         "last_updated": today_date_str,
@@ -782,10 +908,26 @@ def run_daily_scraper():
                         "trend_regime": trend_label
                     }])
                     save_db_with_retry(trend_summary_df, "market_trend_summary", engine, if_exists="replace", index=False)
+                    
+                    # ----------------------------------------
+                    # NEW: Historical Market Breadth NSE Append
+                    # ----------------------------------------
+                    breadth_tracker_df = pd.DataFrame([{
+                        "Date": today_date_str,
+                        "trend_regime": trend_label
+                    }])
+                    save_db_with_retry(breadth_tracker_df, "Historical Market breadth NSE", engine, if_exists="append", index=False)
+                    print("     ✅ Appended today's regime to 'Historical Market breadth NSE'.")
+
                 else:
-                    print("      ⚠️ Not enough history to calculate rolling averages yet.")
+                    print("     ⚠️ Not enough history to calculate rolling averages yet.")
             except Exception as e:
-                print(f"      ❌ Trend Engine Error: {e}")
+                print(f"     ❌ Trend Engine Error: {e}")
+
+        # ==========================================
+        # NEW: Execute Microcap 250 Engine
+        # ==========================================
+        scrape_nifty_microcap_250(engine, merged_df)
 
         # ==========================================
         # STEP 6: PUSH DATA BACK TO CLOUD TABLES
@@ -807,6 +949,26 @@ def run_daily_scraper():
         if not industry_summary_df.empty:
             save_db_with_retry(industry_summary_df, "ATH_Industry_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
             print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
+
+        # ----------------------------------------
+        # NEW: ATH Historical Tracker (NSE Stocks)
+        # ----------------------------------------
+        if is_weekday and not is_time_locked and not is_nse_holiday:
+            print("\n📈 STEP 6.1: Calculating and Saving ATH % to Tracker...")
+            total_nse = len(merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper().isin(['NSE', 'NSE SME'])])
+            
+            if not ath_df.empty:
+                total_ath_nse = len(ath_df[ath_df['Exchange'].astype(str).str.strip().str.upper().isin(['NSE', 'NSE SME'])])
+                ath_percent = round((total_ath_nse / total_nse) * 100, 2) if total_nse > 0 else 0
+            else:
+                ath_percent = 0
+            
+            ath_tracker_df = pd.DataFrame([{
+                "Date": today_date_str,
+                "ATH_Percent": ath_percent
+            }])
+            save_db_with_retry(ath_tracker_df, "ATH_historical_Tracker", engine, if_exists="append", index=False)
+            print(f"   ✅ Appended ATH % ({ath_percent}%) to 'ATH_historical_Tracker'.")
 
         # ==========================================
         # STEP 7: PULL EXACT 20-MONTH CNXSMALLCAP ROC
@@ -861,13 +1023,13 @@ def run_daily_scraper():
                 raise Exception("Failed to fetch CNXSMALLCAP data after 3 attempts.")
         except Exception as e:
             print(f"   ❌ ERROR during CNXSMALLCAP ROC calculation: {e}")
-            raise e
             
         # ==========================================
-        # STEP 8: DOWNLOAD & RANK ETFS (NEW)
+        # STEP 8: DOWNLOAD & RANK ETFS (NEW & UPDATED)
         # ==========================================
         current_module = "ETF Screener Engine"
-        download_and_rank_etfs()
+        download_and_rank_etfs()      # India ETF with expense ratio
+        download_usa_etfs(engine)     # New USA ETF scraper mapping
         
         # ==========================================
         # SUCCESS LOGGING
