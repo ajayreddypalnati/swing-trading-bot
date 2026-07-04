@@ -821,7 +821,7 @@ tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
     "🎢 Market Cycle", 
     "🏆 Market Leaders",
     "🔎 Screeners", 
-    "📈 Portfolio Tracker"
+    "📈 9-EMA Portfolio Tracker"
 ])
 
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
