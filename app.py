@@ -1547,6 +1547,7 @@ with tab_port:
                             if symbol not in inst_dict: continue
                                 
                             inst_key = inst_dict[symbol]
+                            detected_exch = "BSE" if str(inst_key).startswith("BSE") else "NSE"
                             start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
                             df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
                             
@@ -1598,7 +1599,8 @@ with tab_port:
                                 ten_day_rule = f"PENDING ({trading_days}/10)"
                                 
                             results.append({
-                                "Symbol": symbol, 
+                                "Symbol": symbol,
+                                "Exchange": detected_exch,
                                 "Entry Date": entry_date.strftime("%d-%m-%Y"),
                                 "Today chg%": today_chg_pct,
                                 "Entry Price": entry_price, 
@@ -1644,7 +1646,7 @@ with tab_port:
         unsafe_allow_html=True
     )
                             
-                            res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
+                            res_df = res_df[["Symbol", "Exchange", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
                             
                             def highlight_upstox(row):
                                 styles = [''] * len(row)
@@ -1737,7 +1739,13 @@ with tab_port:
                             html_port_table = styled_res.to_html()
                             for _, r in res_df.iterrows():
                                 sym = str(r["Symbol"])
-                                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+                                exch = str(r["Exchange"]).upper()
+                                
+                                if 'NSE' in exch:
+                                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+                                else:
+                                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=BSE%3A{sym}"
+                                    
                                 link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
                                 html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
 
