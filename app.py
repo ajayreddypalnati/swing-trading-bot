@@ -841,7 +841,33 @@ with tab_main:
         html_table = styled_df.to_html()
         
         copy_str = ",".join(display_df['Symbol'].tolist())
-        new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
+
+        copy_js = f'''
+<script>
+(function(){{
+    const txt = {copy_str!r};
+    window.copyTVSymbols = function(){{
+        try {{
+            const ta = document.createElement("textarea");
+            ta.value = txt;
+            ta.style.position="fixed";
+            ta.style.left="-9999px";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            alert("Copied all symbols to clipboard!");
+        }} catch(e) {{
+            prompt("Copy manually:", txt);
+        }}
+    }};
+}})();
+</script>
+'''
+        st.markdown(copy_js, unsafe_allow_html=True)
+
+        new_header = 'Symbol <span onclick="copyTVSymbols()" style="cursor:pointer; font-size:0.9em; margin-left:4px;" title="Copy all for TradingView">📋</span>'
         html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
         
         for _, r in display_df.iterrows():
