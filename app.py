@@ -1165,6 +1165,7 @@ with tab_screeners:
             v_df[col_band] = pd.to_numeric(v_df.get(col_band, 100), errors='coerce')
             v_df[col_chg] = pd.to_numeric(v_df.get(col_chg, 0), errors='coerce')
             v_df['Turnover'] = pd.to_numeric(v_df.get('Turnover', 0), errors='coerce')
+            v_df[col_cmp] = pd.to_numeric(v_df.get(col_cmp, 0), errors='coerce')
             
             # Exclude price band <= 5
             f_vband = v_df[col_band] > 5
@@ -1182,7 +1183,7 @@ with tab_screeners:
                 val_cols = [c for c in val_cols if c in top_50_value.columns]
                 val_display = top_50_value[val_cols].rename(columns={'Ticker':'Symbol', 'Sector':'Category', col_cmp:'Price', col_chg:'Chg %'})
                 
-                styled_val = val_display.style.hide(axis="index").format({'Price': "₹{:.2f}", 'Chg %': "{:.2f}%", 'Turnover': "{:,.0f}"})
+                styled_val = val_display.style.hide(axis="index").format({     'Price': lambda x: f"₹{float(x):.2f}" if pd.notna(x) else "-",      'Chg %': lambda x: f"{float(x):.2f}%" if pd.notna(x) else "-",      'Turnover': lambda x: f"{float(x):,.0f}" if pd.notna(x) else "-" })
                 st.markdown(f'<div class="scrollable-table-container">{styled_val.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No stocks match the Value Screener criteria at the moment.")
             
