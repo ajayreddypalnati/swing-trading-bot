@@ -294,8 +294,6 @@ TV_PAYLOAD = {
 def get_db_cache_key():
     ist = timezone(timedelta(hours=5, minutes=30))
     now = datetime.now(ist)
-    # Between 9 AM and 9 PM IST, use the daily cache (syncs once a day)
-    # Outside of these hours, sync once per hour to capture EOD DB updates
     if 9 <= now.hour < 21:
         return f"locked_{now.strftime('%Y-%m-%d')}"
     else:
@@ -395,8 +393,6 @@ def fetch_database_reference(cache_key):
 @st.cache_data(ttl=60)
 def fetch_market_breadth_from_gsheets():
     try:
-        # Appending timestamp completely bypasses Google's 5-minute "Publish to Web" cache lock
-        # while Streamlit's ttl=60 keeps it constrained to exactly 1 call per minute.
         ts = int(time.time())
         url = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv&t={ts}"
         df = pd.read_csv(url, header=None)
@@ -467,7 +463,6 @@ def get_instrument_mapping():
         with gzip.GzipFile(fileobj=io.BytesIO(response.content)) as f:
             df = pd.read_json(f)
             
-        # Support BSE and NSE and keep unique ticker names mapping to key
         df = df[df["segment"].isin(["NSE_EQ", "BSE_EQ", "BSE"])]
         df = df.drop_duplicates(subset=["trading_symbol"])
         return dict(zip(df["trading_symbol"].astype(str).str.upper(), df["instrument_key"]))
@@ -527,8 +522,18 @@ def get_live_quote(instrument_key, token):
         return None
 
 # ==========================================
-# 4. UI COMPONENTS & GRAPHS 
+# 4. UI COMPONENTS, GRAPHS & SAFE FORMATTERS
 # ==========================================
+
+# THIS SAFE FORMATTER PREVENTS VALUEERRORS FROM BLANK DATABASE CELLS
+def safe_fmt(val, fmt_str):
+    try:
+        if pd.isna(val) or str(val).strip() == "":
+            return "-"
+        return fmt_str.format(float(val))
+    except:
+        return "-"
+
 def get_breadth_color(breadth_str):
     try:
         match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
@@ -552,19 +557,16 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             val = float(match.group(1))
             live_val = float(live_match.group(1)) if live_match else 0.0
 
-            # NEW LOGIC: Strict Emoji Rules first
             if "📉" in str(nse_breadth_str):
                 action_suffix = " - Stop Trading"
             elif "📈" in str(nse_breadth_str):
                 action_suffix = " - Trade"
             else:
-                # If Neutral, fall back to Live Breadth > 50 Check
                 if live_val > 50.0:
                     action_suffix = " - Trade"
                 else:
                     action_suffix = " - Stop Trading"
 
-            # Allocate % based purely on NSE Base percentage
             if val <= 20.0: alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
             elif val <= 25.0: alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
             elif val <= 30.0: alloc_str, color = f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
@@ -581,7 +583,6 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
         return "N/A", "#FFFFFF"
 
 def create_metric_card(title, value, bg_color):
-    # Dynamically scales down the font size if the text is long, and enforces equal rigid heights across all 4 boxes
     val_size = "1.35rem" if len(str(value)) > 20 else "1.65rem"
     return f"""
     <div style="background: {bg_color}; border-radius: 12px; padding: 1.2rem 1.5rem; text-align: left; border: 2px solid #0B1D30; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 115px; display: flex; flex-direction: column; justify-content: center;">
@@ -604,7 +605,6 @@ def render_market_cycle_graph(roc_vals):
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
 
-    # Evaluates proximity to the stage using strict midpoints 
     if trend_dir == "up":
         dot_x = np.interp(roc_val, [0, 20, 40, 60, 100, 150], [0, 4, 8, 12, 16, 20])
         if roc_val <= 10: stage, note = "Disbelief", "This rally will fail like the others."
@@ -646,7 +646,6 @@ def render_market_cycle_graph(roc_vals):
     fig.add_shape(type="line", x0=20, y0=0, x1=20, y1=100, line=dict(color="#0B1D30", width=3))
     fig.add_annotation(x=dot_x, y=dot_y + 15, text=f"<b>{stage}</b>", showarrow=True, arrowhead=2, arrowsize=1, arrowwidth=2, arrowcolor=theme_color, font=dict(family="Inter, sans-serif", size=14, color=theme_color), bgcolor="rgba(255, 255, 255, 0.95)", bordercolor=theme_color, borderwidth=2, borderpad=6, opacity=1.0)
 
-    # Cream background around the chart, white grid inside, matching the rest of the UI
     fig.update_layout(
         xaxis=dict(title=dict(text="<b>Time (Months)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', dtick=2, range=[-2, 50]),
         yaxis=dict(title=dict(text="<b>Price (ROC)</b>", font=dict(family="Inter", size=18, color="#0B1D30")), showgrid=True, gridcolor='rgba(11,29,48,0.1)', zeroline=False, showticklabels=True, tickfont=dict(size=14, color="#0B1D30", family="Inter"), showline=True, linewidth=3, linecolor='#0B1D30', range=[-5, 125]),
@@ -673,7 +672,6 @@ ist = timezone(timedelta(hours=5, minutes=30))
 current_time = datetime.now(ist).strftime('%I:%M:%S %p')
 current_date = datetime.now(ist).strftime('%d %b %Y')
 
-# Custom Premium Header Block (Light Theme)
 st.markdown(f"""
     <div class="premium-header">
         <div class="header-left">
@@ -688,7 +686,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# Professional Syncing Loader (Fixed Overlay to prevent shifting layout)
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(244, 241, 225, 0.65); backdrop-filter: blur(3px); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;">
@@ -708,9 +705,6 @@ live_bg = get_breadth_color(live_sheet_breadth)
 nse_bg = get_breadth_color(trend_regime)
 alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
 
-# -----------------------------------------------
-# LOGIC: ROC > 90 Tight Stop Loss Check
-# -----------------------------------------------
 if roc_vals:
     try:
         current_roc = float(roc_vals[0])
@@ -718,13 +712,10 @@ if roc_vals:
             if " - Trade" in alloc_val: alloc_val = alloc_val.replace(" - Trade", " - Tight stop loss")
             elif " - Stop Trading" in alloc_val: alloc_val = alloc_val.replace(" - Stop Trading", " - Tight stop loss")
             else: alloc_val += " - Tight stop loss"
-            alloc_bg = "rgba(254, 202, 202, 0.4)" # Light red
+            alloc_bg = "rgba(254, 202, 202, 0.4)"
     except: pass
 
-# -----------------------------------------------
-# LOGIC: Last DB Update > 24 Hours Check
-# -----------------------------------------------
-last_sync_bg = "rgba(216, 180, 254, 0.3)" # Default light purple
+last_sync_bg = "rgba(216, 180, 254, 0.3)"
 if str(last_sync) != "Pending Run...":
     try:
         if isinstance(last_sync, str):
@@ -738,7 +729,7 @@ if str(last_sync) != "Pending Run...":
             parsed_sync = parsed_sync.replace(tzinfo=None)
             
         if (ist_now - parsed_sync).total_seconds() > 86400:
-            last_sync_bg = "rgba(254, 202, 202, 0.4)" # Light red warning
+            last_sync_bg = "rgba(254, 202, 202, 0.4)"
     except Exception: pass
 
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
@@ -789,7 +780,6 @@ if data:
         df.loc[p4, 'Priority'] = 4
         df.loc[p5, 'Priority'] = 5
 
-    # Added market_cap exactly after % Change
     display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "market_cap", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
     display_df = df[[c for c in display_cols if c in df.columns]].copy()
     display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
@@ -835,21 +825,25 @@ tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
     if not display_df.empty:
-        # Added formatting for Mar Cap (Cr)
+        # Applying the SAFE formatter everywhere
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-            "Close": "₹{:.2f}", "% Change": "{:.2f}%", "Mar Cap (Cr)": "{:.0f}", "Turnover (Cr)": "{:.0f}", "Volume": "{:,.0f}",
-            "Momentum Rank": lambda x: safe_int(x), "Priority": lambda x: format_stars(x),
-            "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#"),
+            "Close": lambda x: safe_fmt(x, "₹{:.2f}"), 
+            "% Change": lambda x: safe_fmt(x, "{:.2f}%"), 
+            "Mar Cap (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
+            "Turnover (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
+            "Volume": lambda x: safe_fmt(x, "{:,.0f}"),
+            "Momentum Rank": lambda x: safe_int(x), 
+            "Priority": lambda x: format_stars(x),
+            "Sector Rank": lambda x: safe_int(x, "#"), 
+            "Ind. Rank": lambda x: safe_int(x, "#"),
         })
         
         html_table = styled_df.to_html()
         
-        # 1. Inject Copy Button in Header
         copy_str = ",".join(display_df['Symbol'].tolist())
         new_header = f'Symbol <span onclick="navigator.clipboard.writeText(\'{copy_str}\'); alert(\'Copied all symbols to clipboard!\')" style="cursor:pointer; font-size: 0.9em; margin-left: 4px;" title="Copy all for TradingView">📋</span>'
         html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
         
-        # 2. Convert Symbols to TradingView Links
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
             exch = str(r['Exchange']).upper()
@@ -858,7 +852,6 @@ with tab_main:
             else:
                 url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
             link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-            # Strict replacement of exact cell contents to prevent matching accidental substrings
             html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
             
         st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
@@ -991,7 +984,10 @@ with tab_screeners:
                         styles.append(cell_style)
                     return styles
                     
-                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({'Turnover (Cr)': "{:.0f}", 'Chg %': "{:.2f}%"})
+                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
+                })
                 st.markdown(f'<div class="scrollable-table-container">{styled_etf.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No ETFs match the criteria at the moment.")
         else: st.warning("ETF data is currently empty or failed to load.")
@@ -1028,11 +1024,15 @@ with tab_screeners:
                 display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
                 display_mom['Band'] = display_mom['Band'].fillna("-")
                 
-                styled_mom = display_mom.style.hide(axis="index").format({'Market Cap (Cr)': "{:.0f}", 'Turnover (Cr)': "{:.0f}", '1 Day Return %': "{:.2f}%", 'Rank': "{:.0f}"})
+                styled_mom = display_mom.style.hide(axis="index").format({
+                    'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    '1 Day Return %': lambda x: safe_fmt(x, "{:.2f}%"), 
+                    'Rank': lambda x: safe_fmt(x, "{:.0f}")
+                })
                 st.markdown(f'<div class="scrollable-table-container">{styled_mom.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No stocks match the Momentum Screener criteria at the moment.")
                 
-            # PORTFOLIO REBALANCER
             st.divider()
             st.markdown("### 🔄 Upload Portfolio Stocks")
             st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
@@ -1112,15 +1112,15 @@ with tab_screeners:
         if not us_etf_df.empty:
             us_df = us_etf_df.copy()
             
-            # Formatting numeric columns correctly
             us_df['Relative Score'] = pd.to_numeric(us_df.get('Relative Score', 0), errors='coerce')
             us_df['Price (USD)'] = pd.to_numeric(us_df.get('Price (USD)', 0), errors='coerce')
             us_df['Chg %'] = pd.to_numeric(us_df.get('Chg %', 0), errors='coerce')
             us_df['Avg Vol 30D'] = pd.to_numeric(us_df.get('Avg Vol 30D', 0), errors='coerce')
             us_df['Expense Ratio'] = pd.to_numeric(us_df.get('Expense Ratio', 0), errors='coerce')
             
-            # Sort by lowest relative score
-            valid_us = us_df.sort_values('Relative Score', ascending=True)
+            f_us_ema = us_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
+            
+            valid_us = us_df[f_us_ema].sort_values('Relative Score', ascending=True)
             
             final_us_etfs = []
             seen_us_categories = set()
@@ -1141,10 +1141,19 @@ with tab_screeners:
                 us_show_cols = [c for c in us_show_cols if c in us_display.columns]
                 us_display = us_display[us_show_cols]
                 
-                styled_us_etf = us_display.style.hide(axis="index").format({
-                    'Price (USD)': "${:.2f}",
-                    'Chg %': "{:.2f}%",
-                    'Avg Vol 30D': "{:,.0f}"
+                def style_us_row(row):
+                    styles = [''] * len(row)
+                    if row.name < 4: 
+                        try:
+                            idx = list(row.index).index('Symbol')
+                            styles[idx] = 'font-weight: 800;'
+                        except: pass
+                    return styles
+                
+                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
+                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
+                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}")
                 })
                 st.markdown(f'<div class="scrollable-table-container">{styled_us_etf.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No US ETFs match the criteria at the moment.")
@@ -1152,23 +1161,31 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
+        st.markdown("### Minimum Turnover (in Cr)")
+        val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover", label_visibility="collapsed")
+        
         if not micro_df.empty:
             v_df = micro_df.copy()
             
-            # Check for generic column names matching the requested Nifty Microcap 250 Index mappings
             col_cmp = next((c for c in v_df.columns if 'cmp' in str(c).lower() and '%' not in str(c).lower()), 'Price')
             col_chg = next((c for c in v_df.columns if 'return %' in str(c).lower() or 'chg' in str(c).lower()), '1day return %')
             col_vscore = next((c for c in v_df.columns if 'value score' in str(c).lower()), 'Value score')
             col_band = next((c for c in v_df.columns if 'band' in str(c).lower()), 'Band')
+            col_sector = next((c for c in v_df.columns if 'sector' in str(c).lower()), 'Sector')
+            col_ind = next((c for c in v_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+            col_dath = next((c for c in v_df.columns if 'down %_ath' in str(c).lower() or 'down' in str(c).lower()), 'Down %_ATH')
             
-            v_df[col_vscore] = pd.to_numeric(v_df[col_vscore], errors='coerce')
-            v_df[col_band] = pd.to_numeric(v_df.get(col_band, 100), errors='coerce')
+            v_df[col_cmp] = pd.to_numeric(v_df.get(col_cmp, 0), errors='coerce')
             v_df[col_chg] = pd.to_numeric(v_df.get(col_chg, 0), errors='coerce')
+            v_df[col_vscore] = pd.to_numeric(v_df.get(col_vscore, 0), errors='coerce')
+            v_df[col_band] = pd.to_numeric(v_df.get(col_band, 100), errors='coerce')
             v_df['Turnover'] = pd.to_numeric(v_df.get('Turnover', 0), errors='coerce')
+            v_df[col_dath] = pd.to_numeric(v_df.get(col_dath, 0), errors='coerce')
             
-            # Exclude price band <= 5
             f_vband = v_df[col_band] > 5
-            v_filtered = v_df[f_vband].sort_values(by=col_vscore, ascending=True).reset_index(drop=True)
+            f_vturn = v_df['Turnover'] >= val_min_turnover
+            
+            v_filtered = v_df[f_vband & f_vturn].sort_values(by=col_vscore, ascending=True).reset_index(drop=True)
             v_filtered['Rank'] = v_filtered.index + 1
             
             top_50_value = v_filtered.head(50)
@@ -1178,15 +1195,31 @@ with tab_screeners:
                 v_avg_color = "#10B981" if top_25_val_avg > 0 else "#EF4444"
                 st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span>", unsafe_allow_html=True)
                 
-                val_cols = ['Rank', 'Ticker', 'Name', 'Sector', col_cmp, col_chg, 'EMA 21 Status', 'Turnover', 'Expense Ratio']
+                val_cols = ['Rank', 'Ticker', 'Name', col_chg, col_cmp, col_sector, col_ind, col_band, col_dath, 'Turnover']
                 val_cols = [c for c in val_cols if c in top_50_value.columns]
-                val_display = top_50_value[val_cols].rename(columns={'Ticker':'Symbol', 'Sector':'Category', col_cmp:'Price', col_chg:'Chg %'})
+                val_display = top_50_value[val_cols].copy()
                 
-                styled_val = val_display.style.hide(axis="index").format({'Price': "₹{:.2f}", 'Chg %': "{:.2f}%", 'Turnover': "{:,.0f}"})
+                val_display = val_display.rename(columns={
+                    'Ticker': 'Symbol',
+                    col_chg: 'Chg %',
+                    col_cmp: 'Price',
+                    col_sector: 'Sector',
+                    col_ind: 'Industry',
+                    col_band: 'Band',
+                    col_dath: 'Down%_ATH'
+                })
+                
+                # SAFE FORMATTER APPLIED HERE 
+                styled_val = val_display.style.hide(axis="index").format({
+                    'Price': lambda x: safe_fmt(x, "₹{:.2f}"), 
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"), 
+                    'Turnover': lambda x: safe_fmt(x, "{:,.0f}"),
+                    'Down%_ATH': lambda x: safe_fmt(x, "{:.2f}%"),
+                    'Band': lambda x: safe_fmt(x, "{:.0f}")
+                })
                 st.markdown(f'<div class="scrollable-table-container">{styled_val.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No stocks match the Value Screener criteria at the moment.")
             
-            # PORTFOLIO REBALANCER FOR VALUE
             st.divider()
             st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
             val_uploaded_file = st.file_uploader("Upload Value Portfolio", type=['csv', 'txt'], label_visibility="collapsed", key="val_rebal_uploader")
@@ -1296,7 +1329,6 @@ with tab_port:
         with col_gs2:
             load_clicked = st.button("🔄 Load / Refresh Sheet")
             
-        # Metric placeholder for Average Today Chg %
         avg_chg_placeholder = st.empty()
             
         if load_clicked and gsheet_url:
@@ -1322,7 +1354,6 @@ with tab_port:
 
     if not port_df.empty and upstox_token:
         try:
-            # STRICLY ENSURE 5 COLUMNS AND OVERRIDE HEADERS
             if len(port_df.columns) < 5:
                 st.error("Data must contain at least 5 columns: Stock Ticker, Entry Date, Entry Price, Stop Loss, and RISK.")
             else:
@@ -1378,6 +1409,14 @@ with tab_port:
                                 current_price = float(df_hist.iloc[-1]["Close"])
                                 today_chg_pct = 0.0
                                 
+                            if abs(today_chg_pct) < 0.001 and len(df_hist) >= 2:
+                                prev_close = float(df_hist.iloc[-2]["Close"])
+                                last_close = float(df_hist.iloc[-1]["Close"])
+                                if prev_close > 0:
+                                    hist_pct = ((last_close - prev_close) / prev_close) * 100
+                                    if abs(current_price - last_close) < 0.001:
+                                        today_chg_pct = hist_pct
+                                        
                             ema21 = float(df_hist.iloc[-1]["EMA21"])
                             trading_days = len(future_data) if not future_data.empty else 1
                             
@@ -1419,13 +1458,11 @@ with tab_port:
                         if not api_failed and results:
                             res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
                             
-                            # Render UI Avg Today Chg% if available
                             if 'upstox_sheet_df' in st.session_state:
                                 avg_today_chg = res_df['Today chg%'].mean()
                                 avg_color = "#10B981" if avg_today_chg > 0 else "#EF4444"
                                 avg_chg_placeholder.markdown(f"<div style='text-align: right; margin-top: 10px;'><span style='font-size: 1rem; font-weight: 700; color: #0B1D30;'>Avg chg% : <span style='color: {avg_color};'>{avg_today_chg:.2f} %</span></span></div>", unsafe_allow_html=True)
                             
-                            # Enforce specific column order as requested
                             res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
                             
                             def highlight_upstox(row):
@@ -1451,13 +1488,13 @@ with tab_port:
                                 return styles
 
                             styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
-                                "Today chg%": "{:.2f}%",
-                                "Entry Price": "₹{:.2f}", 
-                                "Stop Loss": "₹{:.2f}",
-                                "Current Price": "₹{:.2f}", 
-                                "Profit/Loss": "₹{:.2f}",
-                                "Return %": "{:.2f}%", 
-                                "EMA21": "₹{:.2f}"
+                                "Today chg%": lambda x: safe_fmt(x, "{:.2f}%"),
+                                "Entry Price": lambda x: safe_fmt(x, "₹{:.2f}"), 
+                                "Stop Loss": lambda x: safe_fmt(x, "₹{:.2f}"),
+                                "Current Price": lambda x: safe_fmt(x, "₹{:.2f}"), 
+                                "Profit/Loss": lambda x: safe_fmt(x, "₹{:.2f}"),
+                                "Return %": lambda x: safe_fmt(x, "{:.2f}%"), 
+                                "EMA21": lambda x: safe_fmt(x, "₹{:.2f}")
                             })
                             st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
                         elif not api_failed: st.info("No valid data processed. Check if tickers match NSE/BSE format.")
