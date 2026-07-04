@@ -937,7 +937,7 @@ with tab_leaders:
             st.markdown("##### 🚀 Top 15 Industries")
             ind_cols = ['Rank', 'Broad Industry', 'Avg 1D Return %', 'ATH_Stocks', 'ATH %']
             ind_cols = [c for c in ind_cols if c in raw_ind.columns]
-            top_ind = raw_ind.nssmallest(15, 'Rank')[ind_cols]
+            top_ind = raw_ind.nsmallest(15, 'Rank')[ind_cols]
             
             top_4_ind_idx = []
             if 'Avg 1D Return %' in top_ind.columns: top_4_ind_idx = top_ind['Avg 1D Return %'].astype(float).nlargest(4).index.tolist()
