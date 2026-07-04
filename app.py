@@ -1591,7 +1591,61 @@ with tab_port:
                                 "Return %": lambda x: safe_fmt(x, "{:.2f}%"), 
                                 "EMA21": lambda x: safe_fmt(x, "₹{:.2f}")
                             })
-                            st.markdown(f'<div class="scrollable-table-container">{styled_res.to_html()}</div>', unsafe_allow_html=True)
+
+                            # 1. GENERATE COPY BUTTON FOR PORTFOLIO STOCKS
+                            port_copy_str = ",".join(res_df["Symbol"].astype(str).tolist())
+                            port_copy_html = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                            <style>
+                                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; }}
+                                button {{
+                                    font-family: 'Inter', sans-serif;
+                                    background-color: #0B1D30;
+                                    color: #FFFFFF;
+                                    border: none;
+                                    padding: 6px 12px;
+                                    border-radius: 6px;
+                                    cursor: pointer;
+                                    font-weight: 600;
+                                    font-size: 0.85rem;
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                    transition: all 0.2s;
+                                }}
+                                button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                            </style>
+                            </head>
+                            <body>
+                                <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                                <script>
+                                function copyToClipboard() {{
+                                    const ta = document.createElement('textarea');
+                                    ta.value = "{port_copy_str}";
+                                    document.body.appendChild(ta);
+                                    ta.select();
+                                    document.execCommand('copy');
+                                    document.body.removeChild(ta);
+                                    const btn = document.getElementById('copyPortBtn');
+                                    btn.innerHTML = '✅ Copied!';
+                                    setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                                }}
+                                </script>
+                            </body>
+                            </html>
+                            """
+                            components.html(port_copy_html, height=40)
+
+                            # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
+                            html_port_table = styled_res.to_html()
+                            for _, r in res_df.iterrows():
+                                sym = str(r["Symbol"])
+                                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+                                link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                                html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
+
+                            st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
                         elif not api_failed: st.info("No valid data processed. Check if tickers match NSE/BSE format.")
         except Exception as e: st.error(f"Error parsing portfolio file: {e}")
 
