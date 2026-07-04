@@ -814,11 +814,11 @@ def format_stars(val):
 # ==========================================
 # SAAS NAVIGATION TABS
 # ==========================================
-tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
-    "⚡ 9-EMA Screener", 
-    "🎢 Market Cycle", 
+tab_cycle, tab_leaders, tab_main, tab_screeners, tab_port = st.tabs([
+    "🎢 Market Cycle",
     "🏆 Market Leaders",
-    "🔎 Screeners", 
+    "⚡ 9-EMA Screener",
+    "🔎 Screeners",
     "📈 Portfolio Tracker"
 ])
 
@@ -921,10 +921,10 @@ with tab_leaders:
 
 # --- 4. SCREENERS HUB TAB ---
 with tab_screeners:
-    sub_etf, sub_mom, sub_us_etf, sub_val = st.tabs([
-        "📊 ETF Screener", 
-        "🚀 Momentum Screener", 
+    sub_etf, sub_us_etf, sub_mom, sub_val = st.tabs([
+        "📊 ETF Screener",
         "🌍 US ETF Screener",
+        "🚀 Momentum Screener",
         "💎 Value Screener"
     ])
     
@@ -993,7 +993,7 @@ with tab_screeners:
         else: st.warning("ETF data is currently empty or failed to load.")
 
     # --- SUB 2: MOMENTUM SCREENER ---
-    with sub_mom:
+    with sub_us_etf:
         st.markdown("### Minimum Turnover (in Cr)")
         min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
         
@@ -1108,7 +1108,7 @@ with tab_screeners:
                 except Exception as e: st.error(f"Error processing portfolio: {e}")
 
     # --- SUB 3: US ETF SCREENER ---
-    with sub_us_etf:
+    with sub_mom:
         if not us_etf_df.empty:
             us_df = us_etf_df.copy()
             
