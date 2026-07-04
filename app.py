@@ -1141,34 +1141,34 @@ with tab_screeners:
                 us_show_cols = [c for c in us_show_cols if c in us_display.columns]
                 us_display = us_display[us_show_cols]
                 top_4_chg_idx = us_display['Chg %'].nlargest(4).index.tolist()
-top_4_avg = us_display.loc[top_4_chg_idx, 'Chg %'].mean() if not us_display.empty else 0.0
-avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
+                top_4_avg = us_display.loc[top_4_chg_idx, 'Chg %'].mean() if not us_display.empty else 0.0
+                avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
 
-st.markdown(
-    f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
-    unsafe_allow_html=True
-)
+                st.markdown(
+                    f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
+                    unsafe_allow_html=True
+                )
 
-st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
                 
                 def style_us_row(row):
-    is_top_4 = row.name in top_4_chg_idx
-    styles = []
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
 
-    for col in row.index:
-        style = ""
+                    for col in row.index:
+                        style = ""
 
-        if is_top_4:
-            style += "font-weight:700;"
+                        if is_top_4:
+                            style += "font-weight:700;"
 
-            if col == "Chg %":
-                style += "background-color: rgba(187,247,208,0.5);"
+                            if col == "Chg %":
+                                style += "background-color: rgba(187,247,208,0.5);"
 
-        styles.append(style)
+                        styles.append(style)
 
-    return styles
+                    return styles
                 
-                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
+styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
                     'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
                     'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
