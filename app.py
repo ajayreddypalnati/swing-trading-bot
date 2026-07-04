@@ -1143,12 +1143,12 @@ with tab_screeners:
                 top_4_chg_idx = us_display['Chg %'].nlargest(4).index.tolist()
                 top_4_avg = us_display.loc[top_4_chg_idx, 'Chg %'].mean() if not us_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
-
+                
                 st.markdown(
                     f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
                     unsafe_allow_html=True
                 )
-
+                
                 st.markdown("<br>", unsafe_allow_html=True)
                 
                 def style_us_row(row):
@@ -1168,7 +1168,7 @@ with tab_screeners:
 
                     return styles
                 
-styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
+                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
                     'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
                     'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
