@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, text
 import plotly.graph_objects as go
 import io
 import gzip
+from st_copy_to_clipboard import st_copy_to_clipboard
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
