@@ -1494,24 +1494,34 @@ with tab_port:
                             
                             def highlight_upstox(row):
                                 styles = [''] * len(row)
-                                if row['EMA Status'] == 'BELOW EMA21' or 'EXIT' in str(row['10 Day Rule']):
-                                    styles = ['background-color: rgba(254, 202, 202, 0.4); font-weight:800;'] * len(row)
-                                
+
+                                exit_hit = (
+                                    str(row['EMA Status']).strip() == 'BELOW EMA21'
+                                    or 'EXIT' in str(row['10 Day Rule'])
+                                )
+
+                                if exit_hit:
+                                    # Light red background for entire row
+                                    styles = ['background-color: rgba(254,202,202,0.40);'] * len(row)
+
+                                    # Bold only Symbol
+                                    symbol_idx = list(row.index).index("Symbol")
+                                    styles[symbol_idx] += "font-weight:800;"
+
+                                    # Bold only 10 Day Rule
+                                    rule_idx = list(row.index).index("10 Day Rule")
+                                    styles[rule_idx] += "font-weight:800;"
+
+                                # Return % colour
                                 try:
-                                    ret_idx = list(row.index).index('Return %')
-                                    if float(row['Return %']) > 0:
-                                        styles[ret_idx] = 'background-color: rgba(187, 247, 208, 0.6); font-weight: 800;'
-                                    elif float(row['Return %']) < 0:
-                                        styles[ret_idx] = 'background-color: rgba(254, 202, 202, 0.6); font-weight: 800;'
-                                        
-                                    today_idx = list(row.index).index('Today chg%')
-                                    if float(row['Today chg%']) > 0:
-                                        styles[today_idx] = 'color: #10B981; font-weight: 600;'
-                                    elif float(row['Today chg%']) < 0:
-                                        styles[today_idx] = 'color: #EF4444; font-weight: 600;'
+                                    ret_idx = list(row.index).index("Return %")
+                                    if float(row["Return %"]) > 0:
+                                        styles[ret_idx] += "background-color: rgba(187,247,208,0.60); font-weight:700;"
+                                    else:
+                                        styles[ret_idx] += "background-color: rgba(254,202,202,0.60); font-weight:700;"
                                 except:
                                     pass
-                                    
+
                                 return styles
 
                             styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
