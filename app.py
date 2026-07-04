@@ -1153,7 +1153,8 @@ with tab_screeners:
                 styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
                     'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
-                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}")
+                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
+                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
                 })
                 st.markdown(f'<div class="scrollable-table-container">{styled_us_etf.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No US ETFs match the criteria at the moment.")
@@ -1168,7 +1169,10 @@ with tab_screeners:
             v_df = micro_df.copy()
             
             col_cmp = next((c for c in v_df.columns if 'cmp' in str(c).lower() and '%' not in str(c).lower()), 'Price')
-            col_chg = next((c for c in v_df.columns if 'return %' in str(c).lower() or 'chg' in str(c).lower()), '1day return %')
+            col_chg = next(
+                (c for c in v_df.columns if '1day return' in str(c).lower()),
+                '1day return %'
+            )
             col_vscore = next((c for c in v_df.columns if 'value score' in str(c).lower()), 'Value score')
             col_band = next((c for c in v_df.columns if 'band' in str(c).lower()), 'Band')
             col_sector = next((c for c in v_df.columns if 'sector' in str(c).lower()), 'Sector')
@@ -1461,14 +1465,31 @@ with tab_port:
                             if 'upstox_sheet_df' in st.session_state:
                                 avg_today_chg = res_df['Today chg%'].mean()
                                 avg_color = "#10B981" if avg_today_chg > 0 else "#EF4444"
-                                avg_chg_placeholder.markdown(f"<div style='text-align: right; margin-top: 10px;'><span style='font-size: 1rem; font-weight: 700; color: #0B1D30;'>Avg chg% : <span style='color: {avg_color};'>{avg_today_chg:.2f} %</span></span></div>", unsafe_allow_html=True)
+                                avg_chg_placeholder.markdown(
+                                    f"""
+                                    <div style='text-align:right;
+                                                margin-top:-8px;
+                                                margin-bottom:10px;
+                                                font-size:1.45rem;
+                                                font-weight:800;
+                                                color:#0B1D30;'>
+
+                                        Avg chg% :
+                                        <span style='color:{avg_color};'>
+                                            {avg_today_chg:.2f}%
+                                        </span>
+
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
                             
                             res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
                             
                             def highlight_upstox(row):
                                 styles = [''] * len(row)
                                 if row['EMA Status'] == 'BELOW EMA21' or 'EXIT' in str(row['10 Day Rule']):
-                                    styles = ['background-color: rgba(254, 202, 202, 0.4)'] * len(row)
+                                    styles = ['background-color: rgba(254, 202, 202, 0.4); font-weight:800;'] * len(row)
                                 
                                 try:
                                     ret_idx = list(row.index).index('Return %')
