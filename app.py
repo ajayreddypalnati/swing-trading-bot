@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import io
 import gzip
 from st_copy_to_clipboard import st_copy_to_clipboard
+import streamlit.components.v1 as components
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -843,33 +844,45 @@ with tab_main:
         
         copy_str = ",".join(display_df['Symbol'].tolist())
 
-        copy_js = f'''
-<script>
-(function(){{
-    const txt = {copy_str!r};
-    window.copyTVSymbols = function(){{
-        try {{
-            const ta = document.createElement("textarea");
-            ta.value = txt;
-            ta.style.position="fixed";
-            ta.style.left="-9999px";
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            document.execCommand("copy");
-            document.body.removeChild(ta);
-            alert("Copied all symbols to clipboard!");
-        }} catch(e) {{
-            prompt("Copy manually:", txt);
-        }}
-    }};
-}})();
-</script>
-'''
-        st.markdown(copy_js, unsafe_allow_html=True)
-
-        new_header = 'Priority <span onclick="copyTVSymbols()" style="cursor:pointer; font-size:0.5em; margin-left:4px; vertical-align:super;" title="Copy all for TradingView">📋</span>'
-        html_table = re.sub(r'(<th[^>]*>)(Priority)(</th>)', rf'\1{new_header}\3', html_table)
+        # Render a tiny, interactive Copy Button right above the table using a sandboxed iframe
+        copy_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght=600&display=swap');
+            body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+            button {{
+                font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
+                border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
+                font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                transition: all 0.2s;
+            }}
+            button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+        </style>
+        </head>
+        <body>
+            <button id="copyBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+            <script>
+            function copyToClipboard() {{
+                const ta = document.createElement('textarea');
+                ta.value = "{copy_str}";
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                
+                // Visual feedback that it actually worked
+                const btn = document.getElementById('copyBtn');
+                btn.innerHTML = '✅ Copied!';
+                setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+            }}
+            </script>
+        </body>
+        </html>
+        """
+        # Inject the micro-component directly above the table
+        components.html(copy_html, height=40)
         
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
