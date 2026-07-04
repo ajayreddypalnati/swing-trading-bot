@@ -1010,26 +1010,7 @@ with tab_screeners:
                 top_4_avg = etf_display.head(4)['Chg %'].mean() if not etf_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                def style_etf_row(row):
-                    is_top_4 = row.name in top_4_chg_idx
-                    styles = []
-                    for col in row.index:
-                        cell_style = ""
-                        if is_top_4:
-                            cell_style += "font-weight: 700; "
-                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
-                        styles.append(cell_style)
-                    return styles
-                    
-                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
-                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
-                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
-                })
-
-                # 1. GENERATE COPY BUTTON FOR INDIAN ETFs
+                # 1. GENERATE COPY BUTTON HTML FIRST
                 etf_copy_str = ",".join(etf_display['Symbol'].astype(str).tolist())
                 etf_copy_html = f"""
                 <!DOCTYPE html>
@@ -1037,7 +1018,7 @@ with tab_screeners:
                 <head>
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100%; }}
                     button {{
                         font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
                         border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
@@ -1066,7 +1047,29 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-                components.html(etf_copy_html, height=40)
+
+                # LAYOUT: TEXT AND BUTTON ON THE SAME ROW
+                col_avg, col_btn = st.columns([3, 1])
+                with col_avg:
+                    st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                with col_btn:
+                    components.html(etf_copy_html, height=45)
+                
+                def style_etf_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+                    for col in row.index:
+                        cell_style = ""
+                        if is_top_4:
+                            cell_style += "font-weight: 700; "
+                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
+                        styles.append(cell_style)
+                    return styles
+                    
+                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
+                })
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_etf_table = styled_etf.to_html()
@@ -1232,38 +1235,7 @@ with tab_screeners:
                 top_4_avg = us_display.head(4)['Chg %'].mean() if not us_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                st.markdown(
-                    f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
-                    unsafe_allow_html=True
-                )
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                def style_us_row(row):
-                    is_top_4 = row.name in top_4_chg_idx
-                    styles = []
-
-                    for col in row.index:
-                        style = ""
-
-                        if is_top_4:
-                            style += "font-weight:700;"
-
-                            if col == "Chg %":
-                                style += "background-color: rgba(187,247,208,0.5);"
-
-                        styles.append(style)
-
-                    return styles
-                
-                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
-                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
-                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
-                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
-                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
-                })
-
-                # 1. GENERATE COPY BUTTON FOR US ETFs
+                # 1. GENERATE COPY BUTTON HTML FIRST
                 us_etf_copy_str = ",".join(us_display['Symbol'].astype(str).tolist())
                 us_etf_copy_html = f"""
                 <!DOCTYPE html>
@@ -1271,7 +1243,7 @@ with tab_screeners:
                 <head>
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100%; }}
                     button {{
                         font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
                         border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
@@ -1300,7 +1272,37 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-                components.html(us_etf_copy_html, height=40)
+
+                # LAYOUT: TEXT AND BUTTON ON THE SAME ROW
+                col_avg_us, col_btn_us = st.columns([3, 1])
+                with col_avg_us:
+                    st.markdown(f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                with col_btn_us:
+                    components.html(us_etf_copy_html, height=45)
+                
+                def style_us_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+
+                    for col in row.index:
+                        style = ""
+
+                        if is_top_4:
+                            style += "font-weight:700;"
+
+                            if col == "Chg %":
+                                style += "background-color: rgba(187,247,208,0.5);"
+
+                        styles.append(style)
+
+                    return styles
+                
+                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
+                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
+                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
+                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
+                })
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_us_table = styled_us_etf.to_html()
