@@ -1353,7 +1353,7 @@ with tab_screeners:
 with tab_port:
     port_header_col1, port_header_col2 = st.columns([4, 1])
     with port_header_col1:
-        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, RISK.</span>", unsafe_allow_html=True)
+        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</span>", unsafe_allow_html=True)
     with port_header_col2:
         if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
             st.cache_data.clear()
