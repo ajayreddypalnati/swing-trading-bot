@@ -868,8 +868,8 @@ with tab_main:
 '''
         st.markdown(copy_js, unsafe_allow_html=True)
 
-        new_header = 'Symbol <span onclick="copyTVSymbols()" style="cursor:pointer; font-size:0.9em; margin-left:4px;" title="Copy all for TradingView">📋</span>'
-        html_table = re.sub(r'(<th[^>]*>)(Symbol)(</th>)', rf'\1{new_header}\3', html_table)
+        new_header = 'Priority <span onclick="copyTVSymbols()" style="cursor:pointer; font-size:0.5em; margin-left:4px; vertical-align:super;" title="Copy all for TradingView">📋</span>'
+        html_table = re.sub(r'(<th[^>]*>)(Priority)(</th>)', rf'\1{new_header}\3', html_table)
         
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
