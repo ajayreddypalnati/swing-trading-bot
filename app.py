@@ -1436,4 +1436,314 @@ with tab_screeners:
                         v_rebal_df = pd.DataFrame(v_rebal_data)
                         def val_color_status(row):
                             if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
-                            elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202
+                            elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
+                            return [''] * len(row)
+                        
+                        styled_v_rebal = v_rebal_df.style.apply(val_color_status, axis=1).hide(axis="index")
+                        st.markdown(f'<div class="scrollable-table-container">{styled_v_rebal.to_html()}</div>', unsafe_allow_html=True)
+                    else: st.warning("Could not find any valid tickers in the uploaded file.")
+                except Exception as e: st.error(f"Error processing portfolio: {e}")
+        else: st.warning("Value Screener data is currently empty or failed to load.")
+
+# --- 5. UPSTOX PORTFOLIO TRACKER TAB ---
+with tab_port:
+    port_header_col1, port_header_col2 = st.columns([4, 1])
+    with port_header_col1:
+        st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</span>", unsafe_allow_html=True)
+    with port_header_col2:
+        if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.clear()
+            st.rerun()
+        refresh_time_placeholder = st.empty()
+        refresh_time_placeholder.markdown(f"<div style='text-align: right; margin-top: 5px; color: #6B7280; font-size: 0.85rem; font-weight: 600;'>Last Refreshed: {st.session_state.get('port_refresh_time', 'Never')}</div>", unsafe_allow_html=True)
+        
+    col_t1, col_t2 = st.columns([1, 2])
+    with col_t1:
+        upstox_token = st.text_input("Upstox Access Token", type="password", value="eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiI0RkJLQjYiLCJqdGkiOiI2YTM3NmVmN2ZlOGNjNTM2ODA1MWYzNDciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6ZmFsc2UsImlzRXh0ZW5kZWQiOnRydWUsImlhdCI6MTc4MjAxNzc4MywiaXNzIjoidWRhcGktZ2F0ZXdheS1zZXJ2aWNlIiwiZXhwIjoxODEzNjE1MjAwfQ.hDOC4JVkYd-rzbuQdWNzLU6p1RtROfvVtj9UeFiGQX4", help="If token fails, update it here.")
+    with col_t2:
+        input_method = st.radio("Select Input Method:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed", key="tracker_method")
+
+    port_df = pd.DataFrame()
+
+    if input_method == "Upload CSV":
+        upstox_file = st.file_uploader("Upload Portfolio (CSV)", type=['csv'])
+        if upstox_file is not None:
+            try: 
+                st.session_state['upstox_df'] = pd.read_csv(upstox_file)
+                new_time = datetime.now(ist).strftime('%m/%y %H:%M')
+                st.session_state['port_refresh_time'] = new_time
+                refresh_time_placeholder.markdown(f"<div style='text-align: right; margin-top: 5px; color: #6B7280; font-size: 0.85rem; font-weight: 600;'>Last Refreshed: {new_time}</div>", unsafe_allow_html=True)
+            except Exception as e: 
+                st.error(f"Error reading file: {e}")
+                
+        if 'upstox_df' in st.session_state:
+            port_df = st.session_state['upstox_df']
+
+    elif input_method == "Google Sheets":
+        col_gs1, col_gs2 = st.columns([3, 1])
+        with col_gs1:
+            gsheet_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed", key="tracker_url")
+        with col_gs2:
+            load_clicked = st.button("🔄 Load / Refresh Sheet")
+            
+        avg_chg_placeholder = st.empty()
+            
+        if load_clicked and gsheet_url:
+            try:
+                if "docs.google.com/spreadsheets" in gsheet_url:
+                    sheet_id_match = re.search(r"/d/([a-zA-Z0-9-_]+)", gsheet_url)
+                    if sheet_id_match:
+                        sheet_id = sheet_id_match.group(1)
+                        gid_match = re.search(r"[#&]gid=([0-9]+)", gsheet_url)
+                        gid = gid_match.group(1) if gid_match else "0"
+                        
+                        export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+                        st.session_state['upstox_sheet_df'] = pd.read_csv(export_url)
+                        new_time = datetime.now(ist).strftime('%m/%y %H:%M')
+                        st.session_state['port_refresh_time'] = new_time
+                        refresh_time_placeholder.markdown(f"<div style='text-align: right; margin-top: 5px; color: #6B7280; font-size: 0.85rem; font-weight: 600;'>Last Refreshed: {new_time}</div>", unsafe_allow_html=True)
+                    else: st.error("Could not extract Sheet ID.")
+                else: st.error("Invalid Google Sheets URL format.")
+            except Exception as e: st.error(f"Error loading Google Sheet: {e}. Check if the link is public.")
+            
+        if 'upstox_sheet_df' in st.session_state:
+            port_df = st.session_state['upstox_sheet_df']
+
+    if not port_df.empty and upstox_token:
+        try:
+            if len(port_df.columns) < 5:
+                st.error("Data must contain at least 5 columns: Stock Ticker, Entry Date, Entry Price, Stop Loss, and RISK.")
+            else:
+                port_df = port_df.iloc[:, :5].copy()
+                port_df.columns = ['Stock Ticker', 'Entry Date', 'Entry Price', 'Stop Loss', 'RISK']
+                port_df = port_df.dropna(how='all')
+                
+                col_stock = 'Stock Ticker'
+                col_date = 'Entry Date'
+                col_price = 'Entry Price'
+                col_sl = 'Stop Loss'
+                col_risk = 'RISK'
+                
+                with st.spinner("Fetching data from Upstox API..."):
+                    inst_dict = get_instrument_mapping()
+                    if "error" in inst_dict: 
+                        st.error(f"Failed to load Upstox instrument mapping: {inst_dict['error']}")
+                    else:
+                        results = []
+                        today_str = datetime.now(ist).strftime("%Y-%m-%d")
+                        api_failed = False
+                        
+                        for _, row in port_df.iterrows():
+                            symbol = str(row[col_stock]).strip().upper()
+                            if symbol in ['NAN', 'NONE', '']: continue
+                            try:
+                                entry_date = pd.to_datetime(row[col_date], dayfirst=True).tz_localize(None)
+                                entry_price = float(row[col_price])
+                                stop_loss_price = float(row[col_sl]) if pd.notna(row[col_sl]) else 0.0
+                                risk_pct = str(row[col_risk])
+                            except: continue
+                                
+                            if symbol not in inst_dict: continue
+                                
+                            inst_key = inst_dict[symbol]
+                            start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
+                            df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
+                            
+                            if status_code != 200:
+                                api_failed = True
+                                st.error(f"Upstox API Error {status_code} for {symbol}. Token might be expired or invalid.")
+                                break
+                                
+                            if df_hist.empty: continue
+                                
+                            df_hist["EMA21"] = df_hist["Close"].ewm(span=21, adjust=False).mean()
+                            future_data = df_hist[df_hist.index >= entry_date]
+                            
+                            live_data = get_live_quote(inst_key, upstox_token)
+                            if live_data is not None:
+                                current_price, today_chg_pct = live_data
+                            else:
+                                current_price = float(df_hist.iloc[-1]["Close"])
+                                today_chg_pct = 0.0
+                                
+                            if abs(today_chg_pct) < 0.001 and len(df_hist) >= 2:
+                                prev_close = float(df_hist.iloc[-2]["Close"])
+                                last_close = float(df_hist.iloc[-1]["Close"])
+                                if prev_close > 0:
+                                    hist_pct = ((last_close - prev_close) / prev_close) * 100
+                                    if abs(current_price - last_close) < 0.001:
+                                        today_chg_pct = hist_pct
+                                        
+                            ema21 = float(df_hist.iloc[-1]["EMA21"])
+                            trading_days = len(future_data) if not future_data.empty else 1
+                            
+                            profit_loss = current_price - entry_price
+                            return_pct = ((current_price - entry_price) / entry_price) * 100
+                            ema_status = "ABOVE EMA21" if current_price > ema21 else "BELOW EMA21"
+                            
+                            if current_price < stop_loss_price:
+                                ten_day_rule = "EXIT (STOP LOSS)"
+                            elif trading_days >= 10:
+                                try:
+                                    day10_close = float(future_data.iloc[9]["Close"])
+                                    day10_return = ((day10_close - entry_price) / entry_price) * 100
+                                    if day10_return >= 5:
+                                        ten_day_rule = f"PASS ({day10_return:.2f}%)"
+                                    else:
+                                        ten_day_rule = f"EXIT ({day10_return:.2f}%)"
+                                except IndexError:
+                                    ten_day_rule = f"PENDING ({trading_days}/10)"
+                            else:
+                                ten_day_rule = f"PENDING ({trading_days}/10)"
+                                
+                            results.append({
+                                "Symbol": symbol, 
+                                "Entry Date": entry_date.strftime("%d-%m-%Y"),
+                                "Today chg%": today_chg_pct,
+                                "Entry Price": entry_price, 
+                                "Stop Loss": stop_loss_price,
+                                "Risk %": risk_pct,
+                                "Current Price": current_price,
+                                "Profit/Loss": profit_loss,
+                                "Return %": return_pct, 
+                                "Trading Days": trading_days,
+                                "EMA21": ema21, 
+                                "EMA 21 Status": ema_status, 
+                                "10 Day Rule": ten_day_rule
+                            })
+                            
+                        if not api_failed and results:
+                            res_df = pd.DataFrame(results).sort_values("Return %", ascending=False)
+                            
+                            if 'upstox_sheet_df' in st.session_state:
+                                avg_today_chg = res_df['Today chg%'].mean()
+                                avg_color = "#10B981" if avg_today_chg > 0 else "#EF4444"
+                                avg_chg_placeholder.markdown(
+        f"""
+        <div style="
+            display:flex;
+            justify-content:flex-end;
+            align-items:center;
+            width:100%;
+            margin-top:4px;
+            margin-bottom:12px;
+        ">
+            <span style="
+                font-size:1.20rem;
+                font-weight:800;
+                color:#0B1D30;
+            ">
+                Avg chg% :
+                <span style="color:{avg_color}; padding-left:6px;">
+                    {avg_today_chg:.2f}%
+                </span>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+                            
+                            res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
+                            
+                            def highlight_upstox(row):
+                                styles = [''] * len(row)
+
+                                exit_hit = (
+                                    str(row['EMA 21 Status']).strip() == 'BELOW EMA21'
+                                    or 'EXIT' in str(row['10 Day Rule'])
+                                )
+
+                                if exit_hit:
+                                    # Light red background for entire row
+                                    styles = ['background-color: rgba(254,202,202,0.40);'] * len(row)
+
+                                    # Bold only Symbol
+                                    symbol_idx = list(row.index).index("Symbol")
+                                    styles[symbol_idx] += "font-weight:800;"
+
+                                    # Bold only 10 Day Rule
+                                    rule_idx = list(row.index).index("10 Day Rule")
+                                    styles[rule_idx] += "font-weight:800;"
+
+                                # Return % colour
+                                try:
+                                    ret_idx = list(row.index).index("Return %")
+                                    if float(row["Return %"]) > 0:
+                                        styles[ret_idx] += "background-color: rgba(187,247,208,0.60); font-weight:700;"
+                                    else:
+                                        styles[ret_idx] += "background-color: rgba(254,202,202,0.60); font-weight:700;"
+                                except:
+                                    pass
+
+                                return styles
+
+                            styled_res = res_df.style.apply(highlight_upstox, axis=1).hide(axis="index").format({
+                                "Today chg%": lambda x: safe_fmt(x, "{:.2f}%"),
+                                "Entry Price": lambda x: safe_fmt(x, "₹{:.2f}"), 
+                                "Stop Loss": lambda x: safe_fmt(x, "₹{:.2f}"),
+                                "Current Price": lambda x: safe_fmt(x, "₹{:.2f}"), 
+                                "Profit/Loss": lambda x: safe_fmt(x, "₹{:.2f}"),
+                                "Return %": lambda x: safe_fmt(x, "{:.2f}%"), 
+                                "EMA21": lambda x: safe_fmt(x, "₹{:.2f}")
+                            })
+
+                            # 1. GENERATE COPY BUTTON FOR PORTFOLIO STOCKS
+                            port_copy_str = ",".join(res_df["Symbol"].astype(str).tolist())
+                            port_copy_html = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                            <style>
+                                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; }}
+                                button {{
+                                    font-family: 'Inter', sans-serif;
+                                    background-color: #0B1D30;
+                                    color: #FFFFFF;
+                                    border: none;
+                                    padding: 6px 12px;
+                                    border-radius: 6px;
+                                    cursor: pointer;
+                                    font-weight: 600;
+                                    font-size: 0.85rem;
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                                    transition: all 0.2s;
+                                }}
+                                button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                            </style>
+                            </head>
+                            <body>
+                                <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                                <script>
+                                function copyToClipboard() {{
+                                    const ta = document.createElement('textarea');
+                                    ta.value = "{port_copy_str}";
+                                    document.body.appendChild(ta);
+                                    ta.select();
+                                    document.execCommand('copy');
+                                    document.body.removeChild(ta);
+                                    const btn = document.getElementById('copyPortBtn');
+                                    btn.innerHTML = '✅ Copied!';
+                                    setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                                }}
+                                </script>
+                            </body>
+                            </html>
+                            """
+                            components.html(port_copy_html, height=40)
+
+                            # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
+                            html_port_table = styled_res.to_html()
+                            for _, r in res_df.iterrows():
+                                sym = str(r["Symbol"])
+                                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+                                link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                                html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
+
+                            st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
+                        elif not api_failed: st.info("No valid data processed. Check if tickers match NSE/BSE format.")
+        except Exception as e: st.error(f"Error parsing portfolio file: {e}")
+
+time.sleep(60)
+st.rerun()
