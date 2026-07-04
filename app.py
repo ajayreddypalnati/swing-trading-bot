@@ -966,8 +966,8 @@ with tab_screeners:
                 show_cols = [c for c in show_cols if c in etf_display.columns]
                 etf_display = etf_display[show_cols]
                 
-                top_4_chg_idx = etf_display['Chg %'].nlargest(4).index.tolist()
-                top_4_avg = etf_display.loc[top_4_chg_idx, 'Chg %'].mean() if not etf_display.empty else 0.0
+                top_4_chg_idx = etf_display.head(4).index.tolist()
+                top_4_avg = etf_display.head(4)['Chg %'].mean() if not etf_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
                 st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
@@ -1140,8 +1140,8 @@ with tab_screeners:
                 us_show_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Expense Ratio']
                 us_show_cols = [c for c in us_show_cols if c in us_display.columns]
                 us_display = us_display[us_show_cols]
-                top_4_chg_idx = us_display['Chg %'].nlargest(4).index.tolist()
-                top_4_avg = us_display.loc[top_4_chg_idx, 'Chg %'].mean() if not us_display.empty else 0.0
+                top_4_chg_idx = us_display.head(4).index.tolist()
+                top_4_avg = us_display.head(4)['Chg %'].mean() if not us_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
                 st.markdown(
