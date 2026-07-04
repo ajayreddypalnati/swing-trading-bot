@@ -1513,7 +1513,7 @@ with tab_port:
                                 "Return %": return_pct, 
                                 "Trading Days": trading_days,
                                 "EMA21": ema21, 
-                                "EMA Status": ema_status, 
+                                "EMA 21 Status": ema_status, 
                                 "10 Day Rule": ten_day_rule
                             })
                             
