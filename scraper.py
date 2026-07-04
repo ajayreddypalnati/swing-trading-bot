@@ -211,19 +211,64 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
             col_ey = next((c for c in microcap_df.columns if 'earnings yield' in str(c).lower()), None)
             col_cmpbv = next((c for c in microcap_df.columns if 'cmp' in str(c).lower() and 'bv' in str(c).lower()), None)
 
-            cols_to_rank = [col for col in [col_div, col_roce, col_ey, col_cmpbv] if col is not None]
-            
-            if cols_to_rank:
-                value_score_series = pd.Series(0.0, index=microcap_df.index)
-                for col in cols_to_rank:
-                    microcap_df[col] = pd.to_numeric(microcap_df[col], errors='coerce')
-                    # Highest value = Rank 1
-                    col_rank = microcap_df[col].rank(ascending=False, method='min', na_option='bottom')
-                    value_score_series += (col_rank * 0.25)
-                
-                microcap_df['Value score'] = value_score_series
-                microcap_df = microcap_df.sort_values(by='Value score', ascending=True)
-                print("   ✅ Value Score computed and sheet sorted by Lowest Score.")
+            # ----------------------------------------
+            # Validate required columns
+            # ----------------------------------------
+            required_cols = {
+                "Dividend Yield": col_div,
+                "ROCE": col_roce,
+                "Earnings Yield": col_ey,
+                "CMP/BV": col_cmpbv
+            }
+
+            missing = [name for name, col in required_cols.items() if col is None]
+
+            if missing:
+                raise Exception(f"Missing required columns from Screener: {', '.join(missing)}")
+
+            # ----------------------------------------
+            # Convert to numeric
+            # ----------------------------------------
+            for col in [col_div, col_roce, col_ey, col_cmpbv]:
+                microcap_df[col] = pd.to_numeric(microcap_df[col], errors="coerce")
+
+            # ----------------------------------------
+            # QUALITY FILTER
+            # ----------------------------------------
+            microcap_df = microcap_df[
+                (microcap_df[col_ey] > 0) &
+                (microcap_df[col_roce] >= 15)
+            ].copy()
+
+            print(f"   ✅ {len(microcap_df)} stocks remain after quality filter.")
+
+            value_score = pd.Series(0.0, index=microcap_df.index)
+
+            # Earnings Yield (30%) - Higher is better
+            if col_ey:
+                rank = microcap_df[col_ey].rank(ascending=False, method='min', na_option='bottom')
+                value_score += rank * 0.30
+
+            # CMP / BV (25%) - LOWER is better
+            if col_cmpbv:
+                microcap_df[col_cmpbv] = pd.to_numeric(microcap_df[col_cmpbv], errors='coerce')
+                rank = microcap_df[col_cmpbv].rank(ascending=True, method='min', na_option='bottom')
+                value_score += rank * 0.25
+
+            # ROCE (30%) - Higher is better
+            rank = microcap_df[col_roce].rank(ascending=False, method='min', na_option='bottom')
+            value_score += rank * 0.30
+
+            # Dividend Yield (15%) - Higher is better
+            if col_div:
+                microcap_df[col_div] = pd.to_numeric(microcap_df[col_div], errors='coerce')
+                rank = microcap_df[col_div].rank(ascending=False, method='min', na_option='bottom')
+                value_score += rank * 0.15
+
+            microcap_df['Value score'] = value_score.round(2)
+            microcap_df = microcap_df.sort_values(by='Value score', ascending=True)
+            microcap_df["Value Rank"] = range(1, len(microcap_df) + 1)
+            print("   ✅ Value Score computed and sheet sorted by Lowest Score.")
             
             save_db_with_retry(microcap_df, "Nifty_Microcap_250_Index", engine, if_exists="replace", index=False)
             print("   ☁️ Successfully pushed 'Nifty_Microcap_250_Index' to Supabase.")
