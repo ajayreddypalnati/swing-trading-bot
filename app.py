@@ -814,10 +814,10 @@ def format_stars(val):
 # ==========================================
 # SAAS NAVIGATION TABS
 # ==========================================
-tab_cycle, tab_leaders, tab_main, tab_screeners, tab_port = st.tabs([
+tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
+    "⚡ 9-EMA Screener",
     "🎢 Market Cycle",
     "🏆 Market Leaders",
-    "⚡ 9-EMA Screener",
     "🔎 Screeners",
     "📈 Portfolio Tracker"
 ])
@@ -858,10 +858,12 @@ with tab_main:
     else: 
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
+
 # --- 2. MARKET CYCLE TAB ---
 with tab_cycle:
     if not raw_sec.empty and not raw_ind.empty:
         render_market_cycle_graph(roc_vals)
+
 
 # --- 3. MARKET LEADERS TAB ---
 with tab_leaders:
