@@ -1466,23 +1466,29 @@ with tab_port:
                                 avg_today_chg = res_df['Today chg%'].mean()
                                 avg_color = "#10B981" if avg_today_chg > 0 else "#EF4444"
                                 avg_chg_placeholder.markdown(
-                                    f"""
-                                    <div style='text-align:right;
-                                                margin-top:-8px;
-                                                margin-bottom:10px;
-                                                font-size:1.45rem;
-                                                font-weight:800;
-                                                color:#0B1D30;'>
-
-                                        Avg chg% :
-                                        <span style='color:{avg_color};'>
-                                            {avg_today_chg:.2f}%
-                                        </span>
-
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
+        f"""
+        <div style="
+            display:flex;
+            justify-content:flex-end;
+            align-items:center;
+            width:100%;
+            margin-top:4px;
+            margin-bottom:12px;
+        ">
+            <span style="
+                font-size:1.20rem;
+                font-weight:800;
+                color:#0B1D30;
+            ">
+                Avg chg% :
+                <span style="color:{avg_color}; padding-left:6px;">
+                    {avg_today_chg:.2f}%
+                </span>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
                             
                             res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
                             
