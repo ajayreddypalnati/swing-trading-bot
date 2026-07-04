@@ -1548,13 +1548,13 @@ with tab_port:
         unsafe_allow_html=True
     )
                             
-                            res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA Status", "10 Day Rule"]]
+                            res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
                             
                             def highlight_upstox(row):
                                 styles = [''] * len(row)
 
                                 exit_hit = (
-                                    str(row['EMA Status']).strip() == 'BELOW EMA21'
+                                    str(row['EMA 21 Status']).strip() == 'BELOW EMA21'
                                     or 'EXIT' in str(row['10 Day Rule'])
                                 )
 
