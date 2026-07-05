@@ -18,6 +18,9 @@ import streamlit.components.v1 as components
 # --- INJECT THIS AT THE TOP OF YOUR MAIN app.py ---
 import streamlit as st
 
+st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+
+# --- INJECT TOGGLE HERE ---
 # Create a clean top-right toggle for market selection
 col_blank, col_toggle = st.columns([8.5, 1.5])
 with col_toggle:
@@ -27,6 +30,11 @@ if is_usa:
     import usa_app
     usa_app.run_usa_screener()
     st.stop() # This prevents the rest of the Indian app from loading
+# --------------------------
+
+# Initialize portfolio refresh time in session state
+if 'port_refresh_time' not in st.session_state:
+    st.session_state['port_refresh_time'] = "Never"
 # --------------------------------------------------
 
 # Silence terminal spam
