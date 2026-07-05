@@ -599,10 +599,27 @@ def render_market_cycle_graph(roc_vals):
         return
 
     roc_val = float(roc_vals[0])
-    trend_dir = "up"
+    
+    # --- NEW METHOD 2: Linear Regression Slope ---
     if len(roc_vals) > 1:
-        lookback_index = 20 if len(roc_vals) > 20 else len(roc_vals) - 1
-        if roc_val < float(roc_vals[lookback_index]): trend_dir = "down"
+        # Take up to the last 20 values and reverse them so they are in chronological order (oldest to newest)
+        lookback_window = roc_vals[:20][::-1]
+        y = np.array(lookback_window, dtype=float)
+        x = np.arange(len(y))
+        
+        # polyfit(x, y, 1) calculates a degree 1 polynomial (a straight line)
+        # It returns the slope and the intercept. We only need the slope.
+        slope, _ = np.polyfit(x, y, 1)
+        
+        # If the slope is positive or 0, momentum is trending up. Otherwise, down.
+        if slope >= 0:
+            trend_dir = "up"
+        else:
+            trend_dir = "down"
+    else:
+        # Fallback if there is only 1 data point
+        trend_dir = "up"
+    # ---------------------------------------------
 
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
@@ -1010,7 +1027,26 @@ with tab_screeners:
                 top_4_avg = etf_display.head(4)['Chg %'].mean() if not etf_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                # 1. GENERATE COPY BUTTON HTML FIRST
+                st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                def style_etf_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+                    for col in row.index:
+                        cell_style = ""
+                        if is_top_4:
+                            cell_style += "font-weight: 700; "
+                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
+                        styles.append(cell_style)
+                    return styles
+                    
+                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
+                })
+
+                # 1. GENERATE COPY BUTTON FOR INDIAN ETFs
                 etf_copy_str = ",".join(etf_display['Symbol'].astype(str).tolist())
                 etf_copy_html = f"""
                 <!DOCTYPE html>
@@ -1018,7 +1054,7 @@ with tab_screeners:
                 <head>
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100%; }}
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
                     button {{
                         font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
                         border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
@@ -1047,29 +1083,7 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-
-                # LAYOUT: TEXT AND BUTTON ON THE SAME ROW
-                col_avg, col_btn = st.columns([3, 1])
-                with col_avg:
-                    st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                with col_btn:
-                    components.html(etf_copy_html, height=45)
-                
-                def style_etf_row(row):
-                    is_top_4 = row.name in top_4_chg_idx
-                    styles = []
-                    for col in row.index:
-                        cell_style = ""
-                        if is_top_4:
-                            cell_style += "font-weight: 700; "
-                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
-                        styles.append(cell_style)
-                    return styles
-                    
-                styled_etf = etf_display.style.apply(style_etf_row, axis=1).hide(axis="index").format({
-                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
-                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
-                })
+                components.html(etf_copy_html, height=40)
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_etf_table = styled_etf.to_html()
@@ -1235,7 +1249,38 @@ with tab_screeners:
                 top_4_avg = us_display.head(4)['Chg %'].mean() if not us_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                # 1. GENERATE COPY BUTTON HTML FIRST
+                st.markdown(
+                    f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
+                    unsafe_allow_html=True
+                )
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                def style_us_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+
+                    for col in row.index:
+                        style = ""
+
+                        if is_top_4:
+                            style += "font-weight:700;"
+
+                            if col == "Chg %":
+                                style += "background-color: rgba(187,247,208,0.5);"
+
+                        styles.append(style)
+
+                    return styles
+                
+                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
+                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
+                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
+                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
+                })
+
+                # 1. GENERATE COPY BUTTON FOR US ETFs
                 us_etf_copy_str = ",".join(us_display['Symbol'].astype(str).tolist())
                 us_etf_copy_html = f"""
                 <!DOCTYPE html>
@@ -1243,7 +1288,7 @@ with tab_screeners:
                 <head>
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100%; }}
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
                     button {{
                         font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
                         border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
@@ -1272,37 +1317,7 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-
-                # LAYOUT: TEXT AND BUTTON ON THE SAME ROW
-                col_avg_us, col_btn_us = st.columns([3, 1])
-                with col_avg_us:
-                    st.markdown(f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                with col_btn_us:
-                    components.html(us_etf_copy_html, height=45)
-                
-                def style_us_row(row):
-                    is_top_4 = row.name in top_4_chg_idx
-                    styles = []
-
-                    for col in row.index:
-                        style = ""
-
-                        if is_top_4:
-                            style += "font-weight:700;"
-
-                            if col == "Chg %":
-                                style += "background-color: rgba(187,247,208,0.5);"
-
-                        styles.append(style)
-
-                    return styles
-                
-                styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
-                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
-                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
-                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
-                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
-                })
+                components.html(us_etf_copy_html, height=40)
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_us_table = styled_us_etf.to_html()
@@ -1549,7 +1564,6 @@ with tab_port:
                             if symbol not in inst_dict: continue
                                 
                             inst_key = inst_dict[symbol]
-                            detected_exch = "BSE" if str(inst_key).startswith("BSE") else "NSE"
                             start_fetch_date = (entry_date - pd.Timedelta(days=90)).strftime("%Y-%m-%d")
                             df_hist, status_code = fetch_upstox_history(inst_key, start_fetch_date, today_str, upstox_token)
                             
@@ -1601,8 +1615,7 @@ with tab_port:
                                 ten_day_rule = f"PENDING ({trading_days}/10)"
                                 
                             results.append({
-                                "Symbol": symbol,
-                                "Exchange": detected_exch,
+                                "Symbol": symbol, 
                                 "Entry Date": entry_date.strftime("%d-%m-%Y"),
                                 "Today chg%": today_chg_pct,
                                 "Entry Price": entry_price, 
@@ -1648,7 +1661,7 @@ with tab_port:
         unsafe_allow_html=True
     )
                             
-                            res_df = res_df[["Symbol", "Exchange", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
+                            res_df = res_df[["Symbol", "Entry Date", "Today chg%", "Entry Price", "Stop Loss", "Risk %", "Current Price", "Profit/Loss", "Return %", "Trading Days", "EMA21", "EMA 21 Status", "10 Day Rule"]]
                             
                             def highlight_upstox(row):
                                 styles = [''] * len(row)
@@ -1741,13 +1754,7 @@ with tab_port:
                             html_port_table = styled_res.to_html()
                             for _, r in res_df.iterrows():
                                 sym = str(r["Symbol"])
-                                exch = str(r["Exchange"]).upper()
-                                
-                                if 'NSE' in exch:
-                                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
-                                else:
-                                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=BSE%3A{sym}"
-                                    
+                                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
                                 link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
                                 html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
 
