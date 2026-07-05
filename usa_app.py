@@ -113,8 +113,15 @@ def run_usa_screener():
             ts = int(time.time())
             url = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv&t={ts}"
             df = pd.read_csv(url, header=None)
-            market_breadth_value = df.iloc[5, 28] # Row 6, Column AC (0-indexed)
-            return "N/A" if pd.isna(market_breadth_value) else str(market_breadth_value)
+            # Pull the raw value from Row 6, Column AC
+            raw_val = df.iloc[5, 28]
+            market_breadth_value = str(raw_val).strip()
+
+            # Catch empty cells or Google Sheets formula errors
+            if pd.isna(raw_val) or "DIV/0" in market_breadth_value or "REF!" in market_breadth_value or "N/A" in market_breadth_value:
+                return "N/A"
+
+            return market_breadth_value
         except Exception:
             return "N/A"
 
@@ -125,8 +132,17 @@ def run_usa_screener():
             formatted_data = []
             for item in raw_data:
                 d = item["d"]
-                # Mapping based on provided JSON columns
-                ticker = d[0]
+                raw_ticker = str(d[0])
+                symbol = raw_ticker
+                name = raw_ticker
+                if "{" in raw_ticker:
+                    try:
+                        import ast
+                        parsed_ticker = ast.literal_eval(raw_ticker)
+                        symbol = parsed_ticker.get("name", raw_ticker)
+                        name = parsed_ticker.get("description", symbol)
+                    except:
+                        pass
                 price = d[1]
                 change = d[9]
                 vol = d[10]
@@ -134,7 +150,7 @@ def run_usa_screener():
                 sector = d[15]
                 industry = d[17]
                 exchange = d[18]
-                formatted_data.append([ticker, ticker, price, change, vol, mcap, sector, industry, exchange])
+                formatted_data.append([symbol, name, price, change, vol, mcap, sector, industry, exchange])
             return formatted_data
         except Exception:
             return []
