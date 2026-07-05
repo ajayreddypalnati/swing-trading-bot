@@ -1,0 +1,32 @@
+name: USA Stock Scraper
+
+on:
+  schedule:
+    # Runs at 23:30 UTC every day (which is 5:00 AM IST the next day)
+    - cron: '30 23 * * *'   
+  workflow_dispatch:
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          playwright install chromium
+
+      - name: Run scraper
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # Wrapping the filename in quotes because of the space
+        run: python "US Scraper.py"
