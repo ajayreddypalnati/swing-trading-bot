@@ -2,8 +2,11 @@ import os
 import sys
 import time
 import requests
+import re
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy import text
 
 # ==========================================
 # 0. DATABASE CONFIG & HELPER FUNCTIONS
@@ -37,7 +40,7 @@ def save_db_with_retry(df, table_name, engine, if_exists="replace", index=False,
         except Exception as e:
             print(f"   ⚠️ Database write failed for {table_name} (Attempt {attempt}/3): {e}")
             if attempt < 3: time.sleep(5)
-    raise Exception(f"Failed to save {table_name} to database after 3 attempts.")
+    print(f"❌ Failed to save {table_name} to database after 3 attempts.")
 
 
 # ==========================================
@@ -81,7 +84,7 @@ def fetch_tradingview_etfs_all():
         }
     }
 
-    print("\nFetching ETF data from TradingView...")
+    print("\nFetching US Stock/Fund data from TradingView...")
     response = requests.post(
         url,
         headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
@@ -96,14 +99,13 @@ def fetch_tradingview_etfs_all():
     for r in rows:
         sym=r[0].get("name","") if isinstance(r[0],dict) else r[0]
         processed.append([sym,*r[1:]])
-    rows=processed
 
-    df = pd.DataFrame(rows, columns=[
+    df = pd.DataFrame(processed, columns=[
         "Symbol","Price (USD)","Chg %","Market Cap","Sector","Industry","Exchange","Perf 1W","Perf 1M","Perf 3M","Perf 6M","Perf 1Y","Price x Vol (1M)"
     ])
 
     print("-" * 50)
-    print(f"Success! Downloaded {len(df)} ETFs.")
+    print(f"Success! Downloaded {len(df)} US Stocks/Funds.")
     print("-" * 50)
     return df
 
@@ -152,14 +154,108 @@ def fetch_usdinr():
 
 
 # ==========================================
+# PORTED COMPLETE US ETF SCREENER LOGIC
+# ==========================================
+def fetch_and_rank_actual_us_etfs(engine):
+    print("\n🇺🇸 Fetching and Ranking Actual USA ETFs...")
+    url = "https://scanner.tradingview.com/america/scan"
+    payload = {
+        "columns": [
+            "name", "close", "change", 
+            "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", 
+            "exchange", "average_volume_30d_calc", "EMA21", "expense_ratio"
+        ],
+        "filter": [
+            {"left": "type", "operation": "equal", "right": "fund"},
+            {"left": "Value.Traded", "operation": "greater", "right": 5000000}
+        ],
+        "markets": ["america"],
+        "options": {"lang": "en"},
+        "range": [0, 4000], 
+        "sort": {"sortBy": "Perf.10Y", "sortOrder": "desc"}
+    }
+
+    try:
+        response = requests.post(url, headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        rows = [item["d"] for item in data.get("data", [])]
+        df = pd.DataFrame(rows, columns=[
+            "Symbol", "Price (USD)", "Chg %", 
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", 
+            "Perf 1Y %", "Exchange", "Avg Vol 30D", "EMA 21", "Expense Ratio"
+        ])
+        df["Symbol"] = df["Symbol"].str.upper().str.strip()
+        print(f"   📋 Retrieved {len(df)} USA ETFs from TradingView.")
+
+        # VLOOKUP Logic from USA_ETF_Catagory
+        with engine.connect() as conn:
+            cat_df = pd.read_sql(text('SELECT "Symbol", "Category", "Index" FROM "USA_ETF_Catagory"'), conn)
+        
+        cat_df["Symbol"] = cat_df["Symbol"].astype(str).str.upper().str.strip()
+        df = df.merge(cat_df, on="Symbol", how="inner")
+        print(f"   🔗 Matched {len(df)} USA ETFs against Supabase category map.")
+
+        df["EMA 21 Status"] = df.apply(
+            lambda r: "Above 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) and r["Price (USD)"] > r["EMA 21"]
+            else ("Below 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) else "N/A"), axis=1
+        )
+        df["Turnover (M USD)"] = (df["Price (USD)"] * df["Avg Vol 30D"] / 1_000_000).round(2)
+
+        r1 = df["Perf 1M %"].rank(ascending=False, method="min", na_option="bottom")
+        r3 = df["Perf 3M %"].rank(ascending=False, method="min", na_option="bottom")
+        r6 = df["Perf 6M %"].rank(ascending=False, method="min", na_option="bottom")
+        df["Relative Score"] = r1 * 2 + r3 * 4 + r6 * 4
+        df["Final Rank"] = df["Relative Score"].rank(ascending=True, method="min").astype(int)
+        
+        cols = [
+            "Final Rank", "Relative Score", "Symbol", "Category", "Index",
+            "Exchange", "Price (USD)", "EMA 21", "EMA 21 Status", "Chg %", 
+            "Turnover (M USD)", "Avg Vol 30D", "Expense Ratio",
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
+        ]
+        
+        df = df[[c for c in cols if c in df.columns]].sort_values("Final Rank")
+        return df
+
+    except Exception as e:
+        print(f"   ❌ Failed to scrape and rank USA ETFs: {e}")
+        return pd.DataFrame()
+
+
+# ==========================================
 # 2. MAIN EXECUTION
 # ==========================================
 if __name__=="__main__":
     
+    # ----------------------------------------
+    # TIME & MARKET LOCKOUT LOGIC
+    # ----------------------------------------
+    now_et = pd.Timestamp.now(tz='US/Eastern')
+    
+    # Lockout check: 9 AM to 5 PM (17:00) Eastern Time
+    is_time_locked = 9 <= now_et.hour < 17
+    
+    # Date alignment for proper logging
+    if now_et.hour < 9:
+        trading_date = now_et - pd.Timedelta(days=1)
+    else:
+        trading_date = now_et
+        
+    today_date_str = trading_date.strftime('%Y-%m-%d')
+    is_weekday = trading_date.weekday() < 5
+    
+    # ----------------------------------------
+    # RUN SCRAPERS
+    # ----------------------------------------
     df_all = fetch_tradingview_etfs_all()
     usd_inr = fetch_usdinr()
+    
+    # PORTED US ETF PIPELINE 
+    us_etfs_df = fetch_and_rank_actual_us_etfs(engine)
 
-    # Momentum Score & Rank
+    # Momentum Score & Rank (US Stocks)
     r1=df_all["Perf 1M"].rank(ascending=False,method="min")
     r3=df_all["Perf 3M"].rank(ascending=False,method="min")
     r6=df_all["Perf 6M"].rank(ascending=False,method="min")
@@ -201,55 +297,110 @@ if __name__=="__main__":
     sector_summary["Rank"]=range(1,len(sector_summary)+1)
     sector_summary=sector_summary[["Sector","Total_Stocks","ATH_Stocks","ATH %","Rank","Avg_1D_Return"]]
 
-    positive=(df_all["Chg %"]>0).sum()
-    breadth=round((positive/len(df_all))*100,2)
-    pct=f"{breadth:.2f}%"
-    if breadth<=20:
-        mood=f"Super Negative 🐻 {pct}"
-    elif breadth<=35:
-        mood=f"Negative 🔻 {pct}"
-    elif breadth<=50:
-        mood=f"Neutral ⚖️ {pct}"
-    elif breadth<=65:
-        mood=f"Positive 💚 {pct}"
+    # ----------------------------------------
+    # ADVANCED HOLIDAY / MARKET BREADTH ENGINE
+    # ----------------------------------------
+    is_us_holiday = False
+    
+    if is_weekday:
+        # Variance Check: Are prices completely frozen?
+        if 'Chg %' in df_all.columns:
+            chg_variance = float(df_all["Chg %"].var())
+            
+            if pd.isna(chg_variance) or chg_variance == 0.0 or (df_all["Chg %"] == 0.0).mean() > 0.95:
+                is_us_holiday = True
+                print("\n🛑 WEEKEND/HOLIDAY DETECTED: Market price variance is zero or completely stagnant.")
+                
+        # Existing Log Check
+        already_logged = False
+        try:
+            with engine.connect() as conn:
+                existing = pd.read_sql(text(f'SELECT * FROM "US historical_market_mood" WHERE "Date" = \'{today_date_str}\''), conn)
+                if not existing.empty:
+                    already_logged = True
+        except Exception:
+            pass
+
+        if not is_us_holiday and not already_logged:
+            positive=(df_all["Chg %"]>0).sum()
+            breadth=round((positive/len(df_all))*100,2)
+            pct=f"{breadth:.2f}%"
+            if breadth<=20:
+                mood=f"Super Negative 🐻 {pct}"
+            elif breadth<=35:
+                mood=f"Negative 🔻 {pct}"
+            elif breadth<=50:
+                mood=f"Neutral ⚖️ {pct}"
+            elif breadth<=65:
+                mood=f"Positive 💚 {pct}"
+            else:
+                mood=f"Super Positive 🚀 {pct}"
+            
+            breadth_df=pd.DataFrame({"Date":[today_date_str],"Market Breadth":[mood]})
+            print(f"\n📊 Today's Breadth calculated: {mood}")
+        else:
+            breadth_df = pd.DataFrame()
+            if already_logged:
+                print(f"\n⏸️ Market mood for {today_date_str} already logged. Skipping duplicate.")
     else:
-        mood=f"Super Positive 🚀 {pct}"
-    breadth_df=pd.DataFrame({"Date":[pd.Timestamp.now().strftime("%Y-%m-%d")],"Market Breadth":[mood]})
+        is_us_holiday = True
+        breadth_df = pd.DataFrame()
+        print("\n⏸️ Today is a weekend. Skipping market mood calculations.")
 
-    # Round all numeric columns to 2 decimals
-    for _df in [df_all, df_ath, summary, sector_summary, breadth_df]:
-        num=_df.select_dtypes(include="number").columns
-        _df[num]=_df[num].round(2)
 
-    sync_log=pd.DataFrame({"last_sync":[pd.Timestamp.now().strftime("%d %b %Y, %I:%M %p")],"status":["SUCCESS"],"failed_module":["None"]})
+    # Round all numeric columns to 2 decimals safely
+    dfs_to_round = [df_all, df_ath, summary, sector_summary, us_etfs_df]
+    if not breadth_df.empty:
+        dfs_to_round.append(breadth_df)
+        
+    for _df in dfs_to_round:
+        if not _df.empty:
+            num=_df.select_dtypes(include="number").columns
+            _df[num]=_df[num].round(2)
+
+    sync_log=pd.DataFrame({"last_sync":[pd.Timestamp.now(tz='US/Eastern').strftime("%d %b %Y, %I:%M %p ET")],"status":["SUCCESS"],"failed_module":["None"]})
 
     # ==========================================
-    # 3. PUSH TO SUPABASE
+    # 3. PUSH TO SUPABASE (TIME LOCKED)
     # ==========================================
-    print("\n📦 Pushing data to Supabase...")
+    if is_time_locked:
+        print("\n⏸️ US Market is currently OPEN (9 AM - 5 PM ET).")
+        print("⏸️ Database writing is strictly LOCKED to prevent mid-day fragmentation.")
+        print("\n" + "="*60)
+        print("⚠️ SCRAPE SUCCESSFUL, BUT NO DB WRITES EXECUTED.")
+        print("="*60 + "\n")
+        
+    else:
+        print("\n📦 Pushing data to Supabase...")
 
-    # Main Screener Tables (Replace)
-    save_db_with_retry(df_all, "US Stock screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-    print("   ✅ 'US Stock screener' updated successfully.")
+        # Main Screener Tables
+        save_db_with_retry(df_all, "US Stock screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print("   ✅ 'US Stock screener' updated successfully.")
 
-    save_db_with_retry(df_ath, "US ATH screeener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
-    print("   ✅ 'US ATH screeener' updated successfully.")
+        save_db_with_retry(df_ath, "US ATH screeener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print("   ✅ 'US ATH screeener' updated successfully.")
 
-    # Industry and Sector Analysis (Replace)
-    save_db_with_retry(summary, "US Industry Analysis", engine, if_exists="replace", index=False)
-    print("   ✅ 'US Industry Analysis' updated successfully.")
+        # Actual US ETF Screener
+        if not us_etfs_df.empty:
+            save_db_with_retry(us_etfs_df, "USA_ETF_Screener", engine, if_exists="replace", index=False)
+            print("   ✅ 'USA_ETF_Screener' updated successfully.")
 
-    save_db_with_retry(sector_summary, "USA Sector Analysis", engine, if_exists="replace", index=False)
-    print("   ✅ 'USA Sector Analysis' updated successfully.")
+        # Industry and Sector Analysis
+        save_db_with_retry(summary, "US Industry Analysis", engine, if_exists="replace", index=False)
+        print("   ✅ 'US Industry Analysis' updated successfully.")
 
-    # Historical Mood (Append)
-    save_db_with_retry(breadth_df, "US historical_market_mood", engine, if_exists="append", index=False)
-    print("   ✅ 'US historical_market_mood' updated successfully.")
+        save_db_with_retry(sector_summary, "USA Sector Analysis", engine, if_exists="replace", index=False)
+        print("   ✅ 'USA Sector Analysis' updated successfully.")
 
-    # Sync Log (Replace)
-    save_db_with_retry(sync_log, "US Sync log", engine, if_exists="replace", index=False)
-    print("   ✅ 'US Sync log' updated successfully.")
+        # Historical Mood (Append)
+        if not breadth_df.empty and not is_us_holiday:
+            save_db_with_retry(breadth_df, "US historical_market_mood", engine, if_exists="append", index=False)
+            print("   ✅ 'US historical_market_mood' updated successfully.")
 
-    print("\n" + "="*60)
-    print("🎉 SUCCESS: USA ETF Data synced to Supabase!")
-    print("="*60 + "\n")
+        # Sync Log (Replace)
+        save_db_with_retry(sync_log, "US Sync log", engine, if_exists="replace", index=False)
+        print("   ✅ 'US Sync log' updated successfully.")
+
+        print("\n" + "="*60)
+        print("🎉 SUCCESS: USA Data synced to Supabase!")
+        print("="*60 + "\n")
