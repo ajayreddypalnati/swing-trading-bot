@@ -1,4 +1,4 @@
-name: USA Stock Scraper_Daily.yml
+name: USA Stock Scraper Daily
 
 on:
   schedule:
@@ -28,5 +28,4 @@ jobs:
       - name: Run scraper
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        # Wrapping the filename in quotes because of the space
         run: python "US Scraper.py"
