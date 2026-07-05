@@ -15,10 +15,42 @@ def run_usa_screener():
     TV_URL = 'https://scanner.tradingview.com/america/scan'
     TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
     TV_PAYLOAD = {
-        "columns":["ticker-view","close","type","typespecs","pricescale","minmov","fractional","minmove2","currency","change","volume","market_cap_basic","fundamental_currency_code","sector.tr","market","sector","industry.tr","industry","exchange.tr","source-logoid"],
-        "filter":[{"left":"low","operation":"less","right":"EMA9"},{"left":"is_blacklisted","operation":"equal","right":False},{"left":"high","operation":"greater","right":"EMA9"},{"left":"close","operation":"in_range%","right":["High.All",0.9,1]},{"left":"RSI","operation":"greater","right":65},{"left":"close","operation":"egreater","right":"EMA9"},{"left":"Value.Traded","operation":"greater","right":3000000},{"left":"change","operation":"in_range","right":[0,10]},{"left":"Perf.1M","operation":"greater","right":10},{"left":"is_primary","operation":"equal","right":True}],
-        "ignore_unknown_fields":False,"options":{"lang":"en"},"range":[0,100],"sort":{"sortBy":"market_cap_basic","sortOrder":"asc"},"symbols":{"symbolset":["SYML:TVC;RUA"]},"markets":["america"],
-        "filter2":{"operator":"and","operands":[{"operation":{"operator":"or","operands":[{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["common"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["preferred"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"dr"}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"fund"}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["etf","mutual"]}}]}}]}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["pre-ipo"]}}]}}
+        "columns": ["ticker-view", "close", "type", "typespecs", "pricescale", "minmov", "fractional", "minmove2", "currency", "change", "volume", "market_cap_basic", "fundamental_currency_code", "sector.tr", "market", "sector", "industry.tr", "industry", "exchange.tr", "source-logoid"],
+        "filter": [
+            {"left": "low", "operation": "less", "right": "EMA9"},
+            {"left": "is_blacklisted", "operation": "equal", "right": False},
+            {"left": "high", "operation": "greater", "right": "EMA9"},
+            {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]},
+            {"left": "RSI", "operation": "greater", "right": 65},
+            {"left": "close", "operation": "egreater", "right": "EMA9"},
+            {"left": "Value.Traded", "operation": "greater", "right": 3000000},
+            {"left": "change", "operation": "in_range", "right": [0, 10]},
+            {"left": "Perf.1M", "operation": "greater", "right": 10},
+            {"left": "is_primary", "operation": "equal", "right": True}
+        ],
+        "ignore_unknown_fields": False,
+        "options": {"lang": "en"},
+        "range": [0, 100],
+        "sort": {"sortBy": "market_cap_basic", "sortOrder": "asc"},
+        "symbols": {"symbolset": ["SYML:TVC;RUA"]},
+        "markets": ["america"],
+        "filter2": {
+            "operator": "and",
+            "operands": [
+                {
+                    "operation": {
+                        "operator": "or",
+                        "operands": [
+                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["common"]}}]}},
+                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["preferred"]}}]}},
+                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "dr"}}]}},
+                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "fund"}}, {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["etf", "mutual"]}}]}}
+                        ]
+                    }
+                },
+                {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["pre-ipo"]}}
+            ]
+        }
     }
 
     # ==========================================
