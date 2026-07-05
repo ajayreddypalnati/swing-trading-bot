@@ -1,4 +1,4 @@
-name: USA Stock Scraper
+name: USA Stock Scraper_Daily.yml
 
 on:
   schedule:
