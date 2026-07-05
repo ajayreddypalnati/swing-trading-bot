@@ -71,6 +71,7 @@ def run_usa_screener():
                     col_turnover = next((c for c in us_stock_df.columns if 'turnover' in str(c).lower()), 'Turnover in Cr')
                     col_mom = next((c for c in us_stock_df.columns if 'momentum rank' in str(c).lower() or 'relative' in str(c).lower()), 'Momentum Rank')
                     us_stock_df = us_stock_df[[col_ticker, col_turnover, col_mom]].rename(columns={col_ticker: 'Symbol', col_turnover: 'Turnover in Cr', col_mom: 'Momentum Rank'})
+                    us_stock_df['Symbol'] = us_stock_df['Symbol'].astype(str).str.strip().str.upper()
                 except Exception:
                     us_stock_df = pd.DataFrame(columns=['Symbol', 'Turnover in Cr', 'Momentum Rank'])
 
@@ -152,9 +153,9 @@ def run_usa_screener():
         except: return "-"
 
     def safe_int(val, prefix="", suffix=""):
-        if val == "" or pd.isna(val): return ""
+        if val == "" or pd.isna(val): return "-"
         try: return f"{prefix}{int(float(val))}{suffix}"
-        except: return ""
+        except: return "-"
 
     def format_stars(val):
         if val == "" or pd.isna(val) or val == 6: return ""
@@ -255,18 +256,18 @@ def run_usa_screener():
         df = pd.DataFrame(tv_data, columns=["Ticker", "Price", "Chg %", "Vol", "Mcap", "Sector", "Industry", "Exchange"])
         df['Symbol'] = df['Ticker'].astype(str).str.strip().str.upper()
 
-        # VLOOKUP Sector and Industry Rank
+        # VLOOKUP Sector and Industry Rank (Case Insensitive Match to fix missing values)
         if not raw_sec.empty:
-            sec_rank_dict = dict(zip(raw_sec['Sector'], raw_sec['Rank']))
-            df['Sector Rank'] = df['Sector'].map(sec_rank_dict)
+            sec_rank_dict = {str(k).strip().lower(): v for k, v in zip(raw_sec['Sector'], raw_sec['Rank'])}
+            df['Sector Rank'] = df['Sector'].astype(str).str.strip().str.lower().map(sec_rank_dict)
         else: df['Sector Rank'] = np.nan
             
         if not raw_ind.empty:
-            ind_rank_dict = dict(zip(raw_ind['Industry'], raw_ind['Rank']))
-            df['Ind. Rank'] = df['Industry'].map(ind_rank_dict)
+            ind_rank_dict = {str(k).strip().lower(): v for k, v in zip(raw_ind['Industry'], raw_ind['Rank'])}
+            df['Ind. Rank'] = df['Industry'].astype(str).str.strip().str.lower().map(ind_rank_dict)
         else: df['Ind. Rank'] = np.nan
 
-        # VLOOKUP Turnover and Momentum Rank
+        # VLOOKUP Turnover and Momentum Rank directly from DB
         if not us_stock_df.empty:
             df = df.merge(us_stock_df, on="Symbol", how="left")
         else:
@@ -276,13 +277,18 @@ def run_usa_screener():
         df['Sector Rank'] = pd.to_numeric(df['Sector Rank'], errors='coerce')
         df['Ind. Rank'] = pd.to_numeric(df['Ind. Rank'], errors='coerce')
 
-        # Priority Stars Logic
-        df['Priority'] = 6
-        p1 = (df['Sector Rank'] <= 5) & (df['Ind. Rank'] <= 20)
-        p2 = (df['Sector Rank'] <= 5) & (df['Ind. Rank'] >= 21) & (df['Ind. Rank'] <= 30)
-        p3 = (df['Sector Rank'] > 5) & (df['Ind. Rank'] <= 20)
-        p4 = (df['Sector Rank'] <= 5) & (df['Ind. Rank'] > 20) & ~p1 & ~p2
-        p5 = (df['Sector Rank'] >= 6) & (df['Ind. Rank'] >= 21) & (df['Ind. Rank'] <= 30)
+        # Precise Priority Stars Logic
+        df['Priority'] = 6 # Default to No Stars
+        
+        # Temp vars to safely evaluate logic without NaN breaking the conditions
+        t_sec = df['Sector Rank'].fillna(999)
+        t_ind = df['Ind. Rank'].fillna(999)
+
+        p1 = (t_sec <= 5) & (t_ind <= 20)
+        p2 = (t_sec <= 5) & (t_ind >= 21) & (t_ind <= 30)
+        p3 = (t_sec > 5) & (t_ind <= 20)
+        p4 = (t_sec <= 5) & (t_ind > 30)
+        p5 = (t_sec >= 6) & (t_ind >= 21) & (t_ind <= 30)
         
         df.loc[p1, 'Priority'] = 1
         df.loc[p2, 'Priority'] = 2
@@ -459,12 +465,54 @@ def run_usa_screener():
                 show_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']
                 valid_us = valid_us[[c for c in show_cols if c in valid_us.columns]]
 
-                # Average 1D Return Header
+                # Layout: Average 1D Return and Inline Copy Button
                 top_4_chg_idx = valid_us.head(4).index.tolist()
                 top_4_avg = valid_us.head(4)['Chg %'].mean() if not valid_us.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
+                etf_col1, etf_col2 = st.columns([8.5, 1.5])
+                with etf_col1:
+                    st.markdown(f"<h4 style='margin-top: 10px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                
+                with etf_col2:
+                    # Inline Copy Button Micro-Component
+                    us_etf_copy_str = ",".join(valid_us['Symbol'].astype(str).tolist())
+                    us_etf_copy_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; height: 100%; background-color: transparent; overflow: hidden; }}
+                        button {{
+                            font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
+                            border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
+                            font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            transition: all 0.2s;
+                        }}
+                        button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                    </style>
+                    </head>
+                    <body>
+                        <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                        <script>
+                        function copyToClipboard() {{
+                            const ta = document.createElement('textarea');
+                            ta.value = "{us_etf_copy_str}";
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            const btn = document.getElementById('copyUsEtfBtn');
+                            btn.innerHTML = '✅ Copied!';
+                            setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                        }}
+                        </script>
+                    </body>
+                    </html>
+                    """
+                    components.html(us_etf_copy_html, height=45)
+
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 def style_us_etf_row(row):
@@ -485,44 +533,6 @@ def run_usa_screener():
                     'Turnover (Cr)': lambda x: safe_fmt(x, "₹{:.2f}"),
                     'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
                 })
-
-                # Copy Button Micro-Component
-                us_etf_copy_str = ",".join(valid_us['Symbol'].astype(str).tolist())
-                us_etf_copy_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
-                    button {{
-                        font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                        border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                        font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        transition: all 0.2s;
-                    }}
-                    button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
-                </style>
-                </head>
-                <body>
-                    <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                    <script>
-                    function copyToClipboard() {{
-                        const ta = document.createElement('textarea');
-                        ta.value = "{us_etf_copy_str}";
-                        document.body.appendChild(ta);
-                        ta.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(ta);
-                        const btn = document.getElementById('copyUsEtfBtn');
-                        btn.innerHTML = '✅ Copied!';
-                        setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                    }}
-                    </script>
-                </body>
-                </html>
-                """
-                components.html(us_etf_copy_html, height=40)
 
                 html_us_table = styled_us_etf.to_html()
                 
