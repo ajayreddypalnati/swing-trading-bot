@@ -234,9 +234,6 @@ if __name__=="__main__":
     # ----------------------------------------
     now_et = pd.Timestamp.now(tz='US/Eastern')
     
-    # Lockout check: 9 AM to 5 PM (17:00) Eastern Time
-    is_time_locked = 9 <= now_et.hour < 17
-    
     # Date alignment for proper logging
     if now_et.hour < 9:
         trading_date = now_et - pd.Timedelta(days=1)
@@ -245,6 +242,9 @@ if __name__=="__main__":
         
     today_date_str = trading_date.strftime('%Y-%m-%d')
     is_weekday = trading_date.weekday() < 5
+    
+    # Lockout check: 9 AM to 5 PM (17:00) Eastern Time AND it must be a weekday
+    is_time_locked = (9 <= now_et.hour < 17) and is_weekday
     
     # ----------------------------------------
     # RUN SCRAPERS
@@ -309,6 +309,7 @@ if __name__=="__main__":
             
             if pd.isna(chg_variance) or chg_variance == 0.0 or (df_all["Chg %"] == 0.0).mean() > 0.95:
                 is_us_holiday = True
+                is_time_locked = False # Override the time lock so the database can update safely
                 print("\n🛑 WEEKEND/HOLIDAY DETECTED: Market price variance is zero or completely stagnant.")
                 
         # Existing Log Check
