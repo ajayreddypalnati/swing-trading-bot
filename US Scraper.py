@@ -156,7 +156,7 @@ def fetch_usdinr():
 # ==========================================
 # PORTED COMPLETE US ETF SCREENER LOGIC
 # ==========================================
-def fetch_and_rank_actual_us_etfs(engine):
+def fetch_and_rank_actual_us_etfs(engine, usd_inr):
     print("\n🇺🇸 Fetching and Ranking Actual USA ETFs...")
     url = "https://scanner.tradingview.com/america/scan"
     payload = {
@@ -201,7 +201,9 @@ def fetch_and_rank_actual_us_etfs(engine):
             lambda r: "Above 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) and r["Price (USD)"] > r["EMA 21"]
             else ("Below 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) else "N/A"), axis=1
         )
-        df["Turnover (M USD)"] = (df["Price (USD)"] * df["Avg Vol 30D"] / 1_000_000).round(2)
+        
+        # Converted from M USD to Crores using live INR rate
+        df["Turnover (Cr)"] = ((df["Price (USD)"] * df["Avg Vol 30D"] * usd_inr) / 10000000).round(2)
 
         r1 = df["Perf 1M %"].rank(ascending=False, method="min", na_option="bottom")
         r3 = df["Perf 3M %"].rank(ascending=False, method="min", na_option="bottom")
@@ -212,7 +214,7 @@ def fetch_and_rank_actual_us_etfs(engine):
         cols = [
             "Final Rank", "Relative Score", "Symbol", "Category", "Index",
             "Exchange", "Price (USD)", "EMA 21", "EMA 21 Status", "Chg %", 
-            "Turnover (M USD)", "Avg Vol 30D", "Expense Ratio",
+            "Turnover (Cr)", "Avg Vol 30D", "Expense Ratio",
             "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
         ]
         
@@ -253,7 +255,7 @@ if __name__=="__main__":
     usd_inr = fetch_usdinr()
     
     # PORTED US ETF PIPELINE 
-    us_etfs_df = fetch_and_rank_actual_us_etfs(engine)
+    us_etfs_df = fetch_and_rank_actual_us_etfs(engine, usd_inr)
 
     # Momentum Score & Rank (US Stocks)
     r1=df_all["Perf 1M"].rank(ascending=False,method="min")
@@ -348,11 +350,65 @@ if __name__=="__main__":
         breadth_df = pd.DataFrame()
         print("\n⏸️ Today is a weekend. Skipping market mood calculations.")
 
+    # ----------------------------------------
+    # US TREND ENGINE (7D, 14D, 21D COMPOSITE)
+    # ----------------------------------------
+    trend_summary_df = pd.DataFrame()
+    
+    if is_weekday and not is_time_locked and not is_us_holiday:
+        print("\n📈 Calculating 7-Day, 14-Day, and 21-Day US Composite Trend...")
+        try:
+            query_all = text('SELECT * FROM "US historical_market_mood" ORDER BY "Date" DESC LIMIT 30')
+            with engine.connect() as conn:
+                hist_df = pd.read_sql(query_all, conn)
+            
+            if not breadth_df.empty:
+                hist_df = pd.concat([breadth_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
+            
+            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
+            
+            if len(hist_df) >= 7:
+                def extract_percentage(text_val):
+                    match = re.search(r'([0-9.]+)%', str(text_val))
+                    return float(match.group(1)) if match else np.nan
+
+                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
+                
+                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
+                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
+                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
+                
+                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
+                pct_str = f"{final_score:.2f}%"
+                
+                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
+                elif final_score <= 35: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 50: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 65: trend_label = f"Positive 💚 {pct_str}"
+                else: trend_label = f"Super Positive 🚀 {pct_str}"
+                
+                print(f"   🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                print(f"   🏆 Final US Market Regime: {trend_label}")
+                
+                trend_summary_df = pd.DataFrame([{
+                    "last_updated": today_date_str,
+                    "avg_7d": round(val_7d, 2),
+                    "avg_14d": round(val_14d, 2),
+                    "avg_21d": round(val_21d, 2),
+                    "composite_score": round(final_score, 2),
+                    "trend_regime": trend_label
+                }])
+            else:
+                print("   ⚠️ Not enough history in 'US historical_market_mood' to calculate rolling averages.")
+        except Exception as e:
+            print(f"   ❌ US Trend Engine Error: {e}")
 
     # Round all numeric columns to 2 decimals safely
     dfs_to_round = [df_all, df_ath, summary, sector_summary, us_etfs_df]
     if not breadth_df.empty:
         dfs_to_round.append(breadth_df)
+    if not trend_summary_df.empty:
+        dfs_to_round.append(trend_summary_df)
         
     for _df in dfs_to_round:
         if not _df.empty:
@@ -397,6 +453,11 @@ if __name__=="__main__":
         if not breadth_df.empty and not is_us_holiday:
             save_db_with_retry(breadth_df, "US historical_market_mood", engine, if_exists="append", index=False)
             print("   ✅ 'US historical_market_mood' updated successfully.")
+
+        # Trend Summary (Replace)
+        if not trend_summary_df.empty:
+            save_db_with_retry(trend_summary_df, "US Market trend summary", engine, if_exists="replace", index=False)
+            print("   ✅ 'US Market trend summary' updated successfully.")
 
         # Sync Log (Replace)
         save_db_with_retry(sync_log, "US Sync log", engine, if_exists="replace", index=False)
