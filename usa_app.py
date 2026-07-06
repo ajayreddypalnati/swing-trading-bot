@@ -272,13 +272,15 @@ def run_usa_screener():
         st.info("US ETF Screener Loaded.")
 
     with tab_port:
-        st.markdown("### 📈 9-EMA Portfolio Tracker")
+        st.info("Tracker UI loaded. Note: Using TradingView API for American equity quotes.")
         
+        # UI matching your original Indian layout
         col1, col2 = st.columns([3, 1])
         with col1:
-            gs_url = st.text_input("Google Sheets URL (Make sure it is set to 'Anyone with the link can view'):", 
-                                   value="https://docs.google.com/spreadsheets/d/...")
+            st.text_input("Upstox Access Token (Not required for US tracking)", type="password", disabled=True)
+            gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...")
         with col2:
+            st.radio("Data Source", ["Upload CSV", "Google Sheets"], index=1)
             st.markdown("<br>", unsafe_allow_html=True)
             load_data = st.button("🔄 Load / Refresh Sheet")
 
@@ -346,10 +348,11 @@ def run_usa_screener():
                     })
                 
                 final_port_df = pd.DataFrame(tracker_data)
+                avg_chg = final_port_df['Today chg%'].mean()
                 
-                st.markdown("""
+                st.markdown(f"""
                     <div class="table-header-row">
-                        <div style="font-weight: 600;">Average chg%: <span style="color: red;">Calculated Below</span></div>
+                        <div style="font-weight: 600; font-size: 1.1rem;">Average chg%: <span style="color: {'red' if avg_chg < 0 else 'green'};">{avg_chg:.2f}%</span></div>
                         <button style="padding: 5px 10px; background: #0B1D30; color: white; border-radius: 5px; border: none; font-size: 0.8rem; cursor: pointer;">📋 Copy Symbols</button>
                     </div>
                 """, unsafe_allow_html=True)
@@ -364,18 +367,18 @@ def run_usa_screener():
 
                 styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
                     "Today chg%": "{:.2f}%",
-                    "Entry Price": "₹{:.2f}",
-                    "Stop Loss": "₹{:.2f}",
-                    "Current Price": "₹{:.2f}",
-                    "Profit/Loss": "₹{:.2f}",
+                    "Entry Price": "${:.2f}",
+                    "Stop Loss": "${:.2f}",
+                    "Current Price": "${:.2f}",
+                    "Profit/Loss": "${:.2f}",
                     "Return %": "{:.2f}%",
-                    "EMA21": "₹{:.2f}"
+                    "EMA21": "${:.2f}"
                 })
                 
                 st.markdown(f'<div class="scrollable-table-container">{styled_port.to_html()}</div>', unsafe_allow_html=True)
                 
             except Exception as e:
-                st.error(f"Error loading sheet: {str(e)}. Ensure the columns match: 'Stock Ticker, Entry date, Entry Price, Stop Loss, Risk'")
+                st.error(f"Error loading sheet: {str(e)}. Ensure the columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
 
 if __name__ == "__main__":
     run_usa_screener()
