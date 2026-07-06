@@ -517,17 +517,26 @@ def get_live_quote(instrument_key, token):
         "Authorization": f"Bearer {token}",
         "Api-Version": "2.0"
     }
+    # 1. The parameter MUST be 'instrument_key'
     params = {
-        "symbol": instrument_key
+        "instrument_key": instrument_key
     }
+    
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         if response.status_code != 200:
             return None
+            
         data = response.json()
-        quote = data.get("data", {}).get(instrument_key, {})
-        if not quote:
+        data_obj = data.get("data", {})
+        
+        if not data_obj:
             return None
+            
+        # 2. THE FIX: Extract the quote dynamically.
+        # Upstox keys the response by trading symbol (e.g., 'NSE_EQ:NHPC'), not the instrument_key.
+        # Since we only request one stock at a time, we safely grab the first value in the dictionary.
+        quote = list(data_obj.values())[0]
             
         ltp = quote.get("last_price")
         prev = quote.get("ohlc", {}).get("close")
