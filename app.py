@@ -487,7 +487,11 @@ def get_instrument_mapping():
 def fetch_upstox_history(instrument_key, start_date, end_date, token):
     encoded_key = urllib.parse.quote(instrument_key)
     url = f"https://api.upstox.com/v2/historical-candle/{encoded_key}/day/{end_date}/{start_date}"
-    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    headers = {
+        "Accept": "application/json", 
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
+    }
     try:
         response = requests.get(url, headers=headers)
         time.sleep(0.3)
@@ -510,10 +514,11 @@ def get_live_quote(instrument_key, token):
     url = "https://api.upstox.com/v2/market-quote/quotes"
     headers = {
         "Accept": "application/json",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
     }
     params = {
-        "instrument_key": instrument_key
+        "symbol": instrument_key
     }
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
