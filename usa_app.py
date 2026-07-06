@@ -1,43 +1,80 @@
-import requests
-import pandas as pd
-import numpy as np
+import os
+import sys
 import time
+import requests
 import re
-from datetime import datetime, timezone, timedelta
-import pytz
-import streamlit as st
-from sqlalchemy import create_engine, text
-import streamlit.components.v1 as components
+import numpy as np
+import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy import text
 
-def run_usa_screener():
-    # Auto-refresh the page every 60 seconds
-    components.html('<meta http-equiv="refresh" content="60">', height=0)
+# ==========================================
+# 0. DATABASE CONFIG & HELPER FUNCTIONS
+# ==========================================
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing.")
+    sys.exit(1)
 
-    # ==========================================
-    # APIs & ENDPOINTS
-    # ==========================================
-    TV_URL = 'https://scanner.tradingview.com/america/scan'
-    TV_HEADERS = { 'User-Agent': 'Mozilla/5.0', 'Origin': 'https://www.tradingview.com', 'Content-Type': 'application/json' }
-    TV_PAYLOAD = {
-        "columns": ["ticker-view", "close", "type", "typespecs", "pricescale", "minmov", "fractional", "minmove2", "currency", "change", "volume", "market_cap_basic", "fundamental_currency_code", "sector.tr", "market", "sector", "industry.tr", "industry", "exchange.tr", "source-logoid"],
-        "filter": [
-            {"left": "low", "operation": "less", "right": "EMA9"},
-            {"left": "is_blacklisted", "operation": "equal", "right": False},
-            {"left": "high", "operation": "greater", "right": "EMA9"},
-            {"left": "close", "operation": "in_range%", "right": ["High.All", 0.9, 1]},
-            {"left": "RSI", "operation": "greater", "right": 65},
-            {"left": "close", "operation": "egreater", "right": "EMA9"},
-            {"left": "Value.Traded", "operation": "greater", "right": 3000000},
-            {"left": "change", "operation": "in_range", "right": [0, 10]},
-            {"left": "Perf.1M", "operation": "greater", "right": 10},
-            {"left": "is_primary", "operation": "equal", "right": True}
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+if "?pgbouncer=true" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("?pgbouncer=true", "")
+
+try:
+    print("\n🔌 SYSTEM: Connecting to Supabase Cloud Database...")
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
+    print("✅ SYSTEM: Database connection established successfully.")
+except Exception as e:
+    print(f"❌ FATAL ERROR: Could not connect to database: {e}")
+    sys.exit(1)
+
+
+def save_db_with_retry(df, table_name, engine, if_exists="replace", index=False, chunksize=None, method=None):
+    """Saves DataFrame to Supabase with an automatic 3-attempt retry loop."""
+    for attempt in range(1, 4):
+        try:
+            df.to_sql(table_name, engine, if_exists=if_exists, index=index, chunksize=chunksize, method=method)
+            return True
+        except Exception as e:
+            print(f"   ⚠️ Database write failed for {table_name} (Attempt {attempt}/3): {e}")
+            if attempt < 3: time.sleep(5)
+    print(f"❌ Failed to save {table_name} to database after 3 attempts.")
+
+
+# ==========================================
+# 1. SCRAPING FUNCTIONS
+# ==========================================
+def fetch_tradingview_etfs_all():
+    url = "https://scanner.tradingview.com/global/scan"
+    payload = {
+        "columns": [
+            "ticker-view", "close", "type", "typespecs", "pricescale", 
+            "minmov", "fractional", "minmove2", "currency", "change", 
+            "market_cap_basic", "fundamental_currency_code", "sector.tr", 
+            "market", "sector", "industry.tr", "industry", "EMA21",
+            "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", "Value.Traded|1M"
         ],
+        "filter": [{"left": "is_primary", "operation": "equal", "right": True}],
         "ignore_unknown_fields": False,
         "options": {"lang": "en"},
-        "range": [0, 100],
-        "sort": {"sortBy": "market_cap_basic", "sortOrder": "asc"},
-        "symbols": {"symbolset": ["SYML:TVC;RUA"]},
-        "markets": ["america"],
+        "price_conversion": {"to_currency": "usd"},
+        "range": [0, 3000],  # Increased to capture enough data for momentum ranking
+        "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
+        "markets": [
+            "america","argentina","australia","austria","bahrain","bangladesh",
+            "belgium","bulgaria","brazil","canada","chile","china","colombia",
+            "croatia","cyprus","czech","denmark","egypt","estonia","finland",
+            "france","germany","greece","hongkong","hungary","iceland","india",
+            "indonesia","ireland","israel","italy","japan","kenya","kuwait",
+            "latvia","lithuania","luxembourg","malaysia","mexico","morocco",
+            "netherlands","newzealand","nigeria","norway","pakistan","peru",
+            "philippines","poland","portugal","qatar","romania","russia","ksa",
+            "serbia","singapore","slovakia","slovenia","rsa","korea","spain",
+            "srilanka","sweden","switzerland","taiwan","thailand","tunisia",
+            "turkey","uae","uk","venezuela","vietnam"
+        ],
         "filter2": {
             "operator": "and",
             "operands": [
@@ -57,679 +94,358 @@ def run_usa_screener():
         }
     }
 
-    # ==========================================
-    # DATA FETCHING 
-    # ==========================================
-    @st.cache_data(ttl=86400)
-    def fetch_usa_database_reference():
-        try:
-            db_url = st.secrets["DATABASE_URL"]
-            if db_url.startswith("postgresql://"):
-                db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    print("\nFetching Global Stock/Fund data from TradingView...")
+    response = requests.post(
+        url,
+        headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+        json=payload,
+        timeout=30
+    )
+    response.raise_for_status()
+    data = response.json()
+    
+    rows = [item["d"] for item in data.get("data", [])]
+    processed=[]
+    for r in rows:
+        sym = r[0].get("name","") if isinstance(r[0],dict) else r[0]
+        # Clean symbol suffix if needed, but retaining raw symbol
+        sym = sym.split(":")[-1] if ":" in sym else sym
+        processed.append([sym, *r[1:]])
 
-            engine = create_engine(db_url)
-            with engine.connect() as conn:
-                try:
-                    us_stock_df = pd.read_sql(text('SELECT * FROM "US Stock screener"'), conn)
-                    col_ticker = next((c for c in us_stock_df.columns if 'symbol' in str(c).lower() or 'ticker' in str(c).lower()), 'Symbol')
-                    col_turnover = next((c for c in us_stock_df.columns if 'turnover' in str(c).lower()), 'Turnover in Cr')
-                    col_mom = next((c for c in us_stock_df.columns if 'momentum rank' in str(c).lower() or 'relative' in str(c).lower()), 'Momentum Rank')
-                    us_stock_df = us_stock_df[[col_ticker, col_turnover, col_mom]].rename(columns={col_ticker: 'Symbol', col_turnover: 'Turnover in Cr', col_mom: 'Momentum Rank'})
-                    us_stock_df['Symbol'] = us_stock_df['Symbol'].astype(str).str.strip().str.upper()
-                except Exception:
-                    us_stock_df = pd.DataFrame(columns=['Symbol', 'Turnover in Cr', 'Momentum Rank'])
-
-                try:
-                    raw_sec = pd.read_sql(text('SELECT * FROM "USA Sector Analysis"'), conn)
-                    raw_ind = pd.read_sql(text('SELECT * FROM "US Industry Analysis"'), conn)
-                except:
-                    raw_sec, raw_ind = pd.DataFrame(), pd.DataFrame()
-
-                try:
-                    trend_df = pd.read_sql(text('SELECT * FROM market_trend_summary LIMIT 1'), conn)
-                    trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
-                except Exception:
-                    trend_regime = "N/A"
-
-                try:
-                    sync_df = pd.read_sql(text('SELECT * FROM "US Sync log"'), conn)
-                    last_sync = sync_df['last_sync'].iloc[0]
-                except Exception:
-                    last_sync = "Pending Run..."
-
-                try:
-                    us_etf_df = pd.read_sql(text('SELECT * FROM "USA_ETF_Screener"'), conn)
-                except Exception:
-                    us_etf_df = pd.DataFrame()
-
-            return us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, us_etf_df
-        except Exception:
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
-
-    @st.cache_data(ttl=60)
-    def fetch_us_live_breadth():
-        try:
-            ts = int(time.time())
-            url = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR1Evjm0QI8lj_k3439UzQShcg9fL8oTDq2nWPOY-2aXpKIesb3NsstOO_08pxAsTL6TL6WmLacqq9N/pub?gid=2103540271&single=true&output=csv&t={ts}"
-            df = pd.read_csv(url, header=None)
-            raw_val = df.iloc[5, 28]
-            market_breadth_value = str(raw_val).strip()
-            if pd.isna(raw_val) or "DIV/0" in market_breadth_value or "REF!" in market_breadth_value or "N/A" in market_breadth_value:
-                return "N/A"
-            return market_breadth_value
-        except Exception:
-            return "N/A"
-
-    def fetch_usa_tradingview():
-        try:
-            response = requests.post(TV_URL, headers=TV_HEADERS, json=TV_PAYLOAD, timeout=10)
-            raw_data = response.json().get("data", [])
-            formatted_data = []
-            for item in raw_data:
-                d = item["d"]
-                raw_ticker = str(d[0])
-                symbol = raw_ticker
-                if "{" in raw_ticker:
-                    try:
-                        import ast
-                        parsed_ticker = ast.literal_eval(raw_ticker)
-                        symbol = parsed_ticker.get("name", raw_ticker)
-                    except: pass
-                price = d[1]
-                change = d[9]
-                vol = d[10]
-                mcap = d[11]
-                sector = d[15]
-                industry = d[17]
-                exchange = d[18]
-                formatted_data.append([symbol, price, change, vol, mcap, sector, industry, exchange])
-            return formatted_data
-        except Exception:
-            return []
-
-    def fetch_portfolio_tv_data(symbols_list):
-        try:
-            payload = {
-                "columns":["ticker-view","close","type","typespecs","pricescale","minmov","fractional","minmove2","currency","change","market_cap_basic","fundamental_currency_code","sector.tr","market","sector","industry.tr","industry","EMA21"],
-                "filter":[
-                    {"left":"is_primary","operation":"equal","right":True},
-                    {"left":"name","operation":"in","right":symbols_list}
-                ],
-                "ignore_unknown_fields":False,
-                "options":{"lang":"en"},
-                "price_conversion":{"to_currency":"usd"},
-                "range":[0,500],
-                "sort":{"sortBy":"market_cap_basic","sortOrder":"desc"},
-                "markets":["america","argentina","australia","austria","bahrain","bangladesh","belgium","bulgaria","brazil","canada","chile","china","colombia","croatia","cyprus","czech","denmark","egypt","estonia","finland","france","germany","greece","hongkong","hungary","iceland","india","indonesia","ireland","israel","italy","japan","kenya","kuwait","latvia","lithuania","luxembourg","malaysia","mexico","morocco","netherlands","newzealand","nigeria","norway","pakistan","peru","philippines","poland","portugal","qatar","romania","russia","ksa","serbia","singapore","slovakia","slovenia","rsa","korea","spain","srilanka","sweden","switzerland","taiwan","thailand","tunisia","turkey","uae","uk","venezuela","vietnam"],
-                "filter2":{
-                    "operator":"and",
-                    "operands":[
-                        {"operation":{"operator":"or","operands":[{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["common"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["preferred"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"dr"}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"fund"}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["etf","mutual"]}}]}}]}},
-                        {"expression":{"left":"typespecs","operation":"has_none_of","right":["pre-ipo"]}}
-                    ]
-                }
-            }
-            url = 'https://scanner.tradingview.com/global/scan'
-            response = requests.post(url, headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json'}, json=payload, timeout=10)
-            results = {}
-            for item in response.json().get("data", []):
-                d = item["d"]
-                sym = str(d[0])
-                if "{" in sym:
-                    try:
-                        import ast
-                        sym = ast.literal_eval(sym).get("name", sym)
-                    except: pass
-                else:
-                    sym = sym.split(":")[-1]
-                    
-                results[sym.upper()] = {
-                    "price": float(d[1]) if d[1] is not None else 0.0,
-                    "change": float(d[9]) if d[9] is not None else 0.0,
-                    "ema21": float(d[17]) if d[17] is not None else 0.0
-                }
-            return results
-        except:
-            return {}
-
-    # ==========================================
-    # SAFE FORMATTERS & UI HELPERS
-    # ==========================================
-    def safe_fmt(val, fmt_str):
-        try:
-            if pd.isna(val) or str(val).strip() == "": return "-"
-            return fmt_str.format(float(val))
-        except: return "-"
-
-    def safe_int(val, prefix="", suffix=""):
-        if val == "" or pd.isna(val): return "-"
-        try: return f"{prefix}{int(float(val))}{suffix}"
-        except: return "-"
-
-    def format_stars(val):
-        if val == "" or pd.isna(val) or val == 6: return ""
-        try:
-            stars = 6 - int(float(val))
-            if 1 <= stars <= 5: return "⭐" * stars
-            return ""
-        except: return ""
-
-    def get_breadth_color(breadth_str):
-        try:
-            match = re.search(r'(\d+\.?\d*)%', str(breadth_str))
-            if match:
-                val = float(match.group(1))
-                if val <= 30.0: return "rgba(252, 165, 165, 0.4)"  
-                elif val <= 40.0: return "rgba(254, 202, 202, 0.4)"  
-                elif val <= 50.0: return "rgba(253, 230, 138, 0.4)"  
-                elif val <= 60.0: return "rgba(187, 247, 208, 0.4)"  
-                else: return "rgba(134, 239, 172, 0.4)"  
-            return "#FFFFFF"
-        except: return "#FFFFFF"
-
-    def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
-        try:
-            match = re.search(r'(\d+\.?\d*)%', str(nse_breadth_str))
-            live_match = re.search(r'(\d+\.?\d*)', str(live_breadth_str))
-            if match:
-                val = float(match.group(1))
-                live_val = float(live_match.group(1)) if live_match else 0.0
-                action_suffix = " - Trade" if "📈" in str(nse_breadth_str) else " - Stop Trading"
-                if "📉" not in str(nse_breadth_str) and "📈" not in str(nse_breadth_str):
-                    action_suffix = " - Trade" if live_val > 50.0 else " - Stop Trading"
-
-                if val <= 20.0: alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
-                elif val <= 25.0: alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
-                elif val <= 30.0: alloc_str, color = f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
-                elif val <= 35.0: alloc_str, color = f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
-                elif val <= 40.0: alloc_str, color = f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
-                elif val <= 45.0: alloc_str, color = f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
-                elif val <= 50.0: alloc_str, color = f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
-                else: alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"   
-                if action_suffix != " - Trade": color = "rgba(252, 165, 165, 0.4)" 
-                return alloc_str, color
-            return "N/A", "#FFFFFF"
-        except: return "N/A", "#FFFFFF"
-
-    def create_metric_card(title, value, bg_color):
-        val_size = "1.35rem" if len(str(value)) > 20 else "1.65rem"
-        return f"""
-        <div style="background: {bg_color}; border-radius: 12px; padding: 1.2rem 1.5rem; text-align: left; border: 2px solid #0B1D30; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 115px; display: flex; flex-direction: column; justify-content: center;">
-            <span style="font-size: 0.85rem; color: #0B1D30; font-weight: 700; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span>
-            <span style="color: #0B1D30; font-size: {val_size}; font-weight: 800; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif; line-height: 1.2;">{value}</span>
-        </div>
-        """
-
-    # ==========================================
-    # DASHBOARD MAIN LAYOUT & HEADER (ET Time)
-    # ==========================================
-    et_tz = pytz.timezone('US/Eastern')
-    now_et = datetime.now(et_tz)
-    current_time = now_et.strftime('%I:%M:%S %p ET')
-    current_date = now_et.strftime('%d %b %Y')
-
-    st.markdown(f"""
-        <div class="premium-header">
-            <div class="header-left">
-                <div class="header-title">⚡ USA 9-EMA Screener</div>
-                <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
-            </div>
-            <div class="header-right">
-                <div class="live-status">LIVE DATA <div class="blob green"></div></div>
-                <div class="time">{current_time}</div>
-                <div class="date">{current_date}</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    tv_data = fetch_usa_tradingview()
-    us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, us_etf_df = fetch_usa_database_reference()
-    live_sheet_breadth = fetch_us_live_breadth()
-
-    live_bg = get_breadth_color(live_sheet_breadth)
-    nse_bg = get_breadth_color(trend_regime)
-    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
-    last_sync_bg = "rgba(216, 180, 254, 0.3)"
-
-    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-    with metric_col1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
-    with metric_col2: st.markdown(create_metric_card("⚖️ Market Breadth (USA)", trend_regime, nse_bg), unsafe_allow_html=True)
-    with metric_col3: st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
-    with metric_col4: st.markdown(create_metric_card("🔄 Last DB Update", last_sync, last_sync_bg), unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ==========================================
-    # DATA PROCESSING FOR MAIN TABS
-    # ==========================================
-    display_df = pd.DataFrame()
-    if tv_data:
-        df = pd.DataFrame(tv_data, columns=["Ticker", "Price", "Chg %", "Vol", "Mcap", "Sector", "Industry", "Exchange"])
-        df['Symbol'] = df['Ticker'].astype(str).str.strip().str.upper()
-
-        if not raw_sec.empty:
-            sec_rank_dict = {str(k).strip().lower(): v for k, v in zip(raw_sec['Sector'], raw_sec['Rank'])}
-            df['Sector Rank'] = df['Sector'].astype(str).str.strip().str.lower().map(sec_rank_dict)
-        else: df['Sector Rank'] = np.nan
-            
-        if not raw_ind.empty:
-            ind_rank_dict = {str(k).strip().lower(): v for k, v in zip(raw_ind['Industry'], raw_ind['Rank'])}
-            df['Ind. Rank'] = df['Industry'].astype(str).str.strip().str.lower().map(ind_rank_dict)
-        else: df['Ind. Rank'] = np.nan
-
-        if not us_stock_df.empty:
-            df = df.merge(us_stock_df, on="Symbol", how="left")
-        else:
-            df['Turnover in Cr'] = np.nan
-            df['Momentum Rank'] = np.nan
-
-        df['Sector Rank'] = pd.to_numeric(df['Sector Rank'], errors='coerce')
-        df['Ind. Rank'] = pd.to_numeric(df['Ind. Rank'], errors='coerce')
-
-        df['Priority'] = 6 
-        
-        t_sec = df['Sector Rank'].fillna(999)
-        t_ind = df['Ind. Rank'].fillna(999)
-
-        p1 = (t_sec <= 5) & (t_ind <= 20)
-        p2 = (t_sec <= 5) & (t_ind >= 21) & (t_ind <= 30)
-        p3 = (t_sec > 5) & (t_ind <= 20)
-        p4 = (t_sec <= 5) & (t_ind > 30)
-        p5 = (t_sec >= 6) & (t_ind >= 21) & (t_ind <= 30)
-        
-        df.loc[p1, 'Priority'] = 1
-        df.loc[p2, 'Priority'] = 2
-        df.loc[p3, 'Priority'] = 3
-        df.loc[p4, 'Priority'] = 4
-        df.loc[p5, 'Priority'] = 5
-
-        display_cols = ["Priority", "Symbol", "Exchange", "Price", "Chg %", "Mcap", "Turnover in Cr", "Vol", "Sector", "Sector Rank", "Industry", "Ind. Rank", "Momentum Rank"]
-        display_df = df[[c for c in display_cols if c in df.columns]].copy()
-        display_df = display_df.sort_values(by=["Priority", "Momentum Rank"], ascending=[True, True], na_position="last").fillna("")
-
-    def highlight_main_table(row):
-        styles = []
-        for col in row.index:
-            style = ""
-            if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "" and str(row['Priority']) != '6':
-                try:
-                    if float(row['Priority']) < 6: style += 'background-color: rgba(39, 174, 96, 0.15); '
-                except: pass
-            styles.append(style)
-        return styles
-
-    # ==========================================
-    # NAVIGATION TABS (Only 4 for USA)
-    # ==========================================
-    tab_main, tab_leaders, tab_us_etf, tab_port = st.tabs([
-        "⚡ 9-EMA Screener", 
-        "🏆 Market Leaders",
-        "🌍 US ETF Screener",
-        "📈 Portfolio Tracker"
+    df = pd.DataFrame(processed, columns=[
+        "Symbol", "Price (USD)", "Type", "TypeSpecs", "PriceScale", "MinMov", "Fractional", 
+        "MinMove2", "Currency", "Chg %", "Market Cap", "Fund_Curr_Code", "Sector.tr", "Market",
+        "Sector", "Industry.tr", "Industry", "EMA 21", "Perf 1W", "Perf 1M", "Perf 3M", "Perf 6M", "Perf 1Y", "Price x Vol (1M)"
     ])
 
-    # --- 1. 9-EMA SCREENER TAB ---
-    with tab_main:
-        if not display_df.empty:
-            styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
-                "Price": lambda x: safe_fmt(x, "${:.2f}"), 
-                "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
-                "Mcap": lambda x: safe_fmt(x, "{:,.0f}"),
-                "Turnover in Cr": lambda x: safe_fmt(x, "{:.0f}"),
-                "Vol": lambda x: safe_fmt(x, "{:,.0f}"),
-                "Momentum Rank": lambda x: safe_int(x),
-                "Priority": lambda x: format_stars(x),
-                "Sector Rank": lambda x: safe_int(x, "#"),
-                "Ind. Rank": lambda x: safe_int(x, "#")
-            })
-            html_table = styled_df.to_html()
+    print("-" * 50)
+    print(f"Success! Downloaded {len(df)} Stocks/Funds based on Custom Payload.")
+    print("-" * 50)
+    return df
+
+
+def fetch_tradingview_etfs_near_ath():
+    url = "https://scanner.tradingview.com/america/scan?label-product=screener-stock"
+    payload = {
+        "columns":[
+            "ticker-view","close","change","market_cap_basic","sector.tr","industry.tr","exchange.tr","Perf.W","Perf.1M","Perf.3M","Perf.6M","Perf.Y","Value.Traded|1M"
+        ],
+        "filter":[
+            {"left":"close","operation":"in_range%","right":["High.All",0.9,1]},
+            {"left":"is_blacklisted","operation":"equal","right":False},
+            {"left":"is_primary","operation":"equal","right":True}
+        ],
+        "ignore_unknown_fields":False,
+        "options":{"lang":"en"},
+        "range":[0,3000],
+        "sort":{"sortBy":"market_cap_basic","sortOrder":"asc"},
+        "symbols":{"symbolset":["SYML:TVC;RUA"]},
+        "markets":["america"],
+        "filter2":{"operator":"and","operands":[{"operation":{"operator":"or","operands":[{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["common"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["preferred"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"dr"}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"fund"}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["etf","mutual"]}}]}}]}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["pre-ipo"]}}]}
+    }
+
+    r = requests.post(url, json=payload, headers={"User-Agent":"Mozilla/5.0","Content-Type":"application/json"}, timeout=30)
+    r.raise_for_status()
+    rows=[x["d"] for x in r.json().get("data",[])]
+    processed=[]
+    for row in rows:
+        sym=row[0].get("name","") if isinstance(row[0],dict) else row[0]
+        sym = sym.split(":")[-1] if ":" in sym else sym
+        processed.append([sym,*row[1:]])
+    return pd.DataFrame(processed,columns=[
+        "Symbol","Price (USD)","Chg %","Market Cap","Sector","Industry","Exchange","Perf 1W","Perf 1M","Perf 3M","Perf 6M","Perf 1Y","Price x Vol (1M)"
+    ])
+
+
+def fetch_usdinr():
+    url="https://scanner.tradingview.com/global/scan"
+    payload={
+        "symbols":{"tickers":["FX_IDC:USDINR"]},
+        "columns":["close"]
+    }
+    r=requests.post(url,json=payload,headers={"User-Agent":"Mozilla/5.0","Content-Type":"application/json"},timeout=20)
+    r.raise_for_status()
+    return float(r.json()["data"][0]["d"][0])
+
+
+# ==========================================
+# PORTED COMPLETE US ETF SCREENER LOGIC
+# ==========================================
+def fetch_and_rank_actual_us_etfs(engine, usd_inr):
+    print("\n🇺🇸 Fetching and Ranking Actual USA ETFs...")
+    url = "https://scanner.tradingview.com/america/scan"
+    payload = {
+        "columns": [
+            "name", "close", "change", 
+            "Perf.W", "Perf.1M", "Perf.3M", "Perf.6M", "Perf.Y", 
+            "exchange", "average_volume_30d_calc", "EMA21", "expense_ratio"
+        ],
+        "filter": [
+            {"left": "type", "operation": "equal", "right": "fund"},
+            {"left": "Value.Traded", "operation": "greater", "right": 5000000}
+        ],
+        "markets": ["america"],
+        "options": {"lang": "en"},
+        "range": [0, 4000], 
+        "sort": {"sortBy": "Perf.10Y", "sortOrder": "desc"}
+    }
+
+    try:
+        response = requests.post(url, headers={"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        rows = [item["d"] for item in data.get("data", [])]
+        df = pd.DataFrame(rows, columns=[
+            "Symbol", "Price (USD)", "Chg %", 
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", 
+            "Perf 1Y %", "Exchange", "Avg Vol 30D", "EMA 21", "Expense Ratio"
+        ])
+        df["Symbol"] = df["Symbol"].str.upper().str.strip()
+        print(f"   📋 Retrieved {len(df)} USA ETFs from TradingView.")
+
+        with engine.connect() as conn:
+            cat_df = pd.read_sql(text('SELECT "Symbol", "Category", "Index" FROM "USA_ETF_Catagory"'), conn)
+        
+        cat_df["Symbol"] = cat_df["Symbol"].astype(str).str.upper().str.strip()
+        df = df.merge(cat_df, on="Symbol", how="inner")
+        print(f"   🔗 Matched {len(df)} USA ETFs against Supabase category map.")
+
+        df["EMA 21 Status"] = df.apply(
+            lambda r: "Above 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) and r["Price (USD)"] > r["EMA 21"]
+            else ("Below 21 EMA" if pd.notna(r["Price (USD)"]) and pd.notna(r["EMA 21"]) else "N/A"), axis=1
+        )
+        
+        df["Turnover (Cr)"] = ((df["Price (USD)"] * df["Avg Vol 30D"] * usd_inr) / 10000000).round(2)
+
+        r1 = df["Perf 1M %"].rank(ascending=False, method="min", na_option="bottom")
+        r3 = df["Perf 3M %"].rank(ascending=False, method="min", na_option="bottom")
+        r6 = df["Perf 6M %"].rank(ascending=False, method="min", na_option="bottom")
+        df["Relative Score"] = r1 * 2 + r3 * 4 + r6 * 4
+        df["Final Rank"] = df["Relative Score"].rank(ascending=True, method="min").astype(int)
+        
+        cols = [
+            "Final Rank", "Relative Score", "Symbol", "Category", "Index",
+            "Exchange", "Price (USD)", "EMA 21", "EMA 21 Status", "Chg %", 
+            "Turnover (Cr)", "Avg Vol 30D", "Expense Ratio",
+            "Perf 1W %", "Perf 1M %", "Perf 3M %", "Perf 6M %", "Perf 1Y %"
+        ]
+        
+        df = df[[c for c in cols if c in df.columns]].sort_values("Final Rank")
+        return df
+
+    except Exception as e:
+        print(f"   ❌ Failed to scrape and rank USA ETFs: {e}")
+        return pd.DataFrame()
+
+
+# ==========================================
+# 2. MAIN EXECUTION
+# ==========================================
+if __name__=="__main__":
+    
+    # ----------------------------------------
+    # TIME & MARKET LOCKOUT LOGIC
+    # ----------------------------------------
+    now_et = pd.Timestamp.now(tz='US/Eastern')
+    
+    if now_et.hour < 9:
+        trading_date = now_et - pd.Timedelta(days=1)
+    else:
+        trading_date = now_et
+        
+    today_date_str = trading_date.strftime('%Y-%m-%d')
+    is_weekday = trading_date.weekday() < 5
+    
+    is_time_locked = (9 <= now_et.hour < 17) and is_weekday
+    
+    # ----------------------------------------
+    # RUN SCRAPERS
+    # ----------------------------------------
+    df_all = fetch_tradingview_etfs_all()
+    usd_inr = fetch_usdinr()
+    us_etfs_df = fetch_and_rank_actual_us_etfs(engine, usd_inr)
+
+    # Momentum Score & Rank (US Stocks)
+    r1=df_all["Perf 1M"].rank(ascending=False,method="min")
+    r3=df_all["Perf 3M"].rank(ascending=False,method="min")
+    r6=df_all["Perf 6M"].rank(ascending=False,method="min")
+    df_all["Momentum Score"]=r1*2+r3*4+r6*4
+    df_all["Momentum Rank"]=df_all["Momentum Score"].rank(ascending=True,method="min").astype(int)
+    
+    if "Price x Vol (1M)" in df_all.columns:
+        df_all["Turnover in Cr"]=(df_all["Price x Vol (1M)"]*usd_inr/1e7)
+        
+    df_all=df_all.sort_values("Momentum Rank").reset_index(drop=True)
+    df_ath = fetch_tradingview_etfs_near_ath()
+
+    summary = (
+        df_all.groupby("Industry")
+        .agg(
+            Total_Stocks=("Symbol","count"),
+            Avg_1D_Return=("Chg %","mean")
+        )
+        .reset_index()
+    )
+
+    ath_counts = (
+        df_ath.groupby("Industry")
+        .agg(ATH_Stocks=("Symbol","count"))
+        .reset_index()
+    )
+
+    summary = summary.merge(ath_counts,on="Industry",how="left")
+    summary["ATH_Stocks"] = summary["ATH_Stocks"].fillna(0).astype(int)
+    summary["ATH %"] = (summary["ATH_Stocks"]/summary["Total_Stocks"]*100).round(2)
+    summary = summary.sort_values("ATH %",ascending=False).reset_index(drop=True)
+    summary["Rank"] = range(1,len(summary)+1)
+    summary = summary[["Industry","Total_Stocks","ATH_Stocks","ATH %","Rank","Avg_1D_Return"]]
+
+    sector_summary=(df_all.groupby("Sector").agg(Total_Stocks=("Symbol","count"),Avg_1D_Return=("Chg %","mean")).reset_index())
+    sector_ath=(df_ath.groupby("Sector").agg(ATH_Stocks=("Symbol","count")).reset_index())
+    sector_summary=sector_summary.merge(sector_ath,on="Sector",how="left")
+    sector_summary["ATH_Stocks"]=sector_summary["ATH_Stocks"].fillna(0).astype(int)
+    sector_summary["ATH %"]=(sector_summary["ATH_Stocks"]/sector_summary["Total_Stocks"]*100).round(2)
+    sector_summary=sector_summary.sort_values("ATH %",ascending=False).reset_index(drop=True)
+    sector_summary["Rank"]=range(1,len(sector_summary)+1)
+    sector_summary=sector_summary[["Sector","Total_Stocks","ATH_Stocks","ATH %","Rank","Avg_1D_Return"]]
+
+    # ----------------------------------------
+    # ADVANCED HOLIDAY / MARKET BREADTH ENGINE
+    # ----------------------------------------
+    is_us_holiday = False
+    
+    if is_weekday:
+        if 'Chg %' in df_all.columns:
+            chg_variance = float(df_all["Chg %"].var())
+            if pd.isna(chg_variance) or chg_variance == 0.0 or (df_all["Chg %"] == 0.0).mean() > 0.95:
+                is_us_holiday = True
+                is_time_locked = False
+                print("\n🛑 WEEKEND/HOLIDAY DETECTED: Market price variance is zero or completely stagnant.")
+                
+        already_logged = False
+        try:
+            with engine.connect() as conn:
+                existing = pd.read_sql(text(f'SELECT * FROM "US historical_market_mood" WHERE "Date" = \'{today_date_str}\''), conn)
+                if not existing.empty:
+                    already_logged = True
+        except Exception: pass
+
+        if not is_us_holiday and not already_logged:
+            positive=(df_all["Chg %"]>0).sum()
+            breadth=round((positive/len(df_all))*100,2)
+            pct=f"{breadth:.2f}%"
+            if breadth<=20: mood=f"Super Negative 🐻 {pct}"
+            elif breadth<=35: mood=f"Negative 🔻 {pct}"
+            elif breadth<=50: mood=f"Neutral ⚖️ {pct}"
+            elif breadth<=65: mood=f"Positive 💚 {pct}"
+            else: mood=f"Super Positive 🚀 {pct}"
             
-            copy_str = ",".join(display_df['Symbol'].tolist())
-            copy_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
-                button {{
-                    font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                    border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                    font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    transition: all 0.2s;
-                }}
-                button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
-            </style>
-            </head>
-            <body>
-                <button id="copyBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                <script>
-                function copyToClipboard() {{
-                    const ta = document.createElement('textarea');
-                    ta.value = "{copy_str}";
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(ta);
-                    const btn = document.getElementById('copyBtn');
-                    btn.innerHTML = '✅ Copied!';
-                    setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                }}
-                </script>
-            </body>
-            </html>
-            """
-            components.html(copy_html, height=40)
+            breadth_df=pd.DataFrame({"Date":[today_date_str],"Market Breadth":[mood]})
+            print(f"\n📊 Today's Breadth calculated: {mood}")
+        else:
+            breadth_df = pd.DataFrame()
+            if already_logged: print(f"\n⏸️ Market mood for {today_date_str} already logged. Skipping duplicate.")
+    else:
+        is_us_holiday = True
+        breadth_df = pd.DataFrame()
+        print("\n⏸️ Today is a weekend. Skipping market mood calculations.")
 
-            for _, r in display_df.iterrows():
-                sym = str(r['Symbol'])
-                url = f"https://www.tradingview.com/chart/?symbol={sym}"
-                link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-                html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
-                
-            st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
-        else: 
-            st.info("No US stocks matching criteria right now.")
-
-    # --- 2. MARKET LEADERS TAB ---
-    with tab_leaders:
-        if not raw_sec.empty and not raw_ind.empty:
-            lead_col1, lead_col2 = st.columns(2)
+    # ----------------------------------------
+    # US TREND ENGINE (7D, 14D, 21D COMPOSITE)
+    # ----------------------------------------
+    trend_summary_df = pd.DataFrame()
+    
+    if is_weekday and not is_time_locked and not is_us_holiday:
+        print("\n📈 Calculating 7-Day, 14-Day, and 21-Day US Composite Trend...")
+        try:
+            query_all = text('SELECT * FROM "US historical_market_mood" ORDER BY "Date" DESC LIMIT 30')
+            with engine.connect() as conn:
+                hist_df = pd.read_sql(query_all, conn)
             
-            with lead_col1:
-                st.markdown("##### 🔥 Top 5 Sectors (USA)")
-                top_sec = raw_sec.copy()
-                top_sec = top_sec.rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'})
-                sec_cols = ['Rank', 'Sector', '1d Avg %', 'ATH count', 'ATH %']
-                top_sec = top_sec[[c for c in sec_cols if c in top_sec.columns]].sort_values('Rank').head(5)
-                
-                top_2_sec_idx = []
-                if '1d Avg %' in top_sec.columns: top_2_sec_idx = top_sec['1d Avg %'].astype(float).nlargest(2).index.tolist()
-                if 'ATH %' in top_sec.columns: top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
-                if '1d Avg %' in top_sec.columns: top_sec['1d Avg %'] = top_sec['1d Avg %'].astype(float).map("{:.2f}%".format)
-                
-                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
-                for col in top_sec.columns: html += f"<th>{col}</th>"
-                html += "</tr></thead><tbody>"
-                for idx, row in top_sec.iterrows():
-                    html += "<tr>"
-                    for c in top_sec.columns:
-                        val = row[c]
-                        if idx in top_2_sec_idx and c == '1d Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
-                        elif idx in top_2_sec_idx and c == 'Sector': html += f"<td><b>{val}</b></td>"
-                        else: html += f"<td>{val}</td>"
-                    html += "</tr>"
-                html += "</tbody></table></div>"
-                st.markdown(html, unsafe_allow_html=True)
-                
-            with lead_col2:
-                st.markdown("##### 🚀 Top 30 Industries (USA)")
-                top_ind = raw_ind.copy()
-                top_ind = top_ind.rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'})
-                ind_cols = ['Rank', 'Industry', '1d Avg %', 'ATH count', 'ATH %']
-                top_ind = top_ind[[c for c in ind_cols if c in top_ind.columns]].sort_values('Rank').head(30)
-                
-                top_4_ind_idx = []
-                if '1d Avg %' in top_ind.columns: top_4_ind_idx = top_ind['1d Avg %'].astype(float).nlargest(4).index.tolist()
-                if 'ATH %' in top_ind.columns: top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
-                if '1d Avg %' in top_ind.columns: top_ind['1d Avg %'] = top_ind['1d Avg %'].astype(float).map("{:.2f}%".format)
-                
-                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
-                for col in top_ind.columns: html += f"<th>{col}</th>"
-                html += "</tr></thead><tbody>"
-                for idx, row in top_ind.iterrows():
-                    html += "<tr>"
-                    for c in top_ind.columns:
-                        val = row[c]
-                        if idx in top_4_ind_idx and c == '1d Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
-                        elif idx in top_4_ind_idx and c == 'Industry': html += f"<td><b>{val}</b></td>"
-                        else: html += f"<td>{val}</td>"
-                    html += "</tr>"
-                html += "</tbody></table></div>"
-                st.markdown(html, unsafe_allow_html=True)
-
-    # --- 3. US ETF SCREENER TAB ---
-    with tab_us_etf:
-        if not us_etf_df.empty:
-            us_df = us_etf_df.copy()
+            if not breadth_df.empty:
+                hist_df = pd.concat([breadth_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
             
-            us_df['Price (USD)'] = pd.to_numeric(us_df['Price (USD)'], errors='coerce')
-            us_df['Avg Vol 30D'] = pd.to_numeric(us_df['Avg Vol 30D'], errors='coerce')
-            us_df['Expense Ratio'] = pd.to_numeric(us_df['Expense Ratio'], errors='coerce')
-            us_df['Chg %'] = pd.to_numeric(us_df['Chg %'], errors='coerce')
-
-            us_df['Turnover (Cr)'] = (us_df['Avg Vol 30D'] * us_df['Price (USD)'] * 95) / 10000000
+            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
             
-            f_us_ema = us_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
-            valid_us = us_df[f_us_ema].sort_values('Relative Score', ascending=True).head(10)
-            
-            if not valid_us.empty:
-                valid_us = valid_us.reset_index(drop=True)
-                valid_us['Rank'] = valid_us.index + 1
-                show_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']
-                valid_us = valid_us[[c for c in show_cols if c in valid_us.columns]]
+            if len(hist_df) >= 7:
+                def extract_percentage(text_val):
+                    match = re.search(r'([0-9.]+)%', str(text_val))
+                    return float(match.group(1)) if match else np.nan
 
-                top_4_chg_idx = valid_us.head(4).index.tolist()
-                top_4_avg = valid_us.head(4)['Chg %'].mean() if not valid_us.empty else 0.0
-                avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
+                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
                 
-                etf_col1, etf_col2 = st.columns([8.5, 1.5])
-                with etf_col1:
-                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
+                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
+                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
                 
-                with etf_col2:
-                    us_etf_copy_str = ",".join(valid_us['Symbol'].astype(str).tolist())
-                    us_etf_copy_html = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; height: 100%; background-color: transparent; overflow: hidden; }}
-                        button {{
-                            font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                            border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                            font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                            transition: all 0.2s;
-                        }}
-                        button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
-                    </style>
-                    </head>
-                    <body>
-                        <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                        <script>
-                        function copyToClipboard() {{
-                            const ta = document.createElement('textarea');
-                            ta.value = "{us_etf_copy_str}";
-                            document.body.appendChild(ta);
-                            ta.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            const btn = document.getElementById('copyUsEtfBtn');
-                            btn.innerHTML = '✅ Copied!';
-                            setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                        }}
-                        </script>
-                    </body>
-                    </html>
-                    """
-                    components.html(us_etf_copy_html, height=35)
+                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
+                pct_str = f"{final_score:.2f}%"
+                
+                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
+                elif final_score <= 35: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 50: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 65: trend_label = f"Positive 💚 {pct_str}"
+                else: trend_label = f"Super Positive 🚀 {pct_str}"
+                
+                print(f"   🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                print(f"   🏆 Final US Market Regime: {trend_label}")
+                
+                trend_summary_df = pd.DataFrame([{
+                    "last_updated": today_date_str,
+                    "avg_7d": round(val_7d, 2),
+                    "avg_14d": round(val_14d, 2),
+                    "avg_21d": round(val_21d, 2),
+                    "composite_score": round(final_score, 2),
+                    "trend_regime": trend_label
+                }])
+            else: print("   ⚠️ Not enough history in 'US historical_market_mood' to calculate rolling averages.")
+        except Exception as e: print(f"   ❌ US Trend Engine Error: {e}")
 
-                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
+    dfs_to_round = [df_all, df_ath, summary, sector_summary, us_etfs_df]
+    if not breadth_df.empty: dfs_to_round.append(breadth_df)
+    if not trend_summary_df.empty: dfs_to_round.append(trend_summary_df)
+        
+    for _df in dfs_to_round:
+        if not _df.empty:
+            num=_df.select_dtypes(include="number").columns
+            _df[num]=_df[num].round(2)
 
-                def style_us_etf_row(row):
-                    is_top_4 = row.name in top_4_chg_idx
-                    styles = []
-                    for col in row.index:
-                        cell_style = ""
-                        if is_top_4:
-                            cell_style += "font-weight: 700; "
-                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
-                        styles.append(cell_style)
-                    return styles
-                
-                styled_us_etf = valid_us.style.apply(style_us_etf_row, axis=1).hide(axis="index").format({
-                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
-                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
-                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
-                    'Turnover (Cr)': lambda x: safe_fmt(x, "₹{:.2f}"),
-                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
-                })
+    sync_log=pd.DataFrame({"last_sync":[pd.Timestamp.now(tz='US/Eastern').strftime("%d %b %Y, %I:%M %p ET")],"status":["SUCCESS"],"failed_module":["None"]})
 
-                html_us_table = styled_us_etf.to_html()
-                
-                for _, r in valid_us.iterrows():
-                    sym = str(r['Symbol'])
-                    url = f"https://www.tradingview.com/chart/4efUco2X/?symbol={sym}"
-                    link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-                    html_us_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_us_table)
-                
-                st.markdown(f'<div class="scrollable-table-container">{html_us_table}</div>', unsafe_allow_html=True)
-            else: st.info("No US ETFs match the criteria at the moment.")
+    # ==========================================
+    # 3. PUSH TO SUPABASE (TIME LOCKED)
+    # ==========================================
+    if is_time_locked:
+        print("\n⏸️ US Market is currently OPEN (9 AM - 5 PM ET). Database writing LOCKED.")
+    else:
+        print("\n📦 Pushing data to Supabase...")
 
-    # --- 4. PORTFOLIO TRACKER TAB ---
-    with tab_port:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.text_input("Upstox Access Token (Not required for US tracking)", disabled=True)
-            gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...")
-        with col2:
-            st.radio("Data Source", ["Upload CSV", "Google Sheets"], index=1)
-            st.markdown("<br>", unsafe_allow_html=True)
-            load_data = st.button("🔄 Load / Refresh Sheet")
+        save_db_with_retry(df_all, "US Stock screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print("   ✅ 'US Stock screener' updated successfully.")
 
-        if load_data and "docs.google.com" in gs_url:
-            try:
-                # Convert standard Google Sheets URL to a direct CSV export link
-                csv_url = gs_url.replace('/edit?usp=sharing', '/export?format=csv').replace('/edit#gid=', '/export?format=csv&gid=').replace('/edit', '/export?format=csv')
-                port_df = pd.read_csv(csv_url)
-                
-                # Cleanup and ensure strict column matching
-                port_df = port_df.rename(columns=lambda x: str(x).strip())
-                symbols_to_fetch = port_df['Stock Ticker'].dropna().astype(str).str.upper().tolist()
-                
-                # Fetch Live TradingView Data based on your custom EMA 21 payload
-                live_tv_data = fetch_portfolio_tv_data(symbols_to_fetch)
+        save_db_with_retry(df_ath, "US ATH screeener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print("   ✅ 'US ATH screeener' updated successfully.")
 
-                tracker_data = []
-                for _, row in port_df.iterrows():
-                    sym = str(row['Stock Ticker']).upper().strip()
-                    if not sym or sym == "NAN": continue
-                    
-                    tv = live_tv_data.get(sym, {"price": 0.0, "change": 0.0, "ema21": 0.0})
-                    
-                    entry_price = float(row['Entry Price']) if pd.notna(row['Entry Price']) else 0.0
-                    stop_loss = float(row['Stop Loss']) if pd.notna(row['Stop Loss']) else 0.0
-                    risk_pct = str(row['Risk'])
-                    
-                    current_price = tv["price"]
-                    ema21_val = tv["ema21"]
-                    
-                    profit_loss = current_price - entry_price if entry_price > 0 else 0.0
-                    return_pct = (profit_loss / entry_price * 100) if entry_price > 0 else 0.0
-                    
-                    # Calculate Trading Days
-                    try:
-                        entry_dt = pd.to_datetime(row['Entry date'], format='%d-%m-%Y')
-                        trading_days = np.busday_count(entry_dt.date(), datetime.now().date())
-                    except:
-                        trading_days = 0
-                    
-                    # EMA Status Logic
-                    ema_status = "ABOVE EMA21" if current_price > ema21_val else "BELOW EMA21"
-                    
-                    # 10 Day Rule Logic
-                    if trading_days < 10:
-                        rule_status = f"PENDING ({trading_days}/10)"
-                    else:
-                        rule_status = f"PASS ({return_pct:.2f}%)" if ema_status == "ABOVE EMA21" else f"EXIT ({return_pct:.2f}%)"
+        if not us_etfs_df.empty:
+            save_db_with_retry(us_etfs_df, "USA_ETF_Screener", engine, if_exists="replace", index=False)
+            print("   ✅ 'USA_ETF_Screener' updated successfully.")
 
-                    tracker_data.append({
-                        "Symbol": sym,
-                        "Entry Date": row['Entry date'],
-                        "Today chg%": tv["change"],
-                        "Entry Price": entry_price,
-                        "Stop Loss": stop_loss,
-                        "Risk %": risk_pct,
-                        "Current Price": current_price,
-                        "Profit/Loss": profit_loss,
-                        "Return %": return_pct,
-                        "Trading Days": trading_days,
-                        "EMA21": ema21_val,
-                        "EMA 21 Status": ema_status,
-                        "10 Day Rule": rule_status
-                    })
-                
-                final_port_df = pd.DataFrame(tracker_data)
-                avg_chg = final_port_df['Today chg%'].mean()
-                
-                # Layout spacing exact match for the ETF tab
-                port_col1, port_col2 = st.columns([8.5, 1.5])
-                with port_col1:
-                    avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
-                
-                with port_col2:
-                    port_copy_str = ",".join(final_port_df['Symbol'].tolist())
-                    port_copy_html = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; height: 100%; background-color: transparent; overflow: hidden; }}
-                        button {{ font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s; }}
-                        button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
-                    </style>
-                    </head>
-                    <body>
-                        <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                        <script>
-                        function copyToClipboard() {{
-                            const ta = document.createElement('textarea');
-                            ta.value = "{port_copy_str}";
-                            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                            const btn = document.getElementById('copyPortBtn');
-                            btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                        }}
-                        </script>
-                    </body>
-                    </html>
-                    """
-                    components.html(port_copy_html, height=35)
-                
-                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
-                
-                def style_portfolio(row):
-                    bg_color = [''] * len(row)
-                    ret_idx = final_port_df.columns.get_loc('Return %')
-                    ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
-                    rule_idx = final_port_df.columns.get_loc('10 Day Rule')
-                    
-                    if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
-                    
-                    if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
-                    elif "BELOW" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: red; font-weight: bold;'
-                    
-                    if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif "EXIT" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
-                    
-                    return bg_color
+        save_db_with_retry(summary, "US Industry Analysis", engine, if_exists="replace", index=False)
+        print("   ✅ 'US Industry Analysis' updated successfully.")
 
-                styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
-                    "Today chg%": "{:.2f}%",
-                    "Entry Price": "${:.2f}",
-                    "Stop Loss": "${:.2f}",
-                    "Current Price": "${:.2f}",
-                    "Profit/Loss": "${:.2f}",
-                    "Return %": "{:.2f}%",
-                    "EMA21": "${:.2f}"
-                })
-                
-                st.markdown(f'<div class="scrollable-table-container">{styled_port.to_html()}</div>', unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"Error loading sheet: {str(e)}. Ensure the columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
+        save_db_with_retry(sector_summary, "USA Sector Analysis", engine, if_exists="replace", index=False)
+        print("   ✅ 'USA Sector Analysis' updated successfully.")
 
-if __name__ == "__main__":
-    run_usa_screener()
+        if not breadth_df.empty and not is_us_holiday:
+            save_db_with_retry(breadth_df, "US historical_market_mood", engine, if_exists="append", index=False)
+            print("   ✅ 'US historical_market_mood' updated successfully.")
+
+        if not trend_summary_df.empty:
+            save_db_with_retry(trend_summary_df, "US Market trend summary", engine, if_exists="replace", index=False)
+            print("   ✅ 'US Market trend summary' updated successfully.")
+
+        save_db_with_retry(sync_log, "US Sync log", engine, if_exists="replace", index=False)
+        print("   ✅ 'US Sync log' updated successfully.")
+
+        print("\n🎉 SUCCESS: USA Data synced to Supabase!")
