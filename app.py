@@ -136,121 +136,108 @@ st.markdown("""
         }
 
         /* ========================================================= */
-        /* 1. IMMERSIVE TABS (NUCLEAR OPTION)                        */
+        /* PROFESSIONAL FULL-WIDTH SAAS TABS (STREAMLIT 1.59.0)      */
         /* ========================================================= */
         
-        /* Target the tab container */
-        div[data-testid="stTabs"] > div[role="tablist"] {
+        /* Force the tab list container to flex and spread */
+        div[data-testid="stTabs"] > div {
             display: flex !important;
             width: 100% !important;
             gap: 15px !important;
-            padding: 10px 0px !important;
+            padding-top: 10px !important; 
+            border-bottom: none !important;
         }
-
-        /* Target the tab buttons */
+        
+        /* Tab Button Physics & Styling */
+        div[data-testid="stTabs"] button[data-testid="stTab"],
         div[data-testid="stTabs"] button[role="tab"] {
-            flex: 1 !important;
+            flex: 1 1 0% !important; /* Forces all tabs to be equal width */
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
             border-radius: 12px !important;
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
             box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
-            padding: 15px 10px !important;
-            min-height: 60px !important;
-            transition: all 0.2s ease !important;
-        }
-
-        /* TARGET THE INNER TEXT (This overrides Streamlit's hijack) */
-        div[data-testid="stTabs"] button[role="tab"] div[data-testid="stMarkdownContainer"] p,
-        div[data-testid="stTabs"] button[role="tab"] p,
-        div[data-testid="stTabs"] button[role="tab"] span {
-            font-size: 1.3rem !important;
-            font-weight: 800 !important;
-            color: #FFFFFF !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            padding: 20px 10px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            transform: translateY(0) !important;
+            min-height: 65px !important;
             margin: 0 !important;
-            white-space: nowrap !important;
         }
-
-        /* Hover states */
+        
+        /* IMMERSIVE POPUP - Hover Effect for Tabs */
+        div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
         div[data-testid="stTabs"] button[role="tab"]:hover {
-            transform: translateY(-4px) !important;
+            transform: translateY(-6px) !important;
+            box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
             background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
         }
-
-        /* Active tab states */
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        
+        /* Selected Tab State (The White Layer with Thick Navy Line) */
+        div[data-testid="stTabs"] button[aria-selected="true"] {
             background: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
-            border-top: 6px solid #0B1D30 !important;
-            transform: translateY(-4px) !important;
+            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
+            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
-
-        /* Active tab text (Force Navy Blue) */
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] div[data-testid="stMarkdownContainer"] p,
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] span {
+        
+        /* Tab Text Sizing (Using wildcard to override inner Streamlit <p> tags) */
+        div[data-testid="stTabs"] button[data-testid="stTab"] *,
+        div[data-testid="stTabs"] button[role="tab"] * { 
+            font-size: 1.4rem !important; 
+            font-weight: 800 !important; 
+            color: #FFFFFF !important; 
+            margin: 0 !important;
+            transition: color 0.3s ease !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Selected Tab Text Color */
+        div[data-testid="stTabs"] button[aria-selected="true"] * {
             color: #0B1D30 !important;
         }
-
-        /* Hide the default red line Streamlit added */
-        div[data-testid="stTabIndicator"] {
-            display: none !important;
+        
+        /* Remove default Streamlit tab active line */
+        div[data-testid="stTabIndicator"] { 
+            display: none !important; 
         }
-
+        
         /* ========================================================= */
-        /* 2. ALL BUTTONS & UPLOADERS                                */
+        /* GENERAL BUTTONS & INPUTS                                  */
         /* ========================================================= */
         
+        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT */
         div[data-testid="stButton"] button,
-        button[data-testid="baseButton-secondary"],
-        div[data-testid="stFileUploader"] button {
+        div[data-testid="stBaseButton-secondary"] button,
+        button[kind="secondary"] {
             background-color: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
             border-radius: 8px !important;
         }
-
-        /* Target the text explicitly inside the buttons */
-        div[data-testid="stButton"] button p,
-        div[data-testid="stButton"] button span,
-        button[data-testid="baseButton-secondary"] p,
-        button[data-testid="baseButton-secondary"] span,
-        div[data-testid="stFileUploader"] button p,
-        div[data-testid="stFileUploader"] button span {
+        
+        div[data-testid="stButton"] button *,
+        div[data-testid="stBaseButton-secondary"] button *,
+        button[kind="secondary"] * {
             color: #0B1D30 !important;
             font-weight: 800 !important;
         }
 
-        /* Hover for buttons */
         div[data-testid="stButton"] button:hover,
-        button[data-testid="baseButton-secondary"]:hover,
-        div[data-testid="stFileUploader"] button:hover {
+        div[data-testid="stBaseButton-secondary"] button:hover,
+        button[kind="secondary"]:hover {
             background-color: #F4F1E1 !important;
         }
-
-        /* Uploader Background Fix */
-        div[data-testid="stFileUploader"] {
-            background-color: #FFFFFF !important;
-            border: 2px dashed #0B1D30 !important;
-            border-radius: 8px !important;
-            padding: 15px !important;
-        }
         
-        /* Force uploader text to be readable */
-        div[data-testid="stFileUploader"] p,
-        div[data-testid="stFileUploader"] span,
-        div[data-testid="stFileUploader"] small {
-            color: #0B1D30 !important;
-            font-weight: 600 !important;
-        }
-
-        /* ========================================================= */
-        /* 3. INPUTS & FILE UPLOADER                                 */
-        /* ========================================================= */
+        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
         div[data-testid="stTextInput"] input {
             background-color: #FFFFFF !important;
             color: #0B1D30 !important;
             border: 1px solid #0B1D30 !important;
         }
         
+        /* Make Number Input values massive */
         div[data-testid="stNumberInput"] input {
             background-color: #FFFFFF !important;
             font-size: 1.5rem !important;
@@ -259,25 +246,36 @@ st.markdown("""
             border: 1px solid #0B1D30 !important;
         }
         
-        div[role="radiogroup"] label { color: #0B1D30 !important; }
+        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
+        div[role="radiogroup"] label * {
+            color: #0B1D30 !important;
+        }
 
+        /* UPLOAD BUTTON VISIBILITY ON MOBILE - FORCE WHITE BACKGROUND */
         div[data-testid="stFileUploader"] {
             background-color: #FFFFFF !important;
             border: 2px dashed #0B1D30 !important;
             border-radius: 8px !important;
             padding: 15px !important;
         }
-        div[data-testid="stFileUploader"] section { background-color: transparent !important; }
+        div[data-testid="stFileUploader"] section {
+            background-color: transparent !important;
+        }
         
-        /* Force uploader text colors */
+        /* Force uploader text to be readable */
         div[data-testid="stFileUploader"] * {
             color: #0B1D30 !important;
             font-weight: 600 !important;
         }
         
+        /* Specific override for the Browse Files button */
         div[data-testid="stFileUploader"] button {
             background-color: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
+            border-radius: 6px !important;
+        }
+        div[data-testid="stFileUploader"] button:hover {
+            background-color: #F4F1E1 !important;
         }
         
         /* Pulse Animation for Loader */
