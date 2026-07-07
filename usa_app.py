@@ -107,7 +107,7 @@ def run_usa_screener():
         except Exception:
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
-    @st.cache_data(ttl=3600)
+    @st.cache_data(ttl=86400) # Increased to 24 hours for superfast updates
     def fetch_exchange_mapping():
         """Connects to Supabase to build a VLOOKUP dictionary for Indian and US tickers."""
         exchange_map = {}
@@ -640,32 +640,33 @@ def run_usa_screener():
 
     # --- 4. PORTFOLIO TRACKER TAB ---
     with tab_port:
-        hdr_col1, hdr_col2 = st.columns([5, 1.5])
-        with hdr_col1:
-            st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 10px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
-        with hdr_col2:
-            if st.button("🧹 Clear Cache & Reset Data"):
+        col_text, col_clear = st.columns([8, 2])
+        with col_text:
+            st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 5px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
+        with col_clear:
+            if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
                 st.cache_data.clear()
                 st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 10px 0px 20px 0px; border-color: #E5E7EB;'>", unsafe_allow_html=True)
 
-        # Centered Radio & Inputs
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True)
+        # Centered Radio
+        col_radio1, col_radio2, col_radio3 = st.columns([3, 4, 3])
+        with col_radio2:
+            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
-        input_col1, input_col2 = st.columns([4, 1])
-        with input_col1:
+        # Input and Load Button layout
+        input_col, btn_col = st.columns([8, 2])
+        with input_col:
             if data_source == "Upload CSV":
                 uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
             else:
                 gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...", label_visibility="collapsed")
         
-        with input_col2:
-            load_data = st.button("🔄 Load / Refresh Sheet")
+        with btn_col:
+            load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
         if load_data:
             try:
