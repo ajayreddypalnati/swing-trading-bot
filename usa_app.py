@@ -8,7 +8,6 @@ import pytz
 import streamlit as st
 from sqlalchemy import create_engine, text
 import streamlit.components.v1 as components
-import holidays
 
 def run_usa_screener():
     # Auto-refresh the page every 60 seconds
@@ -107,48 +106,6 @@ def run_usa_screener():
         except Exception:
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
-    @st.cache_data(ttl=86400) # Increased to 24 hours for superfast updates
-    def fetch_exchange_mapping():
-        """Connects to Supabase to build a VLOOKUP dictionary for Indian and US tickers."""
-        exchange_map = {}
-        try:
-            db_url = st.secrets["DATABASE_URL"]
-            if db_url.startswith("postgresql://"):
-                db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-            
-            engine = create_engine(db_url)
-            with engine.connect() as conn:
-                # 1. Indian Stocks (stock_master)
-                try:
-                    ind_df = pd.read_sql(text('SELECT "Ticker", "Exchange" FROM "stock_master"'), conn)
-                    for _, row in ind_df.iterrows():
-                        ticker = str(row['Ticker']).strip().upper()
-                        exch = str(row['Exchange']).strip().upper()
-                        # Clean up SME tags to match generic TradingView exchanges
-                        if 'NSE' in exch: exch = 'NSE'
-                        elif 'BSE' in exch: exch = 'BSE'
-                        
-                        if ticker and ticker != "NAN":
-                            exchange_map[ticker] = f"{exch}:{ticker}"
-                except Exception as e:
-                    print(f"Lookup Error (India): {e}")
-                
-                # 2. US Stocks (US Stock screener)
-                try:
-                    us_df = pd.read_sql(text('SELECT "Symbol", "Exchange" FROM "US Stock screener"'), conn)
-                    for _, row in us_df.iterrows():
-                        ticker = str(row['Symbol']).strip().upper()
-                        exch = str(row['Exchange']).strip().upper()
-                        if ticker and ticker != "NAN":
-                            exchange_map[ticker] = f"{exch}:{ticker}"
-                except Exception as e:
-                    print(f"Lookup Error (US): {e}")
-                    
-        except Exception as e:
-            print(f"Database Connect Error (Mapping): {e}")
-            
-        return exchange_map
-
     @st.cache_data(ttl=60)
     def fetch_us_live_breadth():
         try:
@@ -190,58 +147,43 @@ def run_usa_screener():
         except Exception:
             return []
             
-    @st.cache_data(ttl=60)
-    def fetch_portfolio_tv_data(pure_tickers):
-        """Fetches live data directly using the 'in_range' filter for massive speed improvements."""
-        if not pure_tickers: return {}
+    def fetch_portfolio_tv_data(symbols_list):
         try:
             payload = {
-                "columns": ["ticker-view", "close", "type", "typespecs", "pricescale", "minmov", "fractional", "minmove2", "currency", "change", "market_cap_basic", "fundamental_currency_code", "sector.tr", "market", "sector", "industry.tr", "industry", "EMA21", "exchange.tr", "source-logoid"],
-                "filter": [
-                    {"left": "is_primary", "operation": "equal", "right": True},
-                    {"left": "name", "operation": "in_range", "right": pure_tickers}
+                "columns":["ticker-view","close","type","typespecs","pricescale","minmov","fractional","minmove2","currency","change","market_cap_basic","fundamental_currency_code","sector.tr","market","sector","industry.tr","industry","EMA21"],
+                "filter":[
+                    {"left":"is_primary","operation":"equal","right":True},
+                    {"left":"name","operation":"in","right":symbols_list}
                 ],
-                "ignore_unknown_fields": False,
-                "options": {"lang": "en"},
-                "price_conversion": {"to_currency": "usd"},
-                "range": [0, 5000],
-                "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
-                "markets": ["america","argentina","australia","austria","bahrain","bangladesh","belgium","brazil","canada","chile","china","colombia","croatia","cyprus","czech","denmark","egypt","estonia","finland","france","germany","greece","hongkong","hungary","iceland","india","indonesia","ireland","israel","italy","japan","kenya","kuwait","latvia","lithuania","luxembourg","malaysia","mexico","morocco","netherlands","newzealand","nigeria","norway","pakistan","peru","philippines","poland","portugal","qatar","romania","russia","ksa","serbia","singapore","slovakia","slovenia","rsa","korea","spain","srilanka","sweden","switzerland","taiwan","thailand","tunisia","turkey","uae","uk","venezuela","vietnam"],
-                "filter2": {
-                    "operator": "and",
-                    "operands": [
-                        {"operation": {"operator": "or", "operands": [
-                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["common"]}}]}},
-                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["preferred"]}}]}},
-                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "dr"}}]}},
-                            {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "fund"}}, {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["etf", "mutual"]}}]}}
-                        ]}},
-                        {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["pre-ipo"]}}
-                    ]
-                }
+                "ignore_unknown_fields":False,
+                "options":{"lang":"en"},
+                "price_conversion":{"to_currency":"usd"},
+                "range":[0,500],
+                "sort":{"sortBy":"market_cap_basic","sortOrder":"desc"},
+                "markets":["america","argentina","australia","austria","bahrain","bangladesh","belgium","bulgaria","brazil","canada","chile","china","colombia","croatia","cyprus","czech","denmark","egypt","estonia","finland","france","germany","greece","hongkong","hungary","iceland","india","indonesia","ireland","israel","italy","japan","kenya","kuwait","latvia","lithuania","luxembourg","malaysia","mexico","morocco","netherlands","newzealand","nigeria","norway","pakistan","peru","philippines","poland","portugal","qatar","romania","russia","ksa","serbia","singapore","slovakia","slovenia","rsa","korea","spain","srilanka","sweden","switzerland","taiwan","thailand","tunisia","turkey","uae","uk","venezuela","vietnam"],
+                "filter2":{"operator":"and","operands":[{"operation":{"operator":"or","operands":[{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["common"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"stock"}},{"expression":{"left":"typespecs","operation":"has","right":["preferred"]}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"dr"}}]}},{"operation":{"operator":"and","operands":[{"expression":{"left":"type","operation":"equal","right":"fund"}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["etf","mutual"]}}]}}]}},{"expression":{"left":"typespecs","operation":"has_none_of","right":["pre-ipo"]}}]}
             }
             url = 'https://scanner.tradingview.com/global/scan'
             response = requests.post(url, headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json'}, json=payload, timeout=10)
-            
             results = {}
             for item in response.json().get("data", []):
                 d = item["d"]
-                ticker_name = d[0]["name"] if isinstance(d[0], dict) else d[0]
-                exchange_raw = d[18]
-                
-                if exchange_raw and ticker_name:
-                    composite_sym = f"{str(exchange_raw).upper()}:{str(ticker_name).upper()}"
+                sym = str(d[0])
+                if "{" in sym:
+                    try:
+                        import ast
+                        sym = ast.literal_eval(sym).get("name", sym)
+                    except: pass
                 else:
-                    composite_sym = str(item["s"]).upper()
+                    sym = sym.split(":")[-1]
                     
-                results[composite_sym] = {
+                results[sym.upper()] = {
                     "price": float(d[1]) if d[1] is not None else 0.0,
                     "change": float(d[9]) if d[9] is not None else 0.0,
                     "ema21": float(d[17]) if d[17] is not None else 0.0
                 }
             return results
-        except Exception as e:
-            print("TradingView Fetch Error:", e)
+        except:
             return {}
 
     # ==========================================
@@ -410,7 +352,7 @@ def run_usa_screener():
         return styles
 
     # ==========================================
-    # NAVIGATION TABS 
+    # NAVIGATION TABS (Only 4 for USA)
     # ==========================================
     tab_main, tab_leaders, tab_us_etf, tab_port = st.tabs([
         "⚡ 9-EMA Screener", 
@@ -640,160 +582,72 @@ def run_usa_screener():
 
     # --- 4. PORTFOLIO TRACKER TAB ---
     with tab_port:
-        col_text, col_clear = st.columns([8, 2])
-        with col_text:
-            st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 5px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
-        with col_clear:
-            if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
-                st.cache_data.clear()
-                st.rerun()
-
-        st.markdown("<hr style='margin: 10px 0px 20px 0px; border-color: #E5E7EB;'>", unsafe_allow_html=True)
-
-        # Centered Radio
-        col_radio1, col_radio2, col_radio3 = st.columns([3, 4, 3])
-        with col_radio2:
-            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
-
-        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-
-        # Input and Load Button layout
-        input_col, btn_col = st.columns([8, 2])
-        with input_col:
-            if data_source == "Upload CSV":
-                uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
-            else:
-                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...", label_visibility="collapsed")
+        st.info("Tracker UI loaded. Using TradingView API for live equity quotes.")
         
-        with btn_col:
-            load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.text_input("Upstox Access Token (Not required for US tracking)", disabled=True)
+            gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...")
+        with col2:
+            st.radio("Data Source", ["Upload CSV", "Google Sheets"], index=1)
+            st.markdown("<br>", unsafe_allow_html=True)
+            load_data = st.button("🔄 Load / Refresh Sheet")
 
-        if load_data:
+        if load_data and "docs.google.com" in gs_url:
             try:
-                port_df = pd.DataFrame()
+                # Robust URL parser to prevent HTTP 400 Bad Request
+                match = re.search(r'[#&?]gid=([0-9]+)', gs_url)
+                gid = match.group(1) if match else "0"
+                csv_url = re.sub(r'/edit.*', f'/export?format=csv&gid={gid}', gs_url)
                 
-                # 1. Parse File/URL
-                if data_source == "Google Sheets" and "docs.google.com" in gs_url:
-                    match = re.search(r'[#&?]gid=([0-9]+)', gs_url)
-                    gid = match.group(1) if match else "0"
-                    csv_url = re.sub(r'/edit.*', f'/export?format=csv&gid={gid}', gs_url)
-                    port_df = pd.read_csv(csv_url)
-                elif data_source == "Upload CSV" and uploaded_file is not None:
-                    port_df = pd.read_csv(uploaded_file)
-                else:
-                    st.warning("Please provide a valid data source.")
-                    st.stop()
+                port_df = pd.read_csv(csv_url)
+                port_df = port_df.rename(columns=lambda x: str(x).strip())
                 
-                # 2. Fuzzy Matching & Regex Cleanup
-                port_df.columns = port_df.columns.str.strip()
-                for col in port_df.columns:
-                    col_name = str(col).lower()
-                    if 'ticker' in col_name or 'symbol' in col_name: port_df = port_df.rename(columns={col: "Stock Ticker"})
-                    elif 'risk' in col_name: port_df = port_df.rename(columns={col: "Risk"})
-                    elif 'entry price' in col_name: port_df = port_df.rename(columns={col: "Entry Price"})
-                    elif 'stop loss' in col_name: port_df = port_df.rename(columns={col: "Stop Loss"})
-                    elif 'date' in col_name: port_df = port_df.rename(columns={col: "Entry date"})
+                # Fetch Live TradingView Data
+                symbols_to_fetch = port_df['Stock Ticker'].dropna().astype(str).str.upper().tolist()
+                live_tv_data = fetch_portfolio_tv_data(symbols_to_fetch)
 
-                if "Risk" in port_df.columns:
-                    port_df["Risk"] = port_df["Risk"].astype(str).str.replace(r'[^\d.-]', '', regex=True)
-                    port_df["Risk"] = pd.to_numeric(port_df["Risk"], errors='coerce') / 100
-                if "Entry Price" in port_df.columns:
-                    port_df["Entry Price"] = pd.to_numeric(port_df["Entry Price"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
-                if "Stop Loss" in port_df.columns:
-                    port_df["Stop Loss"] = pd.to_numeric(port_df["Stop Loss"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
-                
-                # 3. Supabase Prefix Mapping (VLOOKUP)
-                exchange_map = fetch_exchange_mapping()
-                search_symbols = []
-                
-                for idx, row in port_df.iterrows():
-                    sym = str(row.get('Stock Ticker', '')).strip().upper()
+                tracker_data = []
+                for _, row in port_df.iterrows():
+                    sym = str(row['Stock Ticker']).upper().strip()
                     if not sym or sym == "NAN": continue
                     
-                    if ":" not in sym:
-                        mapped_sym = exchange_map.get(sym, sym) # Fetch from dictionary, fallback to raw
-                        search_symbols.append(mapped_sym)
-                        port_df.at[idx, 'Mapped_Symbol'] = mapped_sym
-                    else:
-                        search_symbols.append(sym)
-                        port_df.at[idx, 'Mapped_Symbol'] = sym
-
-                # Extract pure tickers for the API filter
-                pure_tickers = list(set([s.split(":")[-1] if ":" in s else s for s in search_symbols]))
-                
-                # 4. Fetch Live Data
-                live_tv_data = fetch_portfolio_tv_data(pure_tickers)
-
-                # 5. Build Final Dataset with Multi-Market Holidays
-                tracker_data = []
-                today = pd.to_datetime('today').normalize()
-                years_to_check = [today.year, today.year - 1]
-                us_holidays = np.array(list(holidays.country_holidays('US', years=years_to_check).keys()), dtype='datetime64[D]')
-                in_holidays = np.array(list(holidays.country_holidays('IN', years=years_to_check).keys()), dtype='datetime64[D]')
-
-                for _, row in port_df.iterrows():
-                    mapped_sym = str(row.get('Mapped_Symbol', '')).strip().upper()
-                    pure_sym = mapped_sym.split(":")[-1] if ":" in mapped_sym else mapped_sym
-                    if not mapped_sym or mapped_sym == "NAN": continue
-                    
-                    tv = live_tv_data.get(mapped_sym)
-                    if not tv: # Fallback matcher just in case
-                        for k, v in live_tv_data.items():
-                            if k.endswith(f":{pure_sym}"):
-                                tv = v
-                                break
-                    if not tv: tv = {"price": 0.0, "change": 0.0, "ema21": 0.0}
+                    tv = live_tv_data.get(sym, {"price": 0.0, "change": 0.0, "ema21": 0.0})
                     
                     entry_price = float(row['Entry Price']) if pd.notna(row['Entry Price']) else 0.0
                     stop_loss = float(row['Stop Loss']) if pd.notna(row['Stop Loss']) else 0.0
+                    risk_pct = str(row['Risk'])
                     
                     current_price = tv["price"]
                     profit_loss = current_price - entry_price if entry_price > 0 else 0.0
                     return_pct = (profit_loss / entry_price * 100) if entry_price > 0 else 0.0
                     
                     try:
-                        entry_dt = pd.to_datetime(row['Entry date'], format='%d-%m-%Y', errors='coerce')
-                        start_date = np.datetime64(entry_dt, 'D')
-                        end_date = np.datetime64(today, 'D')
-                        
-                        if pd.isna(entry_dt) or start_date > end_date:
-                            trading_days = 0
-                        else:
-                            if 'NSE:' in mapped_sym or 'BSE:' in mapped_sym:
-                                trading_days = np.busday_count(start_date, end_date, holidays=in_holidays)
-                            else:
-                                trading_days = np.busday_count(start_date, end_date, holidays=us_holidays)
+                        entry_dt = pd.to_datetime(row['Entry date'], format='%d-%m-%Y')
+                        trading_days = np.busday_count(entry_dt.date(), datetime.now().date())
                     except:
                         trading_days = 0
                     
                     ema21_val = tv["ema21"]
                     ema_status = "ABOVE EMA21" if current_price > ema21_val else "BELOW EMA21"
                     
-                    # Cumulative 10-Day Math
                     if trading_days < 10:
-                        rule_status = f"PENDING ({int(trading_days)}/10)"
+                        rule_status = f"PENDING ({trading_days}/10)"
                     else:
-                        required_return = (trading_days // 10) * 5.0
-                        if return_pct < required_return:
-                            rule_status = f"EXIT ({return_pct:.2f}%)"
-                        else:
-                            rule_status = f"PASS ({return_pct:.2f}%)"
-                            
-                    # Currency Prefix for Formatting
-                    curr_pfx = "₹" if ('NSE:' in mapped_sym or 'BSE:' in mapped_sym) else "$"
+                        rule_status = f"PASS ({return_pct:.2f}%)" if ema_status == "ABOVE EMA21" else f"EXIT ({return_pct:.2f}%)"
 
                     tracker_data.append({
-                        "Symbol": pure_sym,
+                        "Symbol": sym,
                         "Entry Date": row['Entry date'],
                         "Today chg%": tv["change"],
-                        "Entry Price": f"{curr_pfx}{entry_price:.2f}",
-                        "Stop Loss": f"{curr_pfx}{stop_loss:.2f}",
-                        "Risk %": row.get('Risk', 0.0),
-                        "Current Price": f"{curr_pfx}{current_price:.2f}",
-                        "Profit/Loss": f"{curr_pfx}{profit_loss:.2f}",
+                        "Entry Price": entry_price,
+                        "Stop Loss": stop_loss,
+                        "Risk %": risk_pct,
+                        "Current Price": current_price,
+                        "Profit/Loss": profit_loss,
                         "Return %": return_pct,
                         "Trading Days": trading_days,
-                        "EMA21": f"{curr_pfx}{ema21_val:.2f}",
+                        "EMA21": ema21_val,
                         "EMA 21 Status": ema_status,
                         "10 Day Rule": rule_status
                     })
@@ -842,44 +696,29 @@ def run_usa_screener():
                     ret_idx = final_port_df.columns.get_loc('Return %')
                     ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
                     rule_idx = final_port_df.columns.get_loc('10 Day Rule')
-                    sl_idx = final_port_df.columns.get_loc('Stop Loss')
-                    sym_idx = final_port_df.columns.get_loc('Symbol')
                     
                     if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
                     elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
                     
-                    has_alert = False
-                    
                     if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
-                    elif "BELOW" in str(row['EMA 21 Status']): 
-                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                        has_alert = True
+                    elif "BELOW" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: red; font-weight: bold;'
                     
                     if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif "EXIT" in str(row['10 Day Rule']): 
-                        bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                        has_alert = True
-                        
-                    try:
-                        curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
-                        sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
-                        if curr_p <= sl_p and curr_p > 0:
-                            bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                            has_alert = True
-                    except: pass
-                    
-                    if has_alert:
-                        bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    elif "EXIT" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
                     
                     return bg_color
 
                 styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
                     "Today chg%": "{:.2f}%",
+                    "Entry Price": "${:.2f}",
+                    "Stop Loss": "${:.2f}",
+                    "Current Price": "${:.2f}",
+                    "Profit/Loss": "${:.2f}",
                     "Return %": "{:.2f}%",
-                    "Risk %": "{:.2%}"
+                    "EMA21": "${:.2f}"
                 })
                 
                 st.markdown(f'<div class="scrollable-table-container">{styled_port.to_html()}</div>', unsafe_allow_html=True)
                 
             except Exception as e:
-                st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
+                st.error(f"Error loading sheet: {str(e)}. Ensure the columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
