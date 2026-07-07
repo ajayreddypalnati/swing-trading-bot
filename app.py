@@ -135,18 +135,21 @@ st.markdown("""
             }
         }
 
-        /* PROFESSIONAL FULL-WIDTH SAAS TABS (UPDATED FOR NEW STREAMLIT) */
-        div[data-testid="stTabs"] [role="tablist"] { 
+        /* ========================================================= */
+        /* 1. IMMERSIVE TABS (BULLETPROOF)                           */
+        /* ========================================================= */
+        div[data-testid="stTabs"] > div[role="tablist"],
+        .stTabs > div[role="tablist"] { 
             display: flex !important;
             width: 100% !important;
             gap: 15px !important;
-            padding-top: 10px !important; /* Space for hover pop */
+            padding-top: 10px !important;
             padding-bottom: 10px !important;
         }
         
-        /* Tab Button Physics & Styling */
-        div[data-testid="stTabs"] button[role="tab"] {
-            flex: 1 !important; /* Forces all tabs to be equal width */
+        div[data-testid="stTabs"] button[role="tab"],
+        .stTabs button[role="tab"] {
+            flex: 1 !important;
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
             border-radius: 12px !important;
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -156,69 +159,84 @@ st.markdown("""
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
-            transform: translateY(0) !important;
             min-height: 65px !important;
+            transform: translateY(0) !important;
         }
         
-        /* IMMERSIVE POPUP - Hover Effect for Tabs */
-        div[data-testid="stTabs"] button[role="tab"]:hover {
+        div[data-testid="stTabs"] button[role="tab"]:hover,
+        .stTabs button[role="tab"]:hover {
             transform: translateY(-6px) !important;
             box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
             background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
         }
         
-        /* Selected Tab State (The White Layer with Thick Navy Line) */
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+        .stTabs button[role="tab"][aria-selected="true"] {
             background: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
-            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
-            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            border-top: 6px solid #0B1D30 !important;
+            transform: translateY(-6px) !important;
             box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
         
-        /* Tab Text Sizing */
-        div[data-testid="stTabs"] button[role="tab"] p { 
+        /* OVERRIDE INNER P TAGS FOR TABS */
+        div[data-testid="stTabs"] button[role="tab"] *,
+        .stTabs button[role="tab"] * { 
             font-size: 1.4rem !important; 
             font-weight: 800 !important; 
             color: #FFFFFF !important; 
             margin: 0 !important;
-            transition: color 0.3s ease !important;
             white-space: nowrap !important;
         }
         
-        /* Selected Tab Text Color */
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] *,
+        .stTabs button[role="tab"][aria-selected="true"] * {
             color: #0B1D30 !important;
         }
         
-        /* Remove default Streamlit tab active line */
-        div[data-testid="stTabs"] div[data-testid="stTabIndicator"] { 
-            display: none !important; 
-        }
-        
-        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
-        div[data-testid="stButton"] button,
-        button[data-testid="baseButton-secondary"] {
+        /* Hide default animated tab line */
+        div[data-testid="stTabIndicator"] { display: none !important; }
+
+        /* ========================================================= */
+        /* 2. BUTTON FIX (OVERRIDING INNER HTML HIJACK)              */
+        /* ========================================================= */
+        button[kind="primary"], 
+        button[kind="secondary"],
+        button[data-testid="baseButton-secondary"],
+        .stButton button {
             background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
             border: 2px solid #0B1D30 !important;
             border-radius: 8px !important;
+            padding: 8px 16px !important;
+        }
+
+        /* FORCE THE TEXT INSIDE THE BUTTON TO BE NAVY */
+        button[kind="primary"] *, 
+        button[kind="secondary"] *,
+        button[data-testid="baseButton-secondary"] *,
+        .stButton button * {
+            color: #0B1D30 !important;
             font-weight: 800 !important;
         }
-        div[data-testid="stButton"] button:hover,
-        button[data-testid="baseButton-secondary"]:hover {
+
+        /* HOVER STATES */
+        button[kind="primary"]:hover, 
+        button[kind="secondary"]:hover,
+        button[data-testid="baseButton-secondary"]:hover,
+        .stButton button:hover {
             background-color: #F4F1E1 !important;
-            color: #0B1D30 !important;
+            border-color: #0B1D30 !important;
         }
         
-        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
+        /* ========================================================= */
+        /* 3. INPUTS & FILE UPLOADER                                 */
+        /* ========================================================= */
         div[data-testid="stTextInput"] input {
             background-color: #FFFFFF !important;
             color: #0B1D30 !important;
             border: 1px solid #0B1D30 !important;
         }
         
-        /* Make Number Input values (like 3.00) massive and bold and white background */
         div[data-testid="stNumberInput"] input {
             background-color: #FFFFFF !important;
             font-size: 1.5rem !important;
@@ -227,37 +245,25 @@ st.markdown("""
             border: 1px solid #0B1D30 !important;
         }
         
-        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
-        div[role="radiogroup"] label {
-            color: #0B1D30 !important;
-        }
+        div[role="radiogroup"] label { color: #0B1D30 !important; }
 
-        /* UPLOAD BUTTON VISIBILITY ON MOBILE - FORCE WHITE BACKGROUND */
         div[data-testid="stFileUploader"] {
             background-color: #FFFFFF !important;
             border: 2px dashed #0B1D30 !important;
             border-radius: 8px !important;
             padding: 15px !important;
         }
-        div[data-testid="stFileUploader"] section {
-            background-color: transparent !important;
-        }
-        div[data-testid="stFileUploader"] span, 
-        div[data-testid="stFileUploader"] p, 
-        div[data-testid="stFileUploader"] small {
+        div[data-testid="stFileUploader"] section { background-color: transparent !important; }
+        
+        /* Force uploader text colors */
+        div[data-testid="stFileUploader"] * {
             color: #0B1D30 !important;
             font-weight: 600 !important;
         }
-        /* Force the Browse Files button to be white with navy text */
-        div[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"] {
+        
+        div[data-testid="stFileUploader"] button {
             background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
             border: 2px solid #0B1D30 !important;
-            border-radius: 6px !important;
-            font-weight: 800 !important;
-        }
-        div[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"]:hover {
-            background-color: #F4F1E1 !important;
         }
         
         /* Pulse Animation for Loader */
