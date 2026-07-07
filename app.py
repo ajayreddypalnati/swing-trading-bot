@@ -135,7 +135,10 @@ st.markdown("""
             }
         }
 
-        /* PROFESSIONAL FULL-WIDTH SAAS TABS */
+        /* PROFESSIONAL FULL-WIDTH SAAS TABS (Updated for Modern Streamlit) */
+        
+        /* 1. Target the tab container to add gaps and flex layout */
+        div[data-testid="stTabs"] > div[role="tablist"],
         div[data-baseweb="tab-list"] { 
             display: flex !important;
             width: 100% !important;
@@ -143,49 +146,51 @@ st.markdown("""
             border-bottom: none !important;
             margin-bottom: 25px !important;
             padding-top: 10px !important; /* Space for hover pop */
+            background-color: transparent !important;
         }
         
-        div[data-baseweb="tab"] { 
-            padding: 0 !important;
-            background: transparent !important;
-            flex: 1 !important; /* Forces all tabs to be equal width and span entire screen */
+        /* 2. Remove the native active underline indicator */
+        div[data-testid="stTabs"] [data-testid="stTabIndicator"],
+        div[data-baseweb="tab-highlight"] { 
+            display: none !important; 
+        }
+        
+        /* 3. Tab Button Physics & Styling */
+        div[data-testid="stTabs"] button[role="tab"] {
+            flex: 1 !important; 
             min-width: 0 !important;
-        }
-        
-        /* Tab Button Physics & Styling */
-        button[role="tab"] {
             width: 100% !important;
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
             border-radius: 12px !important;
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
             box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            padding: 20px 10px !important;
+            padding: 15px 10px !important;
             display: flex !important;
             justify-content: center !important;
             align-items: center !important;
             transform: translateY(0) !important;
         }
         
-        /* IMMERSIVE POPUP - Hover Effect for Tabs */
-        button[role="tab"]:hover {
+        /* 4. IMMERSIVE POPUP - Hover Effect for Tabs */
+        div[data-testid="stTabs"] button[role="tab"]:hover {
             transform: translateY(-6px) !important;
             box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
             background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
         }
         
-        /* Selected Tab State (The White Layer with Thick Navy Line) */
-        button[role="tab"][aria-selected="true"] {
+        /* 5. Selected Tab State (The White Layer with Thick Navy Line) */
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
             background: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
-            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
-            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            border-top: 6px solid #0B1D30 !important; 
+            transform: translateY(-6px) !important; 
             box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
         
-        /* Tab Text Sizing - Restored to large 1.4rem size */
-        button[role="tab"] p { 
-            font-size: 1.4rem !important; 
+        /* 6. Tab Text Sizing */
+        div[data-testid="stTabs"] button[role="tab"] p { 
+            font-size: 1.1rem !important; 
             font-weight: 800 !important; 
             color: #FFFFFF !important; 
             margin: 0 !important;
@@ -193,14 +198,9 @@ st.markdown("""
             white-space: nowrap !important;
         }
         
-        /* Selected Tab Text Color */
-        button[role="tab"][aria-selected="true"] p {
+        /* 7. Selected Tab Text Color */
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p {
             color: #0B1D30 !important;
-        }
-        
-        /* Remove default Streamlit tab active line */
-        div[data-baseweb="tab-highlight"] { 
-            display: none !important; 
         }
         
         /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
