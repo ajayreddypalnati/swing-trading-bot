@@ -13,4 +13,4 @@ python-dotenv
 git+https://github.com/rongardF/tvdatafeed.git
 st-copy-to-clipboard
 streamlit-aggrid
-
+holidays
