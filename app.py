@@ -503,7 +503,14 @@ with tab_screeners:
             etf_display = pd.DataFrame(final_etfs).head(10).reset_index(drop=True)
             if not etf_display.empty:
                 etf_display['Rank'] = etf_display.index + 1
-                etf_display = etf_display[['Rank', 'Symbol', 'Chg %', 'Name', 'Catergory', 'EMA 21 Status', 'Turnover (Cr)']]
+
+                # Fixes the database typo and safely drops missing columns to prevent KeyErrors
+                if 'Catergory' in etf_display.columns:
+                    etf_display = etf_display.rename(columns={'Catergory': 'Category'})
+
+                show_cols = ['Rank', 'Symbol', 'Chg %', 'Name', 'Category', 'EMA 21 Status', 'Turnover (Cr)']
+                etf_display = etf_display[[c for c in show_cols if c in etf_display.columns]]
+
                 top_4_idx, top_4_avg = etf_display.head(4).index.tolist(), etf_display.head(4)['Chg %'].mean()
                 
                 with t_col2: st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight:700;'>Avg Return: <span style='color:{'#10B981' if top_4_avg > 0 else '#EF4444'};'>{top_4_avg:.2f}%</span></div>", unsafe_allow_html=True)
