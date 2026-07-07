@@ -107,8 +107,9 @@ def run_usa_screener():
         except Exception:
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
-    @st.cache_data(ttl=86400) 
+    @st.cache_data(ttl=86400) # Increased to 24 hours for superfast updates
     def fetch_exchange_mapping():
+        """Connects to Supabase to build a VLOOKUP dictionary for Indian and US tickers."""
         exchange_map = {}
         try:
             db_url = st.secrets["DATABASE_URL"]
@@ -117,18 +118,22 @@ def run_usa_screener():
             
             engine = create_engine(db_url)
             with engine.connect() as conn:
+                # 1. Indian Stocks (stock_master)
                 try:
                     ind_df = pd.read_sql(text('SELECT "Ticker", "Exchange" FROM "stock_master"'), conn)
                     for _, row in ind_df.iterrows():
                         ticker = str(row['Ticker']).strip().upper()
                         exch = str(row['Exchange']).strip().upper()
+                        # Clean up SME tags to match generic TradingView exchanges
                         if 'NSE' in exch: exch = 'NSE'
                         elif 'BSE' in exch: exch = 'BSE'
+                        
                         if ticker and ticker != "NAN":
                             exchange_map[ticker] = f"{exch}:{ticker}"
                 except Exception as e:
                     print(f"Lookup Error (India): {e}")
                 
+                # 2. US Stocks (US Stock screener)
                 try:
                     us_df = pd.read_sql(text('SELECT "Symbol", "Exchange" FROM "US Stock screener"'), conn)
                     for _, row in us_df.iterrows():
@@ -173,13 +178,21 @@ def run_usa_screener():
                         parsed_ticker = ast.literal_eval(raw_ticker)
                         symbol = parsed_ticker.get("name", raw_ticker)
                     except: pass
-                formatted_data.append([symbol, d[1], d[9], d[10], d[11], d[15], d[17], d[18]])
+                price = d[1]
+                change = d[9]
+                vol = d[10]
+                mcap = d[11]
+                sector = d[15]
+                industry = d[17]
+                exchange = d[18]
+                formatted_data.append([symbol, price, change, vol, mcap, sector, industry, exchange])
             return formatted_data
         except Exception:
             return []
             
     @st.cache_data(ttl=60)
     def fetch_portfolio_tv_data(pure_tickers):
+        """Fetches live data directly using the 'in_range' filter for massive speed improvements."""
         if not pure_tickers: return {}
         try:
             payload = {
@@ -215,7 +228,11 @@ def run_usa_screener():
                 d = item["d"]
                 ticker_name = d[0]["name"] if isinstance(d[0], dict) else d[0]
                 exchange_raw = d[18]
-                composite_sym = f"{str(exchange_raw).upper()}:{str(ticker_name).upper()}" if exchange_raw and ticker_name else str(item["s"]).upper()
+                
+                if exchange_raw and ticker_name:
+                    composite_sym = f"{str(exchange_raw).upper()}:{str(ticker_name).upper()}"
+                else:
+                    composite_sym = str(item["s"]).upper()
                     
                 results[composite_sym] = {
                     "price": float(d[1]) if d[1] is not None else 0.0,
@@ -231,18 +248,22 @@ def run_usa_screener():
     # SAFE FORMATTERS & UI HELPERS
     # ==========================================
     def safe_fmt(val, fmt_str):
-        try: return "-" if pd.isna(val) or str(val).strip() == "" else fmt_str.format(float(val))
+        try:
+            if pd.isna(val) or str(val).strip() == "": return "-"
+            return fmt_str.format(float(val))
         except: return "-"
 
     def safe_int(val, prefix="", suffix=""):
-        try: return "-" if pd.isna(val) or val == "" else f"{prefix}{int(float(val))}{suffix}"
+        if val == "" or pd.isna(val): return "-"
+        try: return f"{prefix}{int(float(val))}{suffix}"
         except: return "-"
 
     def format_stars(val):
+        if val == "" or pd.isna(val) or val == 6: return ""
         try:
-            if val in ["", 6] or pd.isna(val): return ""
             stars = 6 - int(float(val))
-            return "⭐" * stars if 1 <= stars <= 5 else ""
+            if 1 <= stars <= 5: return "⭐" * stars
+            return ""
         except: return ""
 
     def get_breadth_color(breadth_str):
@@ -252,36 +273,52 @@ def run_usa_screener():
                 val = float(match.group(1))
                 if val <= 30.0: return "rgba(252, 165, 165, 0.4)"  
                 elif val <= 40.0: return "rgba(254, 202, 202, 0.4)"  
-                elif val <= 60.0: return "rgba(253, 230, 138, 0.4)"  
+                elif val <= 50.0: return "rgba(253, 230, 138, 0.4)"  
+                elif val <= 60.0: return "rgba(187, 247, 208, 0.4)"  
                 else: return "rgba(134, 239, 172, 0.4)"  
             return "#FFFFFF"
         except: return "#FFFFFF"
 
+    def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
+        try:
+            match = re.search(r'(\d+\.?\d*)%', str(nse_breadth_str))
+            live_match = re.search(r'(\d+\.?\d*)', str(live_breadth_str))
+            if match:
+                val = float(match.group(1))
+                live_val = float(live_match.group(1)) if live_match else 0.0
+                action_suffix = " - Trade" if "📈" in str(nse_breadth_str) else " - Stop Trading"
+                if "📉" not in str(nse_breadth_str) and "📈" not in str(nse_breadth_str):
+                    action_suffix = " - Trade" if live_val > 50.0 else " - Stop Trading"
+
+                if val <= 20.0: alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
+                elif val <= 25.0: alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+                elif val <= 30.0: alloc_str, color = f"20% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
+                elif val <= 35.0: alloc_str, color = f"35% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+                elif val <= 40.0: alloc_str, color = f"50% Equity{action_suffix}", "rgba(253, 230, 138, 0.4)"     
+                elif val <= 45.0: alloc_str, color = f"65% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+                elif val <= 50.0: alloc_str, color = f"80% Equity{action_suffix}", "rgba(187, 247, 208, 0.4)"     
+                else: alloc_str, color = f"100% Equity{action_suffix}", "rgba(134, 239, 172, 0.4)"   
+                if action_suffix != " - Trade": color = "rgba(252, 165, 165, 0.4)" 
+                return alloc_str, color
+            return "N/A", "#FFFFFF"
+        except: return "N/A", "#FFFFFF"
+
     def create_metric_card(title, value, bg_color):
+        val_size = "1.35rem" if len(str(value)) > 20 else "1.65rem"
         return f"""
-        <div style="background: {bg_color}; border-radius: 8px; padding: 0.8rem 1rem; border: 1px solid #0B1D30; box-shadow: 0 2px 4px rgba(0,0,0,0.05); height: 85px; display: flex; flex-direction: column; justify-content: center; margin-bottom: 5px;">
-            <span style="font-size: 0.75rem; color: #0B1D30; font-weight: 700; text-transform: uppercase;">{title}</span>
-            <span style="color: #0B1D30; font-size: 1.2rem; font-weight: 800; display: block; margin-top: 0.1rem;">{value}</span>
+        <div style="background: {bg_color}; border-radius: 12px; padding: 1.2rem 1.5rem; text-align: left; border: 2px solid #0B1D30; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height: 115px; display: flex; flex-direction: column; justify-content: center;">
+            <span style="font-size: 0.85rem; color: #0B1D30; font-weight: 700; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">{title}</span>
+            <span style="color: #0B1D30; font-size: {val_size}; font-weight: 800; display: block; margin-top: 0.2rem; font-family: 'Inter', sans-serif; line-height: 1.2;">{value}</span>
         </div>
         """
-
-    def gen_copy_btn(copy_str, id):
-        return f"""
-        <!DOCTYPE html><html><head><style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-        body {{ margin: 0; display: flex; justify-content: flex-end; align-items: center; background: transparent; overflow: hidden; }}
-        button {{ font-family: 'Inter', sans-serif; background: #0B1D30; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        button:hover {{ background: #162C46; }}
-        </style></head><body>
-        <button id="btn{id}" onclick="c()">📋 Copy Symbols</button>
-        <script>function c() {{ let t = document.createElement('textarea'); t.value = "{copy_str}"; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); let b = document.getElementById('btn{id}'); b.innerHTML = '✅ Copied!'; setTimeout(()=>b.innerHTML='📋 Copy Symbols', 2000); }}</script>
-        </body></html>"""
 
     # ==========================================
     # DASHBOARD MAIN LAYOUT & HEADER (ET Time)
     # ==========================================
     et_tz = pytz.timezone('US/Eastern')
     now_et = datetime.now(et_tz)
+    current_time = now_et.strftime('%I:%M:%S %p ET')
+    current_date = now_et.strftime('%d %b %Y')
 
     st.markdown(f"""
         <div class="premium-header">
@@ -291,8 +328,8 @@ def run_usa_screener():
             </div>
             <div class="header-right">
                 <div class="live-status">LIVE DATA <div class="blob green"></div></div>
-                <div class="time">{now_et.strftime('%I:%M:%S %p ET')}</div>
-                <div class="date">{now_et.strftime('%d %b %Y')}</div>
+                <div class="time">{current_time}</div>
+                <div class="date">{current_date}</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -303,15 +340,18 @@ def run_usa_screener():
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
+    alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
+    last_sync_bg = "rgba(216, 180, 254, 0.3)"
 
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: st.markdown(create_metric_card("📊 Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
-    with m2: st.markdown(create_metric_card("⚖️ Breadth (USA)", trend_regime, nse_bg), unsafe_allow_html=True)
-    with m3: st.markdown(create_metric_card("💼 Portfolio Alloc", "N/A", "#FFFFFF"), unsafe_allow_html=True)
-    with m4: st.markdown(create_metric_card("🔄 Last Update", last_sync, "rgba(216, 180, 254, 0.3)"), unsafe_allow_html=True)
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    with metric_col1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
+    with metric_col2: st.markdown(create_metric_card("⚖️ Market Breadth (USA)", trend_regime, nse_bg), unsafe_allow_html=True)
+    with metric_col3: st.markdown(create_metric_card("💼 Portfolio Allocation", alloc_val, alloc_bg), unsafe_allow_html=True)
+    with metric_col4: st.markdown(create_metric_card("🔄 Last DB Update", last_sync, last_sync_bg), unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
-    # DATA PROCESSING 
+    # DATA PROCESSING FOR MAIN TABS
     # ==========================================
     display_df = pd.DataFrame()
     if tv_data:
@@ -328,107 +368,307 @@ def run_usa_screener():
             df['Ind. Rank'] = df['Industry'].astype(str).str.strip().str.lower().map(ind_rank_dict)
         else: df['Ind. Rank'] = np.nan
 
-        df = df.merge(us_stock_df, on="Symbol", how="left") if not us_stock_df.empty else df.assign(**{'Turnover in Cr': np.nan, 'Momentum Rank': np.nan})
+        if not us_stock_df.empty:
+            df = df.merge(us_stock_df, on="Symbol", how="left")
+        else:
+            df['Turnover in Cr'] = np.nan
+            df['Momentum Rank'] = np.nan
 
         df['Sector Rank'] = pd.to_numeric(df['Sector Rank'], errors='coerce')
         df['Ind. Rank'] = pd.to_numeric(df['Ind. Rank'], errors='coerce')
 
         df['Priority'] = 6 
-        t_sec, t_ind = df['Sector Rank'].fillna(999), df['Ind. Rank'].fillna(999)
         
-        df.loc[(t_sec <= 5) & (t_ind <= 20), 'Priority'] = 1
-        df.loc[(t_sec <= 5) & (t_ind >= 21) & (t_ind <= 30), 'Priority'] = 2
-        df.loc[(t_sec > 5) & (t_ind <= 20), 'Priority'] = 3
-        df.loc[(t_sec <= 5) & (t_ind > 30), 'Priority'] = 4
-        df.loc[(t_sec >= 6) & (t_ind >= 21) & (t_ind <= 30), 'Priority'] = 5
+        t_sec = df['Sector Rank'].fillna(999)
+        t_ind = df['Ind. Rank'].fillna(999)
+
+        p1 = (t_sec <= 5) & (t_ind <= 20)
+        p2 = (t_sec <= 5) & (t_ind >= 21) & (t_ind <= 30)
+        p3 = (t_sec > 5) & (t_ind <= 20)
+        p4 = (t_sec <= 5) & (t_ind > 30)
+        p5 = (t_sec >= 6) & (t_ind >= 21) & (t_ind <= 30)
+        
+        df.loc[p1, 'Priority'] = 1
+        df.loc[p2, 'Priority'] = 2
+        df.loc[p3, 'Priority'] = 3
+        df.loc[p4, 'Priority'] = 4
+        df.loc[p5, 'Priority'] = 5
 
         display_cols = ["Priority", "Symbol", "Exchange", "Price", "Chg %", "Mcap", "Turnover in Cr", "Vol", "Sector", "Sector Rank", "Industry", "Ind. Rank", "Momentum Rank"]
-        display_df = df[[c for c in display_cols if c in df.columns]].copy().sort_values(by=["Priority", "Momentum Rank"], ascending=[True, True], na_position="last").fillna("")
+        display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        display_df = display_df.sort_values(by=["Priority", "Momentum Rank"], ascending=[True, True], na_position="last").fillna("")
+
+    def highlight_main_table(row):
+        styles = []
+        for col in row.index:
+            style = ""
+            if col == 'Priority' and pd.notna(row['Priority']) and str(row['Priority']).strip() != "" and str(row['Priority']) != '6':
+                try:
+                    if float(row['Priority']) < 6: style += 'background-color: rgba(39, 174, 96, 0.15); '
+                except: pass
+            styles.append(style)
+        return styles
 
     # ==========================================
     # NAVIGATION TABS 
     # ==========================================
     tab_main, tab_leaders, tab_us_etf, tab_port = st.tabs([
-        "⚡ 9-EMA Screener", "🏆 Market Leaders", "🌍 US ETF Screener", "📈 Portfolio Tracker"
+        "⚡ 9-EMA Screener", 
+        "🏆 Market Leaders",
+        "🌍 US ETF Screener",
+        "📈 Portfolio Tracker"
     ])
 
+    # --- 1. 9-EMA SCREENER TAB ---
     with tab_main:
         if not display_df.empty:
-            html_table = display_df.style.hide(axis="index").apply(lambda r: ['background-color: rgba(39, 174, 96, 0.15);' if c == 'Priority' and str(r.get('Priority','')) not in ['6',''] else '' for c in r.index], axis=1).format({
-                "Price": lambda x: safe_fmt(x, "${:.2f}"), "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
-                "Mcap": lambda x: safe_fmt(x, "{:,.0f}"), "Turnover in Cr": lambda x: safe_fmt(x, "{:.0f}"), 
-                "Vol": lambda x: safe_fmt(x, "{:,.0f}"), "Momentum Rank": safe_int, "Priority": format_stars, 
-                "Sector Rank": lambda x: safe_int(x, "#"), "Ind. Rank": lambda x: safe_int(x, "#")
-            }).to_html()
+            styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
+                "Price": lambda x: safe_fmt(x, "${:.2f}"), 
+                "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
+                "Mcap": lambda x: safe_fmt(x, "{:,.0f}"),
+                "Turnover in Cr": lambda x: safe_fmt(x, "{:.0f}"),
+                "Vol": lambda x: safe_fmt(x, "{:,.0f}"),
+                "Momentum Rank": lambda x: safe_int(x),
+                "Priority": lambda x: format_stars(x),
+                "Sector Rank": lambda x: safe_int(x, "#"),
+                "Ind. Rank": lambda x: safe_int(x, "#")
+            })
+            html_table = styled_df.to_html()
             
-            components.html(gen_copy_btn(",".join(display_df['Symbol'].tolist()), "usamain"), height=30)
-            for _, r in display_df.iterrows(): 
-                html_table = re.sub(rf'(<td[^>]*>)({re.escape(str(r["Symbol"]))})(</td>)', rf'\1<a href="https://www.tradingview.com/chart/?symbol={str(r["Symbol"])}" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px dashed #0B1D30;font-weight:600;">{str(r["Symbol"])}</a>\3', html_table)
+            copy_str = ",".join(display_df['Symbol'].tolist())
+            copy_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                button {{
+                    font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
+                    border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
+                    font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    transition: all 0.2s;
+                }}
+                button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+            </style>
+            </head>
+            <body>
+                <button id="copyBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                <script>
+                function copyToClipboard() {{
+                    const ta = document.createElement('textarea');
+                    ta.value = "{copy_str}";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    const btn = document.getElementById('copyBtn');
+                    btn.innerHTML = '✅ Copied!';
+                    setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                }}
+                </script>
+            </body>
+            </html>
+            """
+            components.html(copy_html, height=40)
+
+            for _, r in display_df.iterrows():
+                sym = str(r['Symbol'])
+                url = f"https://www.tradingview.com/chart/?symbol={sym}"
+                link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
+                
             st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
         else: 
             st.info("No US stocks matching criteria right now.")
 
+    # --- 2. MARKET LEADERS TAB ---
     with tab_leaders:
         if not raw_sec.empty and not raw_ind.empty:
-            lc1, lc2 = st.columns(2)
-            with lc1:
+            lead_col1, lead_col2 = st.columns(2)
+            
+            with lead_col1:
                 st.markdown("##### 🔥 Top 5 Sectors (USA)")
-                ts = raw_sec.copy().rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'}).sort_values('Rank').head(5)
-                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>" + "".join([f"<th>{c}</th>" for c in ts.columns]) + "</tr></thead><tbody>"
-                for i, r in ts.iterrows(): html += "<tr>" + "".join([f"<td>{r[c]}</td>" for c in ts.columns]) + "</tr>"
-                st.markdown(html + "</tbody></table></div>", unsafe_allow_html=True)
-            with lc2:
+                top_sec = raw_sec.copy()
+                top_sec = top_sec.rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'})
+                sec_cols = ['Rank', 'Sector', '1d Avg %', 'ATH count', 'ATH %']
+                top_sec = top_sec[[c for c in sec_cols if c in top_sec.columns]].sort_values('Rank').head(5)
+                
+                top_2_sec_idx = []
+                if '1d Avg %' in top_sec.columns: top_2_sec_idx = top_sec['1d Avg %'].astype(float).nlargest(2).index.tolist()
+                if 'ATH %' in top_sec.columns: top_sec['ATH %'] = top_sec['ATH %'].astype(float).map("{:.2f}%".format)
+                if '1d Avg %' in top_sec.columns: top_sec['1d Avg %'] = top_sec['1d Avg %'].astype(float).map("{:.2f}%".format)
+                
+                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
+                for col in top_sec.columns: html += f"<th>{col}</th>"
+                html += "</tr></thead><tbody>"
+                for idx, row in top_sec.iterrows():
+                    html += "<tr>"
+                    for c in top_sec.columns:
+                        val = row[c]
+                        if idx in top_2_sec_idx and c == '1d Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                        elif idx in top_2_sec_idx and c == 'Sector': html += f"<td><b>{val}</b></td>"
+                        else: html += f"<td>{val}</td>"
+                    html += "</tr>"
+                html += "</tbody></table></div>"
+                st.markdown(html, unsafe_allow_html=True)
+                
+            with lead_col2:
                 st.markdown("##### 🚀 Top 30 Industries (USA)")
-                ti = raw_ind.copy().rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'}).sort_values('Rank').head(30)
-                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>" + "".join([f"<th>{c}</th>" for c in ti.columns]) + "</tr></thead><tbody>"
-                for i, r in ti.iterrows(): html += "<tr>" + "".join([f"<td>{r[c]}</td>" for c in ti.columns]) + "</tr>"
-                st.markdown(html + "</tbody></table></div>", unsafe_allow_html=True)
+                top_ind = raw_ind.copy()
+                top_ind = top_ind.rename(columns={'Avg_1D_Return': '1d Avg %', 'ATH_Stocks': 'ATH count'})
+                ind_cols = ['Rank', 'Industry', '1d Avg %', 'ATH count', 'ATH %']
+                top_ind = top_ind[[c for c in ind_cols if c in top_ind.columns]].sort_values('Rank').head(30)
+                
+                top_4_ind_idx = []
+                if '1d Avg %' in top_ind.columns: top_4_ind_idx = top_ind['1d Avg %'].astype(float).nlargest(4).index.tolist()
+                if 'ATH %' in top_ind.columns: top_ind['ATH %'] = top_ind['ATH %'].astype(float).map("{:.2f}%".format)
+                if '1d Avg %' in top_ind.columns: top_ind['1d Avg %'] = top_ind['1d Avg %'].astype(float).map("{:.2f}%".format)
+                
+                html = "<div class='sleek-table-wrapper'><table class='sleek-table'><thead><tr>"
+                for col in top_ind.columns: html += f"<th>{col}</th>"
+                html += "</tr></thead><tbody>"
+                for idx, row in top_ind.iterrows():
+                    html += "<tr>"
+                    for c in top_ind.columns:
+                        val = row[c]
+                        if idx in top_4_ind_idx and c == '1d Avg %': html += f"<td style='background-color: rgba(187, 247, 208, 0.5); font-weight: 600;'>{val}</td>"
+                        elif idx in top_4_ind_idx and c == 'Industry': html += f"<td><b>{val}</b></td>"
+                        else: html += f"<td>{val}</td>"
+                    html += "</tr>"
+                html += "</tbody></table></div>"
+                st.markdown(html, unsafe_allow_html=True)
 
+    # --- 3. US ETF SCREENER TAB ---
     with tab_us_etf:
         if not us_etf_df.empty:
-            u_df = us_etf_df.copy()
-            for c in ['Price (USD)', 'Avg Vol 30D', 'Expense Ratio', 'Chg %']: u_df[c] = pd.to_numeric(u_df.get(c, 0), errors='coerce')
-            u_df['Turnover (Cr)'] = (u_df['Avg Vol 30D'] * u_df['Price (USD)'] * 95) / 10000000
+            us_df = us_etf_df.copy()
             
-            v_us = u_df[u_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'].sort_values('Relative Score', ascending=True).head(10).reset_index(drop=True)
-            if not v_us.empty:
-                v_us['Rank'] = v_us.index + 1
-                us_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']
-                v_us = v_us[[c for c in us_cols if c in v_us.columns]]
-                
-                t_idx, t_avg = v_us.head(4).index.tolist(), v_us.head(4)['Chg %'].mean()
-                
-                ec1, ec2, ec3 = st.columns([3, 4, 3])
-                with ec2: st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight:700;'>Avg Return: <span style='color:{'#10B981' if t_avg > 0 else '#EF4444'};'>{t_avg:.2f}%</span></div>", unsafe_allow_html=True)
-                with ec3: components.html(gen_copy_btn(",".join(v_us['Symbol'].tolist()), "usae"), height=30)
+            us_df['Price (USD)'] = pd.to_numeric(us_df['Price (USD)'], errors='coerce')
+            us_df['Avg Vol 30D'] = pd.to_numeric(us_df['Avg Vol 30D'], errors='coerce')
+            us_df['Expense Ratio'] = pd.to_numeric(us_df['Expense Ratio'], errors='coerce')
+            us_df['Chg %'] = pd.to_numeric(us_df['Chg %'], errors='coerce')
 
-                h_us = v_us.style.apply(lambda r: ["font-weight:700; background-color:rgba(187,247,208,0.5);" if r.name in t_idx and c == "Chg %" else "font-weight:700;" if r.name in t_idx else "" for c in r.index], axis=1).hide(axis="index").format({'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"), 'Chg %': lambda x: safe_fmt(x, "{:.2f}%"), 'Turnover (Cr)': lambda x: safe_fmt(x, "{:.2f}"), 'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"), 'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")}).to_html()
-                
-                for _, r in v_us.iterrows(): h_us = re.sub(rf'(<td[^>]*>)({re.escape(str(r["Symbol"]))})(</td>)', rf'\1<a href="https://www.tradingview.com/chart/4efUco2X/?symbol={str(r["Symbol"])}" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px dashed #0B1D30;font-weight:600;">{str(r["Symbol"])}</a>\3', h_us)
-                st.markdown(f'<div class="scrollable-table-container">{h_us}</div>', unsafe_allow_html=True)
+            us_df['Turnover (Cr)'] = (us_df['Avg Vol 30D'] * us_df['Price (USD)'] * 95) / 10000000
+            
+            f_us_ema = us_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
+            valid_us = us_df[f_us_ema].sort_values('Relative Score', ascending=True).head(10)
+            
+            if not valid_us.empty:
+                valid_us = valid_us.reset_index(drop=True)
+                valid_us['Rank'] = valid_us.index + 1
+                show_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']
+                valid_us = valid_us[[c for c in show_cols if c in valid_us.columns]]
 
+                top_4_chg_idx = valid_us.head(4).index.tolist()
+                top_4_avg = valid_us.head(4)['Chg %'].mean() if not valid_us.empty else 0.0
+                avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
+                
+                etf_col1, etf_col2 = st.columns([8.5, 1.5])
+                with etf_col1:
+                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                
+                with etf_col2:
+                    us_etf_copy_str = ",".join(valid_us['Symbol'].astype(str).tolist())
+                    us_etf_copy_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; height: 100%; background-color: transparent; overflow: hidden; }}
+                        button {{
+                            font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
+                            border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
+                            font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            transition: all 0.2s;
+                        }}
+                        button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                    </style>
+                    </head>
+                    <body>
+                        <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                        <script>
+                        function copyToClipboard() {{
+                            const ta = document.createElement('textarea');
+                            ta.value = "{us_etf_copy_str}";
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            const btn = document.getElementById('copyUsEtfBtn');
+                            btn.innerHTML = '✅ Copied!';
+                            setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                        }}
+                        </script>
+                    </body>
+                    </html>
+                    """
+                    components.html(us_etf_copy_html, height=35)
+
+                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
+
+                def style_us_etf_row(row):
+                    is_top_4 = row.name in top_4_chg_idx
+                    styles = []
+                    for col in row.index:
+                        cell_style = ""
+                        if is_top_4:
+                            cell_style += "font-weight: 700; "
+                            if col == 'Chg %': cell_style += "background-color: rgba(187, 247, 208, 0.5); "
+                        styles.append(cell_style)
+                    return styles
+                
+                styled_us_etf = valid_us.style.apply(style_us_etf_row, axis=1).hide(axis="index").format({
+                    'Price (USD)': lambda x: safe_fmt(x, "${:.2f}"),
+                    'Chg %': lambda x: safe_fmt(x, "{:.2f}%"),
+                    'Avg Vol 30D': lambda x: safe_fmt(x, "{:,.0f}"),
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "₹{:.2f}"),
+                    'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
+                })
+
+                html_us_table = styled_us_etf.to_html()
+                
+                for _, r in valid_us.iterrows():
+                    sym = str(r['Symbol'])
+                    url = f"https://www.tradingview.com/chart/4efUco2X/?symbol={sym}"
+                    link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                    html_us_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_us_table)
+                
+                st.markdown(f'<div class="scrollable-table-container">{html_us_table}</div>', unsafe_allow_html=True)
+            else: st.info("No US ETFs match the criteria at the moment.")
+
+    # --- 4. PORTFOLIO TRACKER TAB ---
     with tab_port:
-        col_rad, col_clr = st.columns([8, 2])
-        with col_rad: data_source = st.radio("Source", ["Google Sheets", "Upload CSV"], horizontal=True, label_visibility="collapsed")
-        with col_clr:
-            if st.button("🧹 Clear Cache", use_container_width=True): st.cache_data.clear(); st.rerun()
+        col_text, col_clear = st.columns([8, 2])
+        with col_text:
+            st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 5px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
+        with col_clear:
+            if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
 
-        if 'us_port_refresh' not in st.session_state: st.session_state['us_port_refresh'] = "Never"
+        st.markdown("<hr style='margin: 10px 0px 20px 0px; border-color: #E5E7EB;'>", unsafe_allow_html=True)
 
-        if data_source == "Google Sheets":
-            if 'saved_us_gsheet' not in st.session_state: st.session_state['saved_us_gsheet'] = "https://docs.google.com/..."
-            cu, cb = st.columns([8, 2])
-            with cu: gs_url = st.text_input("URL", value=st.session_state['saved_us_gsheet'], label_visibility="collapsed")
-            with cb: load_data = st.button("🔄 Refresh", use_container_width=True)
-            st.markdown(f"<div style='font-size:0.8rem; color:#6B7280;'>🟢 Last Refresh: {st.session_state['us_port_refresh']}</div>", unsafe_allow_html=True)
-            if load_data: st.session_state['saved_us_gsheet'] = gs_url
-        else:
-            cu, cb = st.columns([8, 2])
-            with cu: uploaded_file = st.file_uploader("Upload CSV", type=['csv'], label_visibility="collapsed")
-            with cb: load_data = st.button("🔄 Load", use_container_width=True)
+        # Centered Radio
+        col_radio1, col_radio2, col_radio3 = st.columns([3, 4, 3])
+        with col_radio2:
+            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+
+        # Input and Load Button layout
+        input_col, btn_col = st.columns([8, 2])
+        with input_col:
+            if data_source == "Upload CSV":
+                uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
+            else:
+                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...", label_visibility="collapsed")
+        
+        with btn_col:
+            load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
         if load_data:
-            st.session_state['us_port_refresh'] = datetime.now(pytz.timezone('US/Eastern')).strftime('%d %b %Y, %I:%M %p ET')
             try:
                 port_df = pd.DataFrame()
                 
@@ -471,7 +711,7 @@ def run_usa_screener():
                     if not sym or sym == "NAN": continue
                     
                     if ":" not in sym:
-                        mapped_sym = exchange_map.get(sym, sym)
+                        mapped_sym = exchange_map.get(sym, sym) # Fetch from dictionary, fallback to raw
                         search_symbols.append(mapped_sym)
                         port_df.at[idx, 'Mapped_Symbol'] = mapped_sym
                     else:
@@ -497,7 +737,7 @@ def run_usa_screener():
                     if not mapped_sym or mapped_sym == "NAN": continue
                     
                     tv = live_tv_data.get(mapped_sym)
-                    if not tv:
+                    if not tv: # Fallback matcher just in case
                         for k, v in live_tv_data.items():
                             if k.endswith(f":{pure_sym}"):
                                 tv = v
@@ -539,6 +779,7 @@ def run_usa_screener():
                         else:
                             rule_status = f"PASS ({return_pct:.2f}%)"
                             
+                    # Currency Prefix for Formatting
                     curr_pfx = "₹" if ('NSE:' in mapped_sym or 'BSE:' in mapped_sym) else "$"
 
                     tracker_data.append({
@@ -560,13 +801,41 @@ def run_usa_screener():
                 final_port_df = pd.DataFrame(tracker_data)
                 avg_chg = final_port_df['Today chg%'].mean()
                 
-                port_col1, port_col2, port_col3 = st.columns([3, 4, 3])
-                with port_col2:
+                port_col1, port_col2 = st.columns([8.5, 1.5])
+                with port_col1:
                     avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-                    st.markdown(f"<div style='text-align:center; padding-top:10px; font-weight:700;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
                 
-                with port_col3:
-                    components.html(gen_copy_btn(",".join(final_port_df['Symbol'].tolist()), "usaport"), height=30)
+                with port_col2:
+                    port_copy_str = ",".join(final_port_df['Symbol'].tolist())
+                    port_copy_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
+                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; height: 100%; background-color: transparent; overflow: hidden; }}
+                        button {{ font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s; }}
+                        button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                    </style>
+                    </head>
+                    <body>
+                        <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                        <script>
+                        function copyToClipboard() {{
+                            const ta = document.createElement('textarea');
+                            ta.value = "{port_copy_str}";
+                            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                            const btn = document.getElementById('copyPortBtn');
+                            btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                        }}
+                        </script>
+                    </body>
+                    </html>
+                    """
+                    components.html(port_copy_html, height=35)
+                
+                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
                 
                 def style_portfolio(row):
                     bg_color = [''] * len(row)
@@ -599,11 +868,15 @@ def run_usa_screener():
                             has_alert = True
                     except: pass
                     
-                    if has_alert: bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    if has_alert:
+                        bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    
                     return bg_color
 
                 styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
-                    "Today chg%": "{:.2f}%", "Return %": "{:.2f}%", "Risk %": "{:.2%}"
+                    "Today chg%": "{:.2f}%",
+                    "Return %": "{:.2f}%",
+                    "Risk %": "{:.2%}"
                 })
                 
                 st.markdown(f'<div class="scrollable-table-container">{styled_port.to_html()}</div>', unsafe_allow_html=True)
