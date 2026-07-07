@@ -276,6 +276,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
+# MARKET TOGGLE (Placed AFTER CSS so styles load!)
+# ==========================================
+col_blank, col_toggle = st.columns([8.5, 1.5])
+with col_toggle:
+    is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
+
+if is_usa:
+    import usa_app
+    usa_app.run_usa_screener()
+    st.stop() # Stops the Indian app, but keeps the CSS!
+# ==========================================
+
+# ==========================================
 # 2. APIs & ENDPOINTS
 # ==========================================
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
@@ -474,7 +487,11 @@ def get_instrument_mapping():
 def fetch_upstox_history(instrument_key, start_date, end_date, token):
     encoded_key = urllib.parse.quote(instrument_key)
     url = f"https://api.upstox.com/v2/historical-candle/{encoded_key}/day/{end_date}/{start_date}"
-    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    headers = {
+        "Accept": "application/json", 
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
+    }
     try:
         response = requests.get(url, headers=headers)
         time.sleep(0.3)
@@ -497,19 +514,29 @@ def get_live_quote(instrument_key, token):
     url = "https://api.upstox.com/v2/market-quote/quotes"
     headers = {
         "Accept": "application/json",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
     }
+    # 1. The parameter MUST be 'instrument_key'
     params = {
         "instrument_key": instrument_key
     }
+    
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         if response.status_code != 200:
             return None
+            
         data = response.json()
-        quote = data.get("data", {}).get(instrument_key, {})
-        if not quote:
+        data_obj = data.get("data", {})
+        
+        if not data_obj:
             return None
+            
+        # 2. THE FIX: Extract the quote dynamically.
+        # Upstox keys the response by trading symbol (e.g., 'NSE_EQ:NHPC'), not the instrument_key.
+        # Since we only request one stock at a time, we safely grab the first value in the dictionary.
+        quote = list(data_obj.values())[0]
             
         ltp = quote.get("last_price")
         prev = quote.get("ohlc", {}).get("close")
