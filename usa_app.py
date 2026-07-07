@@ -393,7 +393,8 @@ def run_usa_screener():
             v_us = u_df[u_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'].sort_values('Relative Score', ascending=True).head(10).reset_index(drop=True)
             if not v_us.empty:
                 v_us['Rank'] = v_us.index + 1
-                v_us = v_us[['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']]
+                us_cols = ['Rank', 'Symbol', 'Price (USD)', 'Chg %', 'Category', 'Index', 'EMA 21 Status', 'Avg Vol 30D', 'Turnover (Cr)', 'Expense Ratio']
+                v_us = v_us[[c for c in us_cols if c in v_us.columns]]
                 
                 t_idx, t_avg = v_us.head(4).index.tolist(), v_us.head(4)['Chg %'].mean()
                 
