@@ -60,8 +60,7 @@ def run_usa_screener():
     # ==========================================
     # DATA FETCHING 
     # ==========================================
-    # TTL reduced to 60 seconds so Supabase updates reflect in UI instantly
-    @st.cache_data(ttl=60)
+    @st.cache_data(ttl=86400)
     def fetch_usa_database_reference():
         try:
             db_url = st.secrets["DATABASE_URL"]
@@ -86,9 +85,8 @@ def run_usa_screener():
                 except:
                     raw_sec, raw_ind = pd.DataFrame(), pd.DataFrame()
 
-                # Updated to point to "Market breadth(USA)" table
                 try:
-                    trend_df = pd.read_sql(text('SELECT * FROM "Market breadth(USA)" ORDER BY "Date" DESC LIMIT 1'), conn)
+                    trend_df = pd.read_sql(text('SELECT * FROM market_trend_summary LIMIT 1'), conn)
                     trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
                 except Exception:
                     trend_regime = "N/A"
@@ -96,19 +94,17 @@ def run_usa_screener():
                 try:
                     sync_df = pd.read_sql(text('SELECT * FROM "US Sync log"'), conn)
                     last_sync = sync_df['last_sync'].iloc[0]
-                    sync_timestamp_utc = sync_df['sync_timestamp_utc'].iloc[0] if 'sync_timestamp_utc' in sync_df.columns else None
                 except Exception:
                     last_sync = "Pending Run..."
-                    sync_timestamp_utc = None
 
                 try:
                     us_etf_df = pd.read_sql(text('SELECT * FROM "USA_ETF_Screener"'), conn)
                 except Exception:
                     us_etf_df = pd.DataFrame()
 
-            return us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, sync_timestamp_utc, us_etf_df
+            return us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, us_etf_df
         except Exception:
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", None, pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", pd.DataFrame()
 
     @st.cache_data(ttl=60)
     def fetch_us_live_breadth():
@@ -281,22 +277,13 @@ def run_usa_screener():
     """, unsafe_allow_html=True)
 
     tv_data = fetch_usa_tradingview()
-    us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, sync_timestamp_utc, us_etf_df = fetch_usa_database_reference()
+    us_stock_df, raw_sec, raw_ind, trend_regime, last_sync, us_etf_df = fetch_usa_database_reference()
     live_sheet_breadth = fetch_us_live_breadth()
 
     live_bg = get_breadth_color(live_sheet_breadth)
     nse_bg = get_breadth_color(trend_regime)
     alloc_val, alloc_bg = get_portfolio_allocation(trend_regime, live_sheet_breadth)
-    
-    # Check if Last DB Update is older than 24 hours
     last_sync_bg = "rgba(216, 180, 254, 0.3)"
-    if sync_timestamp_utc:
-        try:
-            sync_dt = datetime.fromisoformat(str(sync_timestamp_utc))
-            if (datetime.now(timezone.utc) - sync_dt).total_seconds() > 86400: # 24 hours
-                last_sync_bg = "rgba(252, 165, 165, 0.4)" # Light red warning
-        except Exception:
-            pass
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     with metric_col1: st.markdown(create_metric_card("📊 Market Breadth (Live)", live_sheet_breadth, live_bg), unsafe_allow_html=True)
