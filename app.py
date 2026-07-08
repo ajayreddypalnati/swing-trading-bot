@@ -105,41 +105,10 @@ st.markdown("""
         }
         
         /* TABLE STYLING - MODIFIED TO ABSORB NEW COLUMN AND AVOID SCROLLING */
-        .scrollable-table-container {
-            width:100%;
-            margin-bottom:0.5rem;
-            overflow-x:auto;
-            -webkit-overflow-scrolling:touch;
-            background:#FFFFFF;
-            border:2px solid #0B1D30 !important;
-            border-radius:8px;
-            overflow:hidden;
-            box-sizing:border-box;
-        }
-        .scrollable-table-container table{
-            width:100%;
-            border-collapse:collapse;
-            border:none !important;
-            background:#FFFFFF;
-        }
-        .scrollable-table-container th{
-            background-color:#0B1D30 !important;
-            color:#F4F1E1 !important;
-            text-align:center !important;
-            vertical-align:middle !important;
-            font-size:0.95rem !important;
-            padding:10px 5px !important;
-            font-weight:700 !important;
-            border:1px solid #0B1D30 !important;
-        }
-        .scrollable-table-container td{
-            color:#111827 !important;
-            text-align:center !important;
-            vertical-align:middle !important;
-            padding:8px 5px !important;
-            border:1px solid rgba(11,29,48,0.10) !important;
-            font-size:0.95rem !important;
-        }
+        .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;}
+        .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 2px solid #0B1D30; overflow: hidden;}
+        .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 0.95rem !important; padding: 10px 5px !important; font-weight: 700 !important;}
+        .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 8px 5px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.1) !important; font-size: 0.95rem !important; }
         
         .sleek-table-wrapper { width: 100%; border: 2px solid #0B1D30; border-radius: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; background: #FFFFFF; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .sleek-table { width: 100%; border-collapse: collapse; font-size: 1.0rem !important; background: transparent; }
@@ -967,7 +936,7 @@ with tab_main:
         </html>
         """
         # Inject the micro-component directly above the table
-        components.html(copy_html, height=28)
+        components.html(copy_html, height=40)
         
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
