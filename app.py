@@ -277,45 +277,16 @@ st.markdown("""
 
 
 # ==========================================
-# MARKET TOGGLE (Compact Version)
+# MARKET TOGGLE (Placed AFTER CSS so styles load!)
 # ==========================================
-st.markdown("""
-<style>
-
-/* Reduce height of ONLY the first columns block */
-div[data-testid="stHorizontalBlock"]:has(div[data-testid="stToggle"]){
-    margin-bottom:-18px !important;
-}
-
-/* Smaller toggle */
-div[data-testid="stToggle"]{
-    transform:scale(0.78);
-    transform-origin:right center;
-}
-
-/* Remove extra spacing around toggle */
-div[data-testid="stToggle"] > label{
-    margin:0 !important;
-    padding:0 !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-left, right = st.columns([30,1])
-
-with right:
+col_blank, col_toggle = st.columns([8.5, 1.5])
+with col_toggle:
     is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
 
 if is_usa:
-    try:
-        import usa_app
-    except ImportError:
-        st.error("USA screener module not available.")
-    else:
-        usa_app.run_usa_screener()
-        st.stop()
-
+    import usa_app
+    usa_app.run_usa_screener()
+    st.stop() # Stops the Indian app, but keeps the CSS!
 # ==========================================
 
 # ==========================================
