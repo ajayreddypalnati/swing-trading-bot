@@ -1104,11 +1104,11 @@ with tab_screeners:
         
         if not main_df.empty:
             mom_df = main_df.copy()
-            mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
-            mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
-            mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
-            mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
-            mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
+            mom_df['turnover'] = pd.to_numeric(mom_df.get('turnover', 0), errors='coerce')
+            mom_df['down_ath'] = pd.to_numeric(mom_df.get('down_ath', 0), errors='coerce')
+            mom_df['relative_score'] = pd.to_numeric(mom_df.get('relative_score', 0), errors='coerce')
+            mom_df['market_cap'] = pd.to_numeric(mom_df.get('market_cap', 0), errors='coerce')
+            mom_df['1d_return'] = pd.to_numeric(mom_df.get('1d_return', 0), errors='coerce')
             
             f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
             f_turnover = mom_df['turnover'] >= min_turnover
