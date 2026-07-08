@@ -135,145 +135,19 @@ st.markdown("""
             }
         }
 
-        /* PROFESSIONAL FULL-WIDTH SAAS TABS */
-        div[data-baseweb="tab-list"] { 
-            display: flex !important;
-            width: 100% !important;
-            gap: 15px !important;
-            border-bottom: none !important;
-            margin-bottom: 25px !important;
-            padding-top: 10px !important; /* Space for hover pop */
-        }
-        
-        div[data-baseweb="tab"] { 
-            padding: 0 !important;
-            background: transparent !important;
-            flex: 1 !important; /* Forces all tabs to be equal width and span entire screen */
-            min-width: 0 !important;
-        }
-        
-        /* Tab Button Physics & Styling */
-        button[role="tab"] {
-            width: 100% !important;
-            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
-            border-radius: 12px !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            padding: 20px 10px !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            transform: translateY(0) !important;
-        }
-        
-        /* IMMERSIVE POPUP - Hover Effect for Tabs */
-        button[role="tab"]:hover {
-            transform: translateY(-6px) !important;
-            box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
-            background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
-        }
-        
-        /* Selected Tab State (The White Layer with Thick Navy Line) */
-        button[role="tab"][aria-selected="true"] {
-            background: #FFFFFF !important;
-            border: 2px solid #0B1D30 !important;
-            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
-            transform: translateY(-6px) !important; /* Keep it popped up when active */
-            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
-        }
-        
-        /* Tab Text Sizing - Restored to large 1.4rem size */
-        button[role="tab"] p { 
-            font-size: 1.4rem !important; 
-            font-weight: 800 !important; 
-            color: #FFFFFF !important; 
-            margin: 0 !important;
-            transition: color 0.3s ease !important;
-            white-space: nowrap !important;
-        }
-        
-        /* Selected Tab Text Color */
-        button[role="tab"][aria-selected="true"] p {
-            color: #0B1D30 !important;
-        }
-        
-        /* Remove default Streamlit tab active line */
-        div[data-baseweb="tab-highlight"] { 
-            display: none !important; 
-        }
-        
-        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
-        div[data-testid="stButton"] button {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 2px solid #0B1D30 !important;
-            border-radius: 8px !important;
-            font-weight: 800 !important;
-        }
-        div[data-testid="stButton"] button:hover {
-            background-color: #F4F1E1 !important;
-            color: #0B1D30 !important;
-        }
-        
-        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
-        div[data-testid="stTextInput"] input {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 1px solid #0B1D30 !important;
-        }
-        
-        /* Make Number Input values (like 3.00) massive and bold and white background */
-        div[data-testid="stNumberInput"] input {
-            background-color: #FFFFFF !important;
-            font-size: 1.5rem !important;
-            font-weight: 800 !important;
-            color: #0B1D30 !important;
-            border: 1px solid #0B1D30 !important;
-        }
-        
-        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
-        div[role="radiogroup"] label {
-            color: #0B1D30 !important;
-        }
 
-        /* UPLOAD BUTTON VISIBILITY ON MOBILE - FORCE WHITE BACKGROUND */
-        div[data-testid="stFileUploader"] {
-            background-color: #FFFFFF !important;
-            border: 2px dashed #0B1D30 !important;
-            border-radius: 8px !important;
-            padding: 15px !important;
-        }
-        div[data-testid="stFileUploader"] section {
-            background-color: transparent !important;
-        }
-        div[data-testid="stFileUploader"] span, 
-        div[data-testid="stFileUploader"] p, 
-        div[data-testid="stFileUploader"] small {
-            color: #0B1D30 !important;
-            font-weight: 600 !important;
-        }
-        /* Force the Browse Files button to be white with navy text */
-        div[data-testid="stFileUploader"] button {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 2px solid #0B1D30 !important;
-            border-radius: 6px !important;
-            font-weight: 800 !important;
-        }
-        div[data-testid="stFileUploader"] button:hover {
-            background-color: #F4F1E1 !important;
-        }
-        
-        /* Pulse Animation for Loader */
-        @keyframes pulse-logo {
-            0% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.3); opacity: 1; text-shadow: 0 0 20px #FFD700; }
-            100% { transform: scale(1); opacity: 0.6; }
-        }
+# ==========================================
+# MARKET TOGGLE (Placed AFTER CSS so styles load!)
+# ==========================================
+col_blank, col_toggle = st.columns([8.5, 1.5])
+with col_toggle:
+    is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
 
-    </style>
-""", unsafe_allow_html=True)
+if is_usa:
+    import usa_app
+    usa_app.run_usa_screener()
+    st.stop() # Stops the Indian app, but keeps the CSS!
+# ==========================================
 
 # ==========================================
 # 2. APIs & ENDPOINTS
@@ -474,7 +348,11 @@ def get_instrument_mapping():
 def fetch_upstox_history(instrument_key, start_date, end_date, token):
     encoded_key = urllib.parse.quote(instrument_key)
     url = f"https://api.upstox.com/v2/historical-candle/{encoded_key}/day/{end_date}/{start_date}"
-    headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+    headers = {
+        "Accept": "application/json", 
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
+    }
     try:
         response = requests.get(url, headers=headers)
         time.sleep(0.3)
@@ -497,19 +375,29 @@ def get_live_quote(instrument_key, token):
     url = "https://api.upstox.com/v2/market-quote/quotes"
     headers = {
         "Accept": "application/json",
-        "Authorization": f"Bearer {token}"
+        "Authorization": f"Bearer {token}",
+        "Api-Version": "2.0"
     }
+    # 1. The parameter MUST be 'instrument_key'
     params = {
         "instrument_key": instrument_key
     }
+    
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         if response.status_code != 200:
             return None
+            
         data = response.json()
-        quote = data.get("data", {}).get(instrument_key, {})
-        if not quote:
+        data_obj = data.get("data", {})
+        
+        if not data_obj:
             return None
+            
+        # 2. THE FIX: Extract the quote dynamically.
+        # Upstox keys the response by trading symbol (e.g., 'NSE_EQ:NHPC'), not the instrument_key.
+        # Since we only request one stock at a time, we safely grab the first value in the dictionary.
+        quote = list(data_obj.values())[0]
             
         ltp = quote.get("last_price")
         prev = quote.get("ohlc", {}).get("close")
@@ -679,7 +567,7 @@ def render_market_cycle_graph(roc_vals):
             Current Stage: <span style="color: {theme_color};">{stage}</span> 
             <span style="color: #6B7280; font-size: 0.95rem; font-weight: normal;">(CNXSMALLCAP ROC: <b>{roc_val}%</b>)</span>
         </h4>
-        <p style="margin: 8px 0 0 0; font-size: 1rem; color: #374151; font-style: italic;">"{note}"</p>
+        <p style="margin: 8px 0 0 0; font-size: 1rem; color: #374151; font-style: italic;">{note}</p>
     </div>
     """, unsafe_allow_html=True)
     st.plotly_chart(fig, use_container_width=True)
@@ -1104,19 +992,11 @@ with tab_screeners:
         
         if not main_df.empty:
             mom_df = main_df.copy()
-            # Ensure we operate on Series even if column missing; strip commas and % before numeric conversion
-            def _col_series(df, col, default=0):
-                src = df.get(col, pd.Series([default] * len(df), index=df.index))
-                # convert to string, remove commas and trailing percent sign, then coerce
-                return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
-
-            mom_df['turnover'] = _col_series(mom_df, 'turnover')
-            mom_df['down_ath'] = _col_series(mom_df, 'down_ath')
-            mom_df['relative_score'] = _col_series(mom_df, 'relative_score')
-            mom_df['market_cap'] = _col_series(mom_df, 'market_cap')
-            mom_df['1d_return'] = _col_series(mom_df, '1d_return')
-            if 'band' not in mom_df.columns: mom_df['band'] = ''
-            if 'db_exchange' not in mom_df.columns: mom_df['db_exchange'] = 'NSE'
+            mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
+            mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
+            mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
+            mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
+            mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
             
             f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
             f_turnover = mom_df['turnover'] >= min_turnover
