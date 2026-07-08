@@ -272,7 +272,18 @@ st.markdown("""
             100% { transform: scale(1); opacity: 0.6; }
         }
 
-    </style>
+    
+/* Market switch */
+div[data-testid="stSegmentedControl"]{
+    margin-top:-118px;
+    display:flex;
+    justify-content:flex-end;
+}
+div[data-testid="stSegmentedControl"] button{
+    font-weight:700!important;
+}
+
+</style>
 """, unsafe_allow_html=True)
 
 
@@ -713,14 +724,21 @@ st.markdown(f"""
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
-            <!-- Toggle moved above Live Data -->
-            <div id="market-toggle-placeholder"></div>
             <div class="live-status">LIVE DATA <div class="blob green"></div></div>
             <div class="time">{current_time}</div>
             <div class="date">{current_date}</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
+
+# Market selector
+_sel1,_sel2=st.columns([8.9,1.1])
+with _sel2:
+    market=st.segmented_control("",["🇮🇳 IND","🇺🇸 USA"],default="🇮🇳 IND",key="market_switch")
+if market=="🇺🇸 USA":
+    import usa_app
+    usa_app.run_usa_screener()
+    st.stop()
 
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
