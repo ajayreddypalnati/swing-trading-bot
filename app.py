@@ -1115,6 +1115,8 @@ with tab_screeners:
             mom_df['relative_score'] = _col_series(mom_df, 'relative_score')
             mom_df['market_cap'] = _col_series(mom_df, 'market_cap')
             mom_df['1d_return'] = _col_series(mom_df, '1d_return')
+            if 'band' not in mom_df.columns: mom_df['band'] = ''
+            if 'db_exchange' not in mom_df.columns: mom_df['db_exchange'] = 'NSE'
             
             f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
             f_turnover = mom_df['turnover'] >= min_turnover
