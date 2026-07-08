@@ -41,6 +41,14 @@ st.markdown("""
         
         /* HIDE NATIVE STREAMLIT RUNNING INDICATOR */
         div[data-testid="stStatusWidget"] { visibility: hidden; }
+
+        /* --- PREVENT STREAMLIT GHOSTING/SHADOW OVERLAY ON BUTTON CLICK --- */
+        [data-stale="true"] {
+            opacity: 1 !important;
+            transition: none !important;
+            filter: none !important;
+            pointer-events: auto !important;
+        }
         
         /* RESTORED CENTERED ALIGNMENT CAP */
         .block-container { 
@@ -284,13 +292,6 @@ st.markdown("""
         div[data-testid="stFileUploader"] button:active {
             transform: translateY(1px) !important;
             box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
-        }
-        
-        /* Pulse Animation for Loader */
-        @keyframes pulse-logo {
-            0% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.3); opacity: 1; text-shadow: 0 0 20px #FFD700; }
-            100% { transform: scale(1); opacity: 0.6; }
         }
 
     </style>
@@ -769,20 +770,10 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-loader_placeholder = st.empty()
-loader_placeholder.markdown("""
-    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(244, 241, 225, 0.65); backdrop-filter: blur(3px); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;">
-        <div style="font-size: 5rem; animation: pulse-logo 1.5s infinite ease-in-out;">⚡</div>
-        <div style="color: #0B1D30; font-weight: 800; font-size: 1.2rem; margin-top: 15px; letter-spacing: 2px;">SYNCING LIVE DATA</div>
-    </div>
-""", unsafe_allow_html=True)
-
 data = get_combined_data()
 current_cache_key = get_db_cache_key()
 main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df, us_etf_df, micro_df = fetch_database_reference(current_cache_key)  
 live_sheet_breadth = fetch_market_breadth_from_gsheets()
-
-loader_placeholder.empty()
 
 live_bg = get_breadth_color(live_sheet_breadth)
 nse_bg = get_breadth_color(trend_regime)
@@ -920,7 +911,7 @@ with tab_main:
         # Applying the SAFE formatter everywhere
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
             "Close": lambda x: safe_fmt(x, "₹{:.2f}"), 
-            "% Change": lambda x: safe_fmt(x, "{:.2f}%"), 
+            "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
             "Mar Cap (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
             "Turnover (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
             "Volume": lambda x: safe_fmt(x, "{:,.0f}"),
@@ -1638,249 +1629,190 @@ div[role="radiogroup"]{
         load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
     if load_data:
-        try:
-            port_df = pd.DataFrame()
-            
-            # 1. Parse File/URL
-            if data_source == "Google Sheets" and "docs.google.com" in gs_url:
-                match = re.search(r'[#&?]gid=([0-9]+)', gs_url)
-                gid = match.group(1) if match else "0"
-                csv_url = re.sub(r'/edit.*', f'/export?format=csv&gid={gid}', gs_url)
-                port_df = pd.read_csv(csv_url)
-            elif data_source == "Upload CSV" and uploaded_file is not None:
-                port_df = pd.read_csv(uploaded_file)
-            else:
-                st.warning("Please provide a valid data source.")
-                st.stop()
-            
-            # 2. Fuzzy Matching & Regex Cleanup
-            port_df.columns = port_df.columns.str.strip()
-            for col in port_df.columns:
-                col_name = str(col).lower()
-                if 'ticker' in col_name or 'symbol' in col_name: port_df = port_df.rename(columns={col: "Stock Ticker"})
-                elif 'risk' in col_name: port_df = port_df.rename(columns={col: "Risk"})
-                elif 'entry price' in col_name: port_df = port_df.rename(columns={col: "Entry Price"})
-                elif 'stop loss' in col_name: port_df = port_df.rename(columns={col: "Stop Loss"})
-                elif 'date' in col_name: port_df = port_df.rename(columns={col: "Entry date"})
-
-            if "Risk" in port_df.columns:
-                port_df["Risk"] = port_df["Risk"].astype(str).str.replace(r'[^\d.-]', '', regex=True)
-                port_df["Risk"] = pd.to_numeric(port_df["Risk"], errors='coerce') / 100
-            if "Entry Price" in port_df.columns:
-                port_df["Entry Price"] = pd.to_numeric(port_df["Entry Price"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
-            if "Stop Loss" in port_df.columns:
-                port_df["Stop Loss"] = pd.to_numeric(port_df["Stop Loss"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
-            
-            # 3. Supabase Prefix Mapping (VLOOKUP)
-            exchange_map = fetch_exchange_mapping()
-            search_symbols = []
-            
-            for idx, row in port_df.iterrows():
-                sym = str(row.get('Stock Ticker', '')).strip().upper()
-                if not sym or sym == "NAN": continue
+        with st.spinner("🔄 Fetching and syncing portfolio data..."):
+            try:
+                port_df = pd.DataFrame()
                 
-                if ":" not in sym:
-                    mapped_sym = exchange_map.get(sym, sym) # Fetch from dictionary, fallback to raw
-                    search_symbols.append(mapped_sym)
-                    port_df.at[idx, 'Mapped_Symbol'] = mapped_sym
+                # 1. Parse File/URL
+                if data_source == "Google Sheets" and "docs.google.com" in gs_url:
+                    match = re.search(r'[#&?]gid=([0-9]+)', gs_url)
+                    gid = match.group(1) if match else "0"
+                    csv_url = re.sub(r'/edit.*', f'/export?format=csv&gid={gid}', gs_url)
+                    port_df = pd.read_csv(csv_url)
+                elif data_source == "Upload CSV" and uploaded_file is not None:
+                    port_df = pd.read_csv(uploaded_file)
                 else:
-                    search_symbols.append(sym)
-                    port_df.at[idx, 'Mapped_Symbol'] = sym
+                    st.warning("Please provide a valid data source.")
+                    st.stop()
+                
+                # 2. Fuzzy Matching & Regex Cleanup
+                port_df.columns = port_df.columns.str.strip()
+                for col in port_df.columns:
+                    col_name = str(col).lower()
+                    if 'ticker' in col_name or 'symbol' in col_name: port_df = port_df.rename(columns={col: "Stock Ticker"})
+                    elif 'risk' in col_name: port_df = port_df.rename(columns={col: "Risk"})
+                    elif 'entry price' in col_name: port_df = port_df.rename(columns={col: "Entry Price"})
+                    elif 'stop loss' in col_name: port_df = port_df.rename(columns={col: "Stop Loss"})
+                    elif 'date' in col_name: port_df = port_df.rename(columns={col: "Entry date"})
 
-            # Extract pure tickers for the API filter
-            pure_tickers = list(set([s.split(":")[-1] if ":" in s else s for s in search_symbols]))
-            
-            # 4. Fetch Live Data
-            live_tv_data = fetch_portfolio_tv_data(pure_tickers)
-
-            # 5. Build Final Dataset with Multi-Market Holidays
-            tracker_data = []
-            today = pd.to_datetime('today').normalize()
-            years_to_check = [today.year, today.year - 1]
-            us_holidays = np.array(list(holidays.country_holidays('US', years=years_to_check).keys()), dtype='datetime64[D]')
-            in_holidays = np.array(list(holidays.country_holidays('IN', years=years_to_check).keys()), dtype='datetime64[D]')
-
-            for _, row in port_df.iterrows():
-                mapped_sym = str(row.get('Mapped_Symbol', '')).strip().upper()
-                pure_sym = mapped_sym.split(":")[-1] if ":" in mapped_sym else mapped_sym
-                if not mapped_sym or mapped_sym == "NAN": continue
+                if "Risk" in port_df.columns:
+                    port_df["Risk"] = port_df["Risk"].astype(str).str.replace(r'[^\d.-]', '', regex=True)
+                    port_df["Risk"] = pd.to_numeric(port_df["Risk"], errors='coerce') / 100
+                if "Entry Price" in port_df.columns:
+                    port_df["Entry Price"] = pd.to_numeric(port_df["Entry Price"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
+                if "Stop Loss" in port_df.columns:
+                    port_df["Stop Loss"] = pd.to_numeric(port_df["Stop Loss"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
                 
-                tv = live_tv_data.get(mapped_sym)
-                if not tv: # Fallback matcher just in case
-                    for k, v in live_tv_data.items():
-                        if k.endswith(f":{pure_sym}"):
-                            tv = v
-                            break
-                if not tv: tv = {"price": 0.0, "change": 0.0, "ema21": 0.0}
+                # 3. Supabase Prefix Mapping (VLOOKUP)
+                exchange_map = fetch_exchange_mapping()
+                search_symbols = []
                 
-                entry_price = float(row['Entry Price']) if pd.notna(row['Entry Price']) else 0.0
-                stop_loss = float(row['Stop Loss']) if pd.notna(row['Stop Loss']) else 0.0
-                
-                current_price = tv["price"]
-                profit_loss = current_price - entry_price if entry_price > 0 else 0.0
-                return_pct = (profit_loss / entry_price * 100) if entry_price > 0 else 0.0
-                
-                try:
-                    entry_dt = pd.to_datetime(row['Entry date'], format='%d-%m-%Y', errors='coerce')
-                    start_date = np.datetime64(entry_dt, 'D')
-                    end_date = np.datetime64(today, 'D')
+                for idx, row in port_df.iterrows():
+                    sym = str(row.get('Stock Ticker', '')).strip().upper()
+                    if not sym or sym == "NAN": continue
                     
-                    if pd.isna(entry_dt) or start_date > end_date:
-                        trading_days = 0
+                    if ":" not in sym:
+                        mapped_sym = exchange_map.get(sym, sym) # Fetch from dictionary, fallback to raw
+                        search_symbols.append(mapped_sym)
+                        port_df.at[idx, 'Mapped_Symbol'] = mapped_sym
                     else:
-                        if 'NSE:' in mapped_sym or 'BSE:' in mapped_sym:
-                            trading_days = np.busday_count(start_date, end_date, holidays=in_holidays)
-                        else:
-                            trading_days = np.busday_count(start_date, end_date, holidays=us_holidays)
-                except:
-                    trading_days = 0
+                        search_symbols.append(sym)
+                        port_df.at[idx, 'Mapped_Symbol'] = sym
+
+                # Extract pure tickers for the API filter
+                pure_tickers = list(set([s.split(":")[-1] if ":" in s else s for s in search_symbols]))
                 
-                ema21_val = tv["ema21"]
-                ema_status = "ABOVE EMA21" if current_price > ema21_val else "BELOW EMA21"
-                
-                # Cumulative 10-Day Math
-                if trading_days < 10:
-                    rule_status = f"PENDING ({int(trading_days)}/10)"
-                else:
-                    required_return = (trading_days // 10) * 5.0
-                    if return_pct < required_return:
-                        rule_status = f"EXIT ({return_pct:.2f}%)"
-                    else:
-                        rule_status = f"PASS ({return_pct:.2f}%)"
+                # 4. Fetch Live Data
+                live_tv_data = fetch_portfolio_tv_data(pure_tickers)
+
+                # 5. Build Final Dataset with Multi-Market Holidays
+                tracker_data = []
+                today = pd.to_datetime('today').normalize()
+                years_to_check = [today.year, today.year - 1]
+                us_holidays = np.array(list(holidays.country_holidays('US', years=years_to_check).keys()), dtype='datetime64[D]')
+                in_holidays = np.array(list(holidays.country_holidays('IN', years=years_to_check).keys()), dtype='datetime64[D]')
+
+                for _, row in port_df.iterrows():
+                    mapped_sym = str(row.get('Mapped_Symbol', '')).strip().upper()
+                    pure_sym = mapped_sym.split(":")[-1] if ":" in mapped_sym else mapped_sym
+                    if not mapped_sym or mapped_sym == "NAN": continue
+                    
+                    tv = live_tv_data.get(mapped_sym)
+                    if not tv: # Fallback matcher just in case
+                        for k, v in live_tv_data.items():
+                            if k.endswith(f":{pure_sym}"):
+                                tv = v
+                                break
+                    if not tv: tv = {"price": 0.0, "change": 0.0, "ema21": 0.0}
+                    
+                    entry_price = float(row['Entry Price']) if pd.notna(row['Entry Price']) else 0.0
+                    stop_loss = float(row['Stop Loss']) if pd.notna(row['Stop Loss']) else 0.0
+                    
+                    current_price = tv["price"]
+                    profit_loss = current_price - entry_price if entry_price > 0 else 0.0
+                    return_pct = (profit_loss / entry_price * 100) if entry_price > 0 else 0.0
+                    
+                    try:
+                        entry_dt = pd.to_datetime(row['Entry date'], format='%d-%m-%Y', errors='coerce')
+                        start_date = np.datetime64(entry_dt, 'D')
+                        end_date = np.datetime64(today, 'D')
                         
-                # Currency Prefix for Formatting
-                curr_pfx = "₹" if ('NSE:' in mapped_sym or 'BSE:' in mapped_sym) else "$"
-
-                tracker_data.append({
-                    "Symbol": pure_sym,
-                    "Entry Date": row['Entry date'],
-                    "Today chg%": tv["change"],
-                    "Entry Price": f"{curr_pfx}{entry_price:.2f}",
-                    "Stop Loss": f"{curr_pfx}{stop_loss:.2f}",
-                    "Risk %": row.get('Risk', 0.0),
-                    "Current Price": f"{curr_pfx}{current_price:.2f}",
-                    "Profit/Loss": f"{curr_pfx}{profit_loss:.2f}",
-                    "Return %": return_pct,
-                    "Trading Days": trading_days,
-                    "EMA21": f"{curr_pfx}{ema21_val:.2f}",
-                    "EMA 21 Status": ema_status,
-                    "10 Day Rule": rule_status
-                })
-            
-            final_port_df = pd.DataFrame(tracker_data)
-            avg_chg = final_port_df['Today chg%'].mean()
-            
-            port_col1, port_col2 = st.columns([8.5, 1.5])
-            with port_col1:
-                avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-                st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
-            
-            with port_col2:
-                port_copy_str = ",".join(final_port_df['Symbol'].tolist())
-                port_copy_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                    body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
-                    button {{
-                        font-family: 'Inter', sans-serif; 
-                        background-color: #FFFFFF; 
-                        color: #0B1D30; 
-                        border: 2px solid #0B1D30; 
-                        padding: 8px 16px; 
-                        border-radius: 8px; 
-                        cursor: pointer; 
-                        font-weight: 800; 
-                        font-size: 0.85rem; 
-                        box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
-                        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                        transform: translateY(0);
-                    }}
-                    button:hover {{ 
-                        background-color: #F4F1E1; 
-                        transform: translateY(-4px); 
-                        box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
-                    }}
-                    button:active {{
-                        transform: translateY(1px);
-                        box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
-                    }}
-                </style>
-                </head>
-                <body>
-                    <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                    <script>
-                    function copyToClipboard() {{
-                        const ta = document.createElement('textarea');
-                        ta.value = "{port_copy_str}";
-                        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                        const btn = document.getElementById('copyPortBtn');
-                        btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                    }}
-                    </script>
-                </body>
-                </html>
-                """
-                components.html(port_copy_html, height=65)
-            
-            st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
-            
-            def style_portfolio(row):
-                bg_color = [''] * len(row)
-                ret_idx = final_port_df.columns.get_loc('Return %')
-                ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
-                rule_idx = final_port_df.columns.get_loc('10 Day Rule')
-                sl_idx = final_port_df.columns.get_loc('Stop Loss')
-                sym_idx = final_port_df.columns.get_loc('Symbol')
-                
-                if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
-                
-                has_alert = False
-                
-                if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
-                elif "BELOW" in str(row['EMA 21 Status']): 
-                    bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                    has_alert = True
-                
-                if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                elif "EXIT" in str(row['10 Day Rule']): 
-                    bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                    has_alert = True
+                        if pd.isna(entry_dt) or start_date > end_date:
+                            trading_days = 0
+                        else:
+                            if 'NSE:' in mapped_sym or 'BSE:' in mapped_sym:
+                                trading_days = np.busday_count(start_date, end_date, holidays=in_holidays)
+                            else:
+                                trading_days = np.busday_count(start_date, end_date, holidays=us_holidays)
+                    except:
+                        trading_days = 0
                     
-                try:
-                    curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
-                    sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
-                    if curr_p <= sl_p and curr_p > 0:
-                        bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                        has_alert = True
-                except: pass
-                
-                if has_alert:
-                    bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                
-                return bg_color
+                    ema21_val = tv["ema21"]
+                    ema_status = "ABOVE EMA21" if current_price > ema21_val else "BELOW EMA21"
+                    
+                    # Cumulative 10-Day Math
+                    if trading_days < 10:
+                        rule_status = f"PENDING ({int(trading_days)}/10)"
+                    else:
+                        required_return = (trading_days // 10) * 5.0
+                        if return_pct < required_return:
+                            rule_status = f"EXIT ({return_pct:.2f}%)"
+                        else:
+                            rule_status = f"PASS ({return_pct:.2f}%)"
+                            
+                    # Currency Prefix for Formatting
+                    curr_pfx = "₹" if ('NSE:' in mapped_sym or 'BSE:' in mapped_sym) else "$"
 
-            styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
-                "Today chg%": "{:.2f}%",
-                "Return %": "{:.2f}%",
-                "Risk %": "{:.2%}"
-            })
-            
-            # Inject TradingView links back in based on the pure symbol!
-            html_port_table = styled_port.to_html()
-            for _, r in final_port_df.iterrows():
-                sym = str(r["Symbol"])
-                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
-                link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-                html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
-            
-            st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
-            
-        except Exception as e:
-            st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
-
-time.sleep(60)
-st.rerun()
+                    tracker_data.append({
+                        "Symbol": pure_sym,
+                        "Entry Date": row['Entry date'],
+                        "Today chg%": tv["change"],
+                        "Entry Price": f"{curr_pfx}{entry_price:.2f}",
+                        "Stop Loss": f"{curr_pfx}{stop_loss:.2f}",
+                        "Risk %": row.get('Risk', 0.0),
+                        "Current Price": f"{curr_pfx}{current_price:.2f}",
+                        "Profit/Loss": f"{curr_pfx}{profit_loss:.2f}",
+                        "Return %": return_pct,
+                        "Trading Days": trading_days,
+                        "EMA21": f"{curr_pfx}{ema21_val:.2f}",
+                        "EMA 21 Status": ema_status,
+                        "10 Day Rule": rule_status
+                    })
+                
+                final_port_df = pd.DataFrame(tracker_data)
+                avg_chg = final_port_df['Today chg%'].mean()
+                
+                port_col1, port_col2 = st.columns([8.5, 1.5])
+                with port_col1:
+                    avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
+                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
+                
+                with port_col2:
+                    port_copy_str = ",".join(final_port_df['Symbol'].tolist())
+                    port_copy_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                        body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                        button {{
+                            font-family: 'Inter', sans-serif; 
+                            background-color: #FFFFFF; 
+                            color: #0B1D30; 
+                            border: 2px solid #0B1D30; 
+                            padding: 8px 16px; 
+                            border-radius: 8px; 
+                            cursor: pointer; 
+                            font-weight: 800; 
+                            font-size: 0.85rem; 
+                            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
+                            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                            transform: translateY(0);
+                        }}
+                        button:hover {{ 
+                            background-color: #F4F1E1; 
+                            transform: translateY(-4px); 
+                            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
+                        }}
+                        button:active {{
+                            transform: translateY(1px);
+                            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
+                        }}
+                    </style>
+                    </head>
+                    <body>
+                        <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                        <script>
+                        function copyToClipboard() {{
+                            const ta = document.createElement('textarea');
+                            ta.value = "{port_copy_str}";
+                            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                            const btn = document.getElementById('copyPortBtn');
+                            btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                        }}
+                        </script>
+                    </body>
+                    </html>
+                    """
+                    components.html(port
