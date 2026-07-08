@@ -1,135 +1,546 @@
-import streamlit as st
+import requests
+import time
+import random
+import re
+import pandas as pd
+import numpy as np
+import io  
+import os
+import sys
+import warnings
+from bs4 import BeautifulSoup
+from sqlalchemy import create_engine
+from sqlalchemy import text
+from playwright.sync_api import sync_playwright
 
-def apply_custom_css():
-    st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-            
-            /* GLOBAL AESTHETICS */
-            html { zoom: 1; } 
-            html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-            #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-            div[data-testid="stStatusWidget"] { visibility: hidden; }
-            .stApp { background-color: #F4F1E1 !important; }
-            h1, h2, h3, h4, h5, h6, p, span { color: #0B1D30; }
-            
-            /* EXTREME COMPACT MODE (Reduced Whitespace) */
-            .block-container { 
-                padding-top: 1.5rem !important; 
-                padding-bottom: 0rem !important; 
-                max-width: 98% !important; 
-                gap: 0.5rem !important;
-            }
-            
-            /* ABSOLUTE POSITION NATIVE TOGGLE INSIDE PREMIUM HEADER */
-            div[data-testid="stToggle"] {
-                position: absolute;
-                top: 40px;
-                right: 220px;
-                z-index: 10;
-                background: rgba(255, 255, 255, 0.95);
-                padding: 4px 12px;
-                border-radius: 8px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-                border: 1px solid rgba(11,29,48,0.1);
-            }
-            @media (max-width: 768px) {
-                div[data-testid="stToggle"] { top: 15px; right: 15px; }
-            }
+# Force unbuffered output so execution logs write instantly to Windows command prompt
+sys.stdout.reconfigure(line_buffering=True)
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
-            /* PREMIUM CUSTOM HEADER */
-            .premium-header {
-                background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%); 
-                border-radius: 12px;
-                padding: 20px 30px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                position: relative;
-                overflow: hidden;
-                margin-bottom: 15px;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-                box-shadow: 0 8px 20px rgba(11, 29, 48, 0.2);
-            }
-            .premium-header::after {
-                content: ''; position: absolute; top: -50px; right: -50px; width: 350px; height: 200%;
-                background: #F4F1E1; transform: rotate(20deg); z-index: 1;
-                box-shadow: -15px 0 35px rgba(0,0,0,0.4); border-left: 2px solid rgba(255, 255, 255, 0.4);
-            }
-            .header-left { position: relative; z-index: 2; }
-            .header-title { color: #FFFFFF !important; margin: 0; font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px;}
-            .header-subtitle { color: #FFFFFF !important; margin: 2px 0 0 0; font-size: 0.9rem; opacity: 0.9; }
-            .header-right { position: relative; z-index: 2; text-align: right; padding-right: 10px;}
-            .header-right .live-status { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
-            .header-right .time { font-size: 1.4rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
-            .header-right .date { font-size: 0.85rem; font-weight: 600; color: #3A4A5A;}
+# ==========================================
+# 0. CREDENTIALS & DATABASE CONFIG
+# ==========================================
+SCREENER_EMAIL = "ajayreddypalnati@gmail.com"
+SCREENER_PASSWORD = "sunnyreddi999@AA"
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    print("\n❌ FATAL ERROR: DATABASE_URL environment variable is missing on this machine.")
+    sys.exit(1)
+
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+if "?pgbouncer=true" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("?pgbouncer=true", "")
+
+try:
+    print("\n🔌 SYSTEM: Connecting to Supabase Cloud Database...")
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=1800)
+    print("✅ SYSTEM: Database connection established successfully.")
+except Exception as e:
+    print(f"❌ FATAL ERROR: Could not connect to database: {e}")
+    sys.exit(1)
+
+SCREENER_URL = "https://www.screener.in/screens/3299871/all-screener-stocks/"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# ==========================================
+# 1. AUTO-LOGIN FUNCTION (PLAYWRIGHT)
+# ==========================================
+def get_fresh_screener_cookies(email, password):
+    print("\n🤖 AUTO-LOGIN: Launching invisible browser to authenticate with Screener...")
+    cookie_string = ""
+    
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(user_agent=USER_AGENT)
+            page = context.new_page()
+
+            page.goto("https://www.screener.in/login/")
+            page.fill("input[name='username']", email)
+            page.fill("input[name='password']", password)
+            page.click("button[type='submit']")
+
+            page.wait_for_timeout(8000)
             
-            /* ANIMATIONS */
-            @keyframes pulse-green {
-                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7); }
-                70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(39, 174, 96, 0); }
-                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(39, 174, 96, 0); }
-            }
-            @keyframes pulse-logo {
-                0% { transform: scale(1); opacity: 0.6; }
-                50% { transform: scale(1.3); opacity: 1; text-shadow: 0 0 20px #FFD700; }
-                100% { transform: scale(1); opacity: 0.6; }
-            }
-            .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
-
-            /* SAAS NAVIGATION TABS - COMPACT (Updated for newest Streamlit DOM) */
-            div[data-testid="stTabs"] [role="tablist"] { 
-                display: flex !important; width: 100% !important; gap: 10px !important; margin-bottom: 15px !important; border-bottom: none !important; padding-top: 5px !important;
-            }
-            div[data-testid="stTabs"] button[role="tab"] {
-                flex: 1 !important; width: 100% !important; background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
-                border-radius: 8px !important; padding: 12px 5px !important; border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                box-shadow: 0 4px 10px rgba(11, 29, 48, 0.15) !important; transform: translateY(0) !important; transition: all 0.2s !important;
-            }
-            div[data-testid="stTabs"] button[role="tab"]:hover { 
-                transform: translateY(-3px) !important; background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important; 
-            }
-            div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-                background: #FFFFFF !important; border: 1px solid #0B1D30 !important; border-top: 5px solid #0B1D30 !important; transform: translateY(-3px) !important; box-shadow: 0 8px 15px rgba(11, 29, 48, 0.1) !important;
-            }
-            div[data-testid="stTabs"] button[role="tab"] p { 
-                font-size: 1.15rem !important; font-weight: 800 !important; color: #FFFFFF !important; margin: 0 !important; white-space: nowrap !important; 
-            }
-            div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p { 
-                color: #0B1D30 !important; 
-            }
-            div[data-baseweb="tab-highlight"], div[data-testid="stTabs"] [data-testid="stTabIndicator"] { 
-                display: none !important; 
-            }
-
-            /* TABLES (Sleek & Compact) */
-            .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow-x: auto; border-radius: 8px; border: 1px solid #0B1D30; background: #FFFFFF;}
-            .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; overflow: hidden; font-size: 0.9rem !important;}
-            .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; padding: 8px 4px !important; font-weight: 700 !important;}
-            .scrollable-table-container td { color: #111827 !important; text-align: center !important; vertical-align: middle !important; padding: 6px 4px !important; border-bottom: 1px solid rgba(11, 29, 48, 0.05) !important; }
+            cookies = context.cookies()
+            cookie_dict = {cookie['name']: cookie['value'] for cookie in cookies}
+            csrf = cookie_dict.get('csrftoken', '')
+            session = cookie_dict.get('sessionid', '')
             
-            .sleek-table-wrapper { width: 100%; border: 1px solid #0B1D30; border-radius: 8px; overflow-x: auto; background: #FFFFFF; }
-            .sleek-table { width: 100%; border-collapse: collapse; font-size: 0.9rem !important; }
-            .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; padding: 8px 4px; font-weight: 700 !important; }
-            .sleek-table td { color: #111827 !important; text-align: center; padding: 6px 4px; border-bottom: 1px solid rgba(11, 29, 48, 0.05); }
-
-            /* FORMS & WIDGETS COMPACT MODE */
-            div[data-testid="stSelectbox"] > div { min-height: 2.2rem !important; border-radius: 6px !important; }
-            div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
-                background-color: #FFFFFF !important; color: #0B1D30 !important; border: 1px solid #0B1D30 !important; padding: 0.4rem !important; font-size: 0.95rem !important;
-            }
-            div[data-testid="stButton"] button {
-                background-color: #FFFFFF !important; color: #0B1D30 !important; border: 2px solid #0B1D30 !important; border-radius: 6px !important; font-weight: 700 !important; padding: 0.25rem 0.5rem !important; height: auto !important; min-height: 38px !important;
-            }
-            div[data-testid="stButton"] button:hover { background-color: #F4F1E1 !important; }
-            div[role="radiogroup"] label { color: #0B1D30 !important; font-size: 0.9rem !important; }
+            if session:
+                print("   ✅ Login successful! Extracted fresh session tokens.")
+            else:
+                print("   ❌ WARNING: Could not find 'sessionid'. Login likely failed.")
+                sys.exit(1)
             
-            /* FILE UPLOAD COMPACT */
-            div[data-testid="stFileUploader"] { background-color: #FFFFFF !important; border: 1px dashed #0B1D30 !important; border-radius: 6px !important; padding: 10px !important; }
-            div[data-testid="stFileUploader"] span { font-weight: 600 !important; }
+            cookie_string = f"csrftoken={csrf}; sessionid={session}"
+            browser.close()
+            
+    except Exception as e:
+        print(f"   ❌ Auto-login script crashed: {e}")
+        sys.exit(1)
+        
+    return cookie_string
 
-            /* GRAPHS */
-            div.stPlotlyChart { background-color: #FFFFFF !important; border: 1px solid #0B1D30 !important; border-radius: 8px !important; box-shadow: 0 4px 10px rgba(11, 29, 48, 0.05) !important; padding: 10px !important; }
-            @media (max-width: 768px) { div.stPlotlyChart svg text { font-size: 10px !important; } div.stPlotlyChart svg g.textpoint { transform: translateY(-15px); } }
-        </style>
-    """, unsafe_allow_html=True)
+# ==========================================
+# HELPER FUNCTIONS
+# ==========================================
+def random_sleep(min_ms=800, max_ms=2000):
+    time.sleep(random.uniform(min_ms / 1000, max_ms / 1000))
+
+def fetch_with_retry(session, url, referer_url=None, retries=3):
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Cookie": session.screener_cookies
+    }
+    if referer_url: headers["Referer"] = referer_url
+        
+    for attempt in range(1, retries + 1):
+        try:
+            resp = session.get(url, headers=headers, timeout=15)
+            if resp.status_code == 200: return resp.text
+            elif resp.status_code == 429:
+                print(f"   ⚠️ WARNING: Rate limited by Screener (429). Pausing for 15 seconds...")
+                time.sleep(15)
+        except Exception:
+            pass
+        random_sleep(1500, 3500)
+    return None
+
+def run_daily_scraper():
+    print("\n" + "="*60)
+    print("🚀 STARTING: Cloud-Native Market Scraper & Trend Engine")
+    print("="*60)
+    
+    fresh_cookies = get_fresh_screener_cookies(SCREENER_EMAIL, SCREENER_PASSWORD)
+    session = requests.Session()
+    session.screener_cookies = fresh_cookies
+    
+    # ==========================================
+    # STEP 1: FETCH STATIC DB MAP & CACHE
+    # ==========================================
+    print("\n📚 STEP 1: Checking database for companies we already know...")
+    try:
+        static_df = pd.read_sql("SELECT * FROM sector_master", engine)
+        
+        col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
+        col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
+        col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
+        col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+        col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
+        col_ath = next((c for c in static_df.columns if 'alltime' in str(c).lower() or 'ath' in str(c).lower()), 'Alltime High  Rs.')
+        
+        unknown_mask = (static_df[col_s] == 'Unknown') | (static_df[col_i] == 'Unknown')
+        if unknown_mask.any():
+            print(f"   🧹 Found {unknown_mask.sum()} incomplete profiles. Forcing a re-scrape for them...")
+            with engine.begin() as conn:
+                conn.execute(text(f'DELETE FROM sector_master WHERE "{col_s}" = \'Unknown\' OR "{col_i}" = \'Unknown\''))
+            static_df = static_df[~unknown_mask]
+        
+        cols_to_keep = [c for c in [col_n, col_t, col_s, col_i, col_e, col_ath] if c in static_df.columns]
+        static_subset = static_df[cols_to_keep].copy()
+        static_subset.columns = ['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH']
+        static_subset['Name'] = static_subset['Name'].astype(str).str.strip()
+        
+        known_names = set(static_subset['Name'].tolist())
+        print(f"   ✅ Cache Loaded: We currently have {len(known_names)} companies saved in Supabase.")
+    except Exception as e:
+        print(f"   ⚠️ Could not load database cache. Starting fresh. ({e})")
+        known_names = set()
+        static_subset = pd.DataFrame(columns=['Name', 'Ticker', 'Sector', 'Broad Industry', 'Exchange', 'Static_ATH'])
+
+    if 'Exchange' not in static_subset.columns:
+        static_subset['Exchange'] = "NSE"
+
+    # ==========================================
+    # STEP 2: FAST LIVE SCRAPE (MAIN TABLES)
+    # ==========================================
+    print("\n📡 STEP 2: Scanning Screener.in for live market prices...")
+    first_page = fetch_with_retry(session, SCREENER_URL)
+    if not first_page: 
+        print("   ❌ FATAL ERROR: Cannot reach Screener.in. Check internet connection.")
+        return
+        
+    page_match = re.search(r'Showing page \d+ of (\d+)', first_page)
+    total_pages = int(page_match.group(1)) if page_match else 1
+    print(f"   📋 Found {total_pages} pages of live market data. Downloading now...")
+    
+    all_dataframes = []
+    
+    for page in range(1, total_pages + 1):
+        page_url = SCREENER_URL if page == 1 else f"{SCREENER_URL}?page={page}"
+        referer_url = None if page == 1 else (SCREENER_URL if page == 2 else f"{SCREENER_URL}?page={page-1}")
+        
+        html_content = first_page if page == 1 else fetch_with_retry(session, page_url, referer_url=referer_url)
+        if not html_content: continue
+        
+        try:
+            tables = pd.read_html(io.StringIO(html_content), thousands=',')
+            if tables:
+                df = tables[0]
+                df = df[df['Name'] != 'Name'].copy()
+                df['Name'] = df['Name'].astype(str).str.strip()
+                
+                soup = BeautifulSoup(html_content, 'html.parser')
+                table = soup.find('table')
+                codes = []
+                if table and table.find('tbody'):
+                    for tr in table.find('tbody').find_all('tr'):
+                        if tr.find('th'): continue
+                        a_tag = tr.find('a', href=re.compile(r'/company/([A-Za-z0-9_\-&]+)/'))
+                        if a_tag:
+                            code = re.search(r'/company/([A-Za-z0-9_\-&]+)/', a_tag['href']).group(1)
+                            codes.append(code.upper())
+                
+                if len(codes) == len(df):
+                    df['live_ticker_slug'] = codes 
+                    all_dataframes.append(df)
+                else:
+                    print(f"      ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                    
+        except Exception as e:
+            print(f"      ⚠️ ERROR parsing page {page}: {e}")
+            
+        if page % 10 == 0 or page == total_pages:
+            print(f"      -> Processed {page}/{total_pages} pages...")
+            
+        if page < total_pages: random_sleep(800, 1500)
+
+    if not all_dataframes: 
+        print("   ❌ FATAL ERROR: No data scraped. Exiting.")
+        return
+        
+    live_df = pd.concat(all_dataframes, ignore_index=True)
+    print(f"   ✅ Done! Collected live data for {len(live_df)} active companies.")
+    
+    # ==========================================
+    # STEP 3: DEEP SCRAPE MISSING NAMES ONLY
+    # ==========================================
+    print("\n🕵️‍♂️ STEP 3: Checking for brand new companies (IPOs, name changes)...")
+    live_names = set(live_df['Name'].tolist())
+    missing_names = [n for n in live_names if n not in known_names]
+    
+    if missing_names:
+        missing_df = live_df[live_df['Name'].isin(missing_names)].drop_duplicates(subset=['Name'])
+        total_missing = len(missing_df)
+        print(f"   🚨 Found {total_missing} NEW companies! Fetching their sector details...")
+        new_records = []
+        
+        current_count = 0
+        for idx, row in missing_df.iterrows():
+            current_count += 1
+            stock_name = row['Name']
+            code = row['live_ticker_slug']
+            url = f"https://www.screener.in/company/{code}/"
+            
+            if current_count > 1 and current_count % 25 == 0:
+                cooldown = random.randint(6, 12)
+                print(f"      💤 Anti-Block Trigger: Taking a {cooldown}-second stealth pause...")
+                time.sleep(cooldown)
+
+            print(f"      -> [{current_count}/{total_missing}] Investigating: {stock_name}")
+            page_html = fetch_with_retry(session, url, referer_url=SCREENER_URL)
+            
+            sector, industry, exchange_class = "Unknown", "Unknown", ""
+            if page_html:
+                soup = BeautifulSoup(page_html, 'html.parser')
+                sec_tag = soup.find('a', title='Sector')
+                ind_tag = soup.find('a', title='Broad Industry')
+                if sec_tag: sector = sec_tag.text.strip()
+                if ind_tag: industry = ind_tag.text.strip()
+
+                nse_link = soup.find('a', href=re.compile(r'nseindia\.com/get-quotes/equity\?symbol='))
+                bse_link = soup.find('a', href=re.compile(r'bseindia\.com/stock-share-price/'))
+
+                if nse_link:
+                    span_tag = nse_link.find('span')
+                    exchange_class = "NSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "NSE"
+                elif bse_link:
+                    span_tag = bse_link.find('span')
+                    exchange_class = "BSE SME" if (span_tag and 'SME' in span_tag.text.upper()) else "BSE"
+                else:
+                    exchange_class = "BSE" if code.isdigit() else "NSE"
+            else:
+                exchange_class = "BSE" if code.isdigit() else "NSE"
+                
+            try:
+                original_col_t = next((c for c in static_df.columns if str(c).strip().lower() == 'ticker'), 'Ticker')
+                original_col_n = next((c for c in static_df.columns if str(c).strip().lower() == 'name'), 'Name')
+                original_col_s = next((c for c in static_df.columns if str(c).strip().lower() == 'sector'), 'Sector')
+                original_col_i = next((c for c in static_df.columns if 'industry' in str(c).lower()), 'Broad Industry')
+                original_col_e = next((c for c in static_df.columns if 'exchange' in str(c).lower()), 'Exchange')
+                
+                new_records.append({
+                    original_col_n: stock_name,
+                    original_col_t: code, 
+                    original_col_s: sector, 
+                    original_col_i: industry, 
+                    original_col_e: exchange_class
+                })
+            except Exception:
+                pass
+            random_sleep(800, 1500)
+            
+        if new_records:
+            new_static_df = pd.DataFrame(new_records)
+            print(f"   ☁️ Saving {len(new_records)} new companies permanently to database...")
+            try:
+                new_static_df.to_sql("sector_master", engine, if_exists="append", index=False)
+                new_static_mapped = pd.DataFrame({
+                    'Name': [r.get(original_col_n) for r in new_records],
+                    'Ticker': [r.get(original_col_t) for r in new_records],
+                    'Sector': [r.get(original_col_s) for r in new_records],
+                    'Broad Industry': [r.get(original_col_i) for r in new_records],
+                    'Exchange': [r.get(original_col_e) for r in new_records],
+                    'Static_ATH': [np.nan for _ in new_records]
+                })
+                static_subset = pd.concat([static_subset, new_static_mapped], ignore_index=True)
+                print("   ✅ New companies saved successfully.")
+            except Exception as e:
+                print(f"   ❌ Failed to save new companies: {e}")
+    else:
+        print("   ✅ No new companies today. Existing database is perfectly up to date.")
+
+    # ==========================================
+    # STEP 4: MERGE, CLEAN, & CALCULATE MOMENTUM
+    # ==========================================
+    print("\n🧮 STEP 4: Calculating cross-sectional momentum scores...")
+    ret_1m = next((c for c in live_df.columns if '1m' in c.lower() and 'return' in c.lower()), None)
+    ret_3m = next((c for c in live_df.columns if '3m' in c.lower() and 'return' in c.lower()), None)
+    ret_6m = next((c for c in live_df.columns if '6m' in c.lower() and 'return' in c.lower()), None)
+
+    if ret_1m and ret_3m and ret_6m:
+        live_df[ret_1m] = pd.to_numeric(live_df[ret_1m], errors='coerce')
+        live_df[ret_3m] = pd.to_numeric(live_df[ret_3m], errors='coerce')
+        live_df[ret_6m] = pd.to_numeric(live_df[ret_6m], errors='coerce')
+
+        rank_1m = live_df[ret_1m].rank(ascending=False, method='min')
+        rank_3m = live_df[ret_3m].rank(ascending=False, method='min')
+        rank_6m = live_df[ret_6m].rank(ascending=False, method='min')
+        
+        momentum_score = (rank_1m * 2) + (rank_3m * 4) + (rank_6m * 4)
+        valid_mask = live_df[[ret_1m, ret_3m, ret_6m]].notna().all(axis=1)
+        live_df['Relative score'] = momentum_score.where(valid_mask, np.nan)
+        print("   ✅ Momentum calculated and assigned to all stocks.")
+    else:
+        print("   ⚠️ WARNING: 1M/3M/6M return columns are missing. Cannot calculate momentum.")
+        live_df['Relative score'] = np.nan
+
+    live_df = live_df.drop(columns=['live_ticker_slug'])
+    merged_df = pd.merge(live_df, static_subset, on='Name', how='left')
+    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()].copy()
+
+    # ==========================================
+    # STEP 5.1: SECTOR & INDUSTRY ATH (Excluding SMEs only)
+    # ==========================================
+    print("\n📊 STEP 5: Generating Sector Breakout Rankings & Market Breadth...")
+    col_cmp = next((c for c in merged_df.columns if 'cmp' in c.lower()), None)
+    sector_summary_df = pd.DataFrame()
+    industry_summary_df = pd.DataFrame()
+    
+    if col_cmp and 'Static_ATH' in merged_df.columns:
+        merged_df['Static_ATH'] = pd.to_numeric(merged_df['Static_ATH'], errors='coerce')
+        merged_df[col_cmp] = pd.to_numeric(merged_df[col_cmp], errors='coerce')
+        
+        merged_df['is_ath'] = merged_df[col_cmp] >= (0.9 * merged_df['Static_ATH'])
+        
+        analysis_df = merged_df[~merged_df['Exchange'].astype(str).str.contains('SME', case=False, na=False)].copy()
+
+        def build_summary_table(df, group_col):
+            valid_df = df[(df[group_col] != "Unknown") & (df[group_col].notna())]
+            if valid_df.empty: return pd.DataFrame()
+            summary = valid_df.groupby(group_col).agg(Total_Stocks=('is_ath', 'count'), ATH_Stocks=('is_ath', 'sum')).reset_index()
+            summary['ATH %'] = (summary['ATH_Stocks'] / summary['Total_Stocks'] * 100).round(2)
+            summary = summary.sort_values(by='ATH %', ascending=False).reset_index(drop=True)
+            summary['Rank'] = summary.index + 1
+            return summary
+
+        sector_summary_df = build_summary_table(analysis_df, 'Sector')
+        industry_summary_df = build_summary_table(analysis_df, 'Broad Industry')
+        merged_df = merged_df.drop(columns=['Static_ATH', 'is_ath'])
+        print("   ✅ Sector and Industry ATH rankings generated successfully.")
+
+    # ==========================================
+    # STEP 5.2: DAILY MARKET MOOD ENGINE & HOLIDAY ENGINE
+    # ==========================================
+    now_ist = pd.Timestamp.now(tz='Asia/Kolkata')
+    
+    # DATE ALIGNMENT: If the VPS runs this after midnight IST (e.g., late UTC schedule),
+    # the script must log the data against the previous trading day.
+    if now_ist.hour < 9:
+        trading_date = now_ist - pd.Timedelta(days=1)
+    else:
+        trading_date = now_ist
+
+    today_date_str = trading_date.strftime('%Y-%m-%d')
+    is_weekday = trading_date.weekday() < 5  
+    
+    historical_mood_df = pd.DataFrame()
+    already_logged = False
+    is_nse_holiday = False
+    
+    if is_weekday:
+        print(f"\n   🕒 Date check passed for trading day {today_date_str}. Running Market Engine...")
+        try:
+            # 1. Check if today's date was already written to prevent duplicate log attempts
+            query_dup = text(f"""SELECT * FROM historical_market_mood WHERE "Date" = '{today_date_str}'""")
+            with engine.connect() as conn:
+                existing_mood = pd.read_sql(query_dup, conn)
+            already_logged = not existing_mood.empty
+        except Exception:
+            already_logged = False
+            
+        if not already_logged:
+            mood_analysis_df = merged_df[merged_df['Exchange'].astype(str).str.strip().str.upper() == 'NSE'].copy()
+            
+            col_chg = next((c for c in mood_analysis_df.columns if 'return over 1day' in c.lower() or '1d' in c.lower() or 'chg' in c.lower()), None)
+            if not col_chg: col_chg = next((c for c in mood_analysis_df.columns if 'return' in c.lower() and '1' in c.lower()), None)
+
+            if col_chg:
+                mood_analysis_df[col_chg] = pd.to_numeric(mood_analysis_df[col_chg], errors='coerce')
+                valid_returns = mood_analysis_df[mood_analysis_df[col_chg].notna()]
+                total_stocks = int(len(valid_returns))
+                positive_stocks = int((valid_returns[col_chg] > 0).sum())
+                
+                if total_stocks > 0:
+                    ratio = positive_stocks / total_stocks
+                    score = ratio * 100
+                    pct_str = f"{score:.2f}%"  
+                    
+                    # --- NEW CODE: THE ADVANCED HOLIDAY DETECTION SYSTEM ---
+                    print("   🔍 HOLIDAY DETECTOR: Comparing values with last logged entry...")
+                    try:
+                        query_last = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 1')
+                        with engine.connect() as conn:
+                            last_entry_df = pd.read_sql(query_last, conn)
+                        
+                        if not last_entry_df.empty:
+                            last_text = str(last_entry_df['Market Breadth'].iloc[0])
+                            match_pct = re.search(r'([0-9.]+)%', last_text)
+                            if match_pct:
+                                last_logged_pct = float(match_pct.group(1))
+                                today_rounded_pct = round(score, 2)
+                                
+                                # Lock 1: Do the percentages match up to 2 decimal places?
+                                if today_rounded_pct == last_logged_pct:
+                                    # Lock 2: Stagnancy Guard (Did price returns freeze across the broad index?)
+                                    return_variance = float(valid_returns[col_chg].var())
+                                    
+                                    if np.isnan(return_variance) or return_variance == 0.0 or (valid_returns[col_chg] == 0.0).mean() > 0.95:
+                                        is_nse_holiday = True
+                                        print(f"   🛑 HOLIDAY DETECTED: Today's precision score is matching previous active session ({today_rounded_pct}%).")
+                                        print("      广 Return analysis confirms 0% market variance. Skipping timeline insertion.")
+                    except Exception as e:
+                        print(f"   ⚠️ Holiday check warning (Skipping safe check execution): {e}")
+                    # ----------------------------------------------------------------------
+                    
+                    if not is_nse_holiday:
+                        if score <= 20: mood_label = f"Super Negative 🐻 {pct_str}"
+                        elif score <= 40: mood_label = f"Negative 🔻 {pct_str}"
+                        elif score <= 60: mood_label = f"Neutral ⚖️ {pct_str}"
+                        elif score <= 80: mood_label = f"Positive 💚 {pct_str}"
+                        else: mood_label = f"Super Positive 🚀 {pct_str}"
+                            
+                        historical_mood_df = pd.DataFrame([{"Date": today_date_str, "Market Breadth": mood_label}])
+                        
+                        print(f"      📊 Today's Result: Total NSE Mainboard: {total_stocks} | Positive: {positive_stocks}")
+                        print(f"      🚦 Today's Mood: {mood_label}")
+                        
+                        try:
+                            historical_mood_df.to_sql("historical_market_mood", engine, if_exists="append", index=False)
+                            print("      ✅ Market Mood successfully logged to history.")
+                        except Exception as e:
+                            print(f"      ❌ Failed to save market mood: {e}")
+        else:
+            print(f"   ⏸️ Market mood for {today_date_str} is already logged. Skipping duplicate.")
+    else:
+        print(f"\n   ⏸️ Skipping Market Mood: {today_date_str} is not a valid weekday.")
+
+    # ==========================================
+    # STEP 5.3: COMPOSITE SMOOTHED TREND ENGINE
+    # ==========================================
+    if is_weekday and not already_logged and not is_nse_holiday:
+        print("\n   📈 Calculating 7-Day, 14-Day, and 21-Day Composite Trend...")
+        try:
+            query_all = text('SELECT * FROM historical_market_mood ORDER BY "Date" DESC LIMIT 30')
+            with engine.connect() as conn:
+                hist_df = pd.read_sql(query_all, conn)
+            
+            if not historical_mood_df.empty:
+                hist_df = pd.concat([historical_mood_df, hist_df], ignore_index=True).drop_duplicates(subset=['Date'])
+            hist_df = hist_df.sort_values(by='Date', ascending=True).reset_index(drop=True)
+            
+            if len(hist_df) >= 7:
+                def extract_percentage(text_val):
+                    match = re.search(r'([0-9.]+)%', str(text_val))
+                    return float(match.group(1)) if match else np.nan
+
+                hist_df['pct_value'] = hist_df['Market Breadth'].apply(extract_percentage)
+                
+                val_7d = hist_df['pct_value'].iloc[-7:].mean() if len(hist_df) >= 7 else np.nan
+                val_14d = hist_df['pct_value'].iloc[-14:].mean() if len(hist_df) >= 14 else val_7d
+                val_21d = hist_df['pct_value'].iloc[-21:].mean() if len(hist_df) >= 21 else val_14d
+                
+                final_score = (val_7d * 5 + val_14d * 3 + val_21d * 2) / 10
+                pct_str = f"{final_score:.2f}%"
+                
+                if final_score <= 20: trend_label = f"Super Negative 🐻 {pct_str}"
+                elif final_score <= 40: trend_label = f"Negative 🔻 {pct_str}"
+                elif final_score <= 60: trend_label = f"Neutral ⚖️ {pct_str}"
+                elif final_score <= 80: trend_label = f"Positive 💚 {pct_str}"
+                else: trend_label = f"Super Positive 🚀 {pct_str}"
+                
+                print(f"      🎯 Rolling Averages: 7D: {val_7d:.1f}% | 14D: {val_14d:.1f}% | 21D: {val_21d:.1f}%")
+                print(f"      🏆 Final Market Regime: {trend_label}")
+                
+                trend_summary_df = pd.DataFrame([{
+                    "last_updated": today_date_str,
+                    "avg_7d": round(val_7d, 2),
+                    "avg_14d": round(val_14d, 2),
+                    "avg_21d": round(val_21d, 2),
+                    "composite_score": round(final_score, 2),
+                    "trend_regime": trend_label
+                }])
+                trend_summary_df.to_sql("market_trend_summary", engine, if_exists="replace", index=False)
+            else:
+                print("      ⚠️ Not enough history to calculate rolling averages yet.")
+        except Exception as e:
+            print(f"      ❌ Trend Engine Error: {e}")
+    elif is_nse_holiday:
+        print("\n   ⏸️ Trend Engine Paused: Rolling calculations skipped due to NSE Trading Holiday.")
+
+    # ==========================================
+    # STEP 6: PUSH DATA BACK TO CLOUD TABLES
+    # ==========================================
+    print("\n📦 STEP 6: Delivering all final data to Supabase (Chunked Upload)...")
+    try:
+        merged_df.to_sql("stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
+        
+        if not sector_summary_df.empty:
+            sector_summary_df.to_sql("sector_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'sector_analysis' overwritten successfully.")
+            
+        if not industry_summary_df.empty:
+            industry_summary_df.to_sql("industry_analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            print(f"   ✅ 'industry_analysis' overwritten successfully.")
+            
+        timestamp_string = pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y, %I:%M %p')
+        sync_df = pd.DataFrame([{"last_sync": timestamp_string}])
+        sync_df.to_sql("sync_log", engine, if_exists="replace", index=False)
+        print(f"   🕒 Data timestamp set to IST: {timestamp_string}")
+            
+    except Exception as e:
+        print(f"   ❌ FATAL ERROR during database upload: {e}")
+
+    print("\n" + "="*60)
+    print("🎉 SUCCESS: Entire daily pipeline finished without errors!")
+    print("="*60 + "\n")
+
+if __name__ == "__main__":
+    run_daily_scraper()
