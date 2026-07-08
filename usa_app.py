@@ -640,30 +640,46 @@ def run_usa_screener():
 
     # --- 4. PORTFOLIO TRACKER TAB ---
     with tab_port:
-        col_text, col_clear = st.columns([8, 2])
+        col_text, col_clear = st.columns([9, 2], vertical_alignment="center")
         with col_text:
-            st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 5px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='color:#4B5563; font-size:0.9rem; margin:0;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
         with col_clear:
             if st.button("🧹 Clear Cache & Reset Data", use_container_width=True):
                 st.cache_data.clear()
                 st.rerun()
 
-        st.markdown("<hr style='margin: 10px 0px 20px 0px; border-color: #E5E7EB;'>", unsafe_allow_html=True)
+        st.markdown("""
+<style>
+div[data-testid="stRadio"]{
+    margin-top:-4px !important;
+    margin-bottom:0px !important;
+    padding-top:0px !important;
+    padding-bottom:0px !important;
+}
 
-        # Centered Radio
-        col_radio1, col_radio2, col_radio3 = st.columns([3, 4, 3])
-        with col_radio2:
-            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
+div[role="radiogroup"]{
+    margin:0 !important;
+    padding:0 !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        data_source = st.radio(
+            "",
+            ["Upload CSV", "Google Sheets"],
+            index=1,
+            horizontal=True,
+            label_visibility="collapsed"
+        )
+
 
         # Input and Load Button layout
-        input_col, btn_col = st.columns([8, 2])
+        input_col, btn_col = st.columns([9, 2])
         with input_col:
             if data_source == "Upload CSV":
                 uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
             else:
-                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed")
+                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...", label_visibility="collapsed")
         
         with btn_col:
             load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
