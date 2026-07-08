@@ -42,13 +42,26 @@ st.markdown("""
         
         /* RESTORED CENTERED ALIGNMENT CAP */
         .block-container { 
-            padding-top: 1.5rem; 
+            padding-top: 0rem !important; 
             padding-bottom: 0rem; 
             max-width: 98%; 
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
         
+        
+        section.main > div {
+            padding-top: 0rem !important;
+        }
+
+        [data-testid="stAppViewContainer"] > .main {
+            padding-top: 0rem !important;
+        }
+
+        .premium-header {
+            margin-top: -12px;
+        }
+
         /* GLOBAL THEME BACKGROUND (Cream) */
         .stApp { background-color: #F4F1E1 !important; }
         h1, h2, h3, h4, h5, h6, p, span { color: #0B1D30; }
