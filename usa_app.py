@@ -487,7 +487,7 @@ def run_usa_screener():
                 link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
                 html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
                 
-            st.markdown(f'<div class="scrollable-table-container" style="border:2px solid #0B1D30;border-radius:10px;overflow:hidden;">{html_table}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
         else: 
             st.info("No US stocks matching criteria right now.")
 
@@ -644,7 +644,7 @@ def run_usa_screener():
                     link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
                     html_us_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_us_table)
                 
-                st.markdown(f'<div class="scrollable-table-container" style="border:2px solid #0B1D30;border-radius:10px;overflow:hidden;">{html_us_table}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="scrollable-table-container">{html_us_table}</div>', unsafe_allow_html=True)
             else: st.info("No US ETFs match the criteria at the moment.")
 
     # --- 4. PORTFOLIO TRACKER TAB ---
@@ -875,10 +875,9 @@ div[role="radiogroup"]{
                     
                     has_alert = False
                     
-                    if "ABOVE" in str(row['EMA 21 Status']):
-                        pass
+                    if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
                     elif "BELOW" in str(row['EMA 21 Status']): 
-                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.35); color: #B91C1C; font-weight: bold;'
+                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
                         has_alert = True
                     
                     if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
@@ -905,7 +904,7 @@ div[role="radiogroup"]{
                     "Risk %": "{:.2%}"
                 })
                 
-                st.markdown(f'<div class="scrollable-table-container" style="border:2px solid #0B1D30;border-radius:10px;overflow:hidden;">{styled_port.to_html()}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="scrollable-table-container">{styled_port.to_html()}</div>', unsafe_allow_html=True)
                 
             except Exception as e:
                 st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
