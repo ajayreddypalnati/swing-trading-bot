@@ -3,7 +3,7 @@ name: Daily Stock Scraper
 on:
   schedule:
     # 8:00 PM IST (14:30 UTC)
-    - cron: '30 14 * * *'   
+    - cron: '30 14 * * *'
   workflow_dispatch:
 
 jobs:
@@ -28,4 +28,4 @@ jobs:
       - name: Run scraper
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python scraper.py
+        run: python scrapers/scraper.py
