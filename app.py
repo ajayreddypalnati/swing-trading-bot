@@ -203,17 +203,26 @@ st.markdown("""
             display: none !important; 
         }
         
-        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
+        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT AND ADD PREMIUM SHADOW/HOVER */
         div[data-testid="stButton"] button {
             background-color: #FFFFFF !important;
             color: #0B1D30 !important;
             border: 2px solid #0B1D30 !important;
             border-radius: 8px !important;
             font-weight: 800 !important;
+            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            transform: translateY(0) !important;
         }
         div[data-testid="stButton"] button:hover {
             background-color: #F4F1E1 !important;
             color: #0B1D30 !important;
+            transform: translateY(-4px) !important;
+            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25) !important;
+        }
+        div[data-testid="stButton"] button:active {
+            transform: translateY(1px) !important;
+            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
         }
         
         /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
@@ -253,16 +262,25 @@ st.markdown("""
             color: #0B1D30 !important;
             font-weight: 600 !important;
         }
-        /* Force the Browse Files button to be white with navy text */
+        /* Force the Browse Files button to be white with navy text AND ADD PREMIUM SHADOW/HOVER */
         div[data-testid="stFileUploader"] button {
             background-color: #FFFFFF !important;
             color: #0B1D30 !important;
             border: 2px solid #0B1D30 !important;
-            border-radius: 6px !important;
+            border-radius: 8px !important;
             font-weight: 800 !important;
+            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            transform: translateY(0) !important;
         }
         div[data-testid="stFileUploader"] button:hover {
             background-color: #F4F1E1 !important;
+            transform: translateY(-4px) !important;
+            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25) !important;
+        }
+        div[data-testid="stFileUploader"] button:active {
+            transform: translateY(1px) !important;
+            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
         }
         
         /* Pulse Animation for Loader */
