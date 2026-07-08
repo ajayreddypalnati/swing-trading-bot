@@ -93,43 +93,15 @@ st.markdown("""
         .header-title { color: #FFFFFF !important; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;}
         .header-subtitle { color: #FFFFFF !important; margin: 5px 0 0 0; font-size: 1rem; opacity: 0.9; }
         
-        /* HEADER RIGHT TEXT ALIGNMENT */
-        .header-right { 
-            position: relative; 
-            z-index: 2; 
-            text-align: right; 
-            padding-right: 15px;
-            padding-top: 35px; /* Pushes the time/date down to make room */
-        }
+        .header-right { position: relative; z-index: 2; text-align: right; padding-right: 15px;}
         .header-right .live-status { font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #0B1D30;}
         .header-right .time { font-size: 1.6rem; font-weight: 800; margin: 0; color: #0B1D30; line-height: 1.2;}
         .header-right .date { font-size: 0.9rem; font-weight: 600; color: #3A4A5A;}
 
-        /* --- USA / IND TOGGLE INTEGRATION INTO HEADER --- */
-        div[data-testid="stToggle"] {
-            position: absolute !important;
-            top: 65px !important; /* Forces it 65px down from the top of the app into the header */
-            right: 50px !important;
-            z-index: 9999 !important;
-        }
-        
-        div[data-testid="stToggle"] label p {
-            color: #0B1D30 !important;
-            font-weight: 800 !important;
-            font-size: 0.85rem !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-        }
-
-        /* MOBILE RESPONSIVENESS */
         @media (max-width: 768px) {
             .premium-header { flex-direction: column; align-items: flex-start; padding: 20px; }
             .premium-header::after { width: 100%; height: 120px; top: auto; bottom: 0; right: 0; transform: none; box-shadow: none; border-top: 5px solid #E5E1CD;}
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
-            div[data-testid="stToggle"] {
-                top: 20px !important;
-                right: 20px !important;
-            }
         }
         
         /* TABLE STYLING - MODIFIED TO ABSORB NEW COLUMN AND AVOID SCROLLING */
@@ -303,10 +275,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
 # ==========================================
 # MARKET TOGGLE (Placed AFTER CSS so styles load!)
 # ==========================================
-is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False, key="market_toggle")
+col_blank, col_toggle = st.columns([8.5, 1.5])
+with col_toggle:
+    is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
 
 if is_usa:
     import usa_app
