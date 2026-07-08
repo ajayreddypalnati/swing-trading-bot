@@ -272,20 +272,22 @@ st.markdown("""
             100% { transform: scale(1); opacity: 0.6; }
         }
 
-    
-/* Market switch */
-div[data-testid="stSegmentedControl"]{
-    margin-top:-118px;
-    display:flex;
-    justify-content:flex-end;
-}
-div[data-testid="stSegmentedControl"] button{
-    font-weight:700!important;
-}
-
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
+
+# ==========================================
+# MARKET TOGGLE (Placed AFTER CSS so styles load!)
+# ==========================================
+col_blank, col_toggle = st.columns([8.5, 1.5])
+with col_toggle:
+    is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
+
+if is_usa:
+    import usa_app
+    usa_app.run_usa_screener()
+    st.stop() # Stops the Indian app, but keeps the CSS!
+# ==========================================
 
 # ==========================================
 # 2. APIs & ENDPOINTS
@@ -730,15 +732,6 @@ st.markdown(f"""
         </div>
     </div>
 """, unsafe_allow_html=True)
-
-# Market selector
-_sel1,_sel2=st.columns([8.9,1.1])
-with _sel2:
-    market=st.segmented_control("",["🇮🇳 IND","🇺🇸 USA"],default="🇮🇳 IND",key="market_switch")
-if market=="🇺🇸 USA":
-    import usa_app
-    usa_app.run_usa_screener()
-    st.stop()
 
 loader_placeholder = st.empty()
 loader_placeholder.markdown("""
