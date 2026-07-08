@@ -135,6 +135,146 @@ st.markdown("""
             }
         }
 
+        /* PROFESSIONAL FULL-WIDTH SAAS TABS */
+        div[data-baseweb="tab-list"] { 
+            display: flex !important;
+            width: 100% !important;
+            gap: 15px !important;
+            border-bottom: none !important;
+            margin-bottom: 25px !important;
+            padding-top: 10px !important; /* Space for hover pop */
+        }
+        
+        div[data-baseweb="tab"] { 
+            padding: 0 !important;
+            background: transparent !important;
+            flex: 1 !important; /* Forces all tabs to be equal width and span entire screen */
+            min-width: 0 !important;
+        }
+        
+        /* Tab Button Physics & Styling */
+        button[role="tab"] {
+            width: 100% !important;
+            background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
+            border-radius: 12px !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 8px 20px rgba(11, 29, 48, 0.15) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            padding: 20px 10px !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            transform: translateY(0) !important;
+        }
+        
+        /* IMMERSIVE POPUP - Hover Effect for Tabs */
+        button[role="tab"]:hover {
+            transform: translateY(-6px) !important;
+            box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
+            background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
+        }
+        
+        /* Selected Tab State (The White Layer with Thick Navy Line) */
+        button[role="tab"][aria-selected="true"] {
+            background: #FFFFFF !important;
+            border: 2px solid #0B1D30 !important;
+            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
+            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
+        }
+        
+        /* Tab Text Sizing - Restored to large 1.4rem size */
+        button[role="tab"] p { 
+            font-size: 1.4rem !important; 
+            font-weight: 800 !important; 
+            color: #FFFFFF !important; 
+            margin: 0 !important;
+            transition: color 0.3s ease !important;
+            white-space: nowrap !important;
+        }
+        
+        /* Selected Tab Text Color */
+        button[role="tab"][aria-selected="true"] p {
+            color: #0B1D30 !important;
+        }
+        
+        /* Remove default Streamlit tab active line */
+        div[data-baseweb="tab-highlight"] { 
+            display: none !important; 
+        }
+        
+        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT (Fixes dark mode mobile issue) */
+        div[data-testid="stButton"] button {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 2px solid #0B1D30 !important;
+            border-radius: 8px !important;
+            font-weight: 800 !important;
+        }
+        div[data-testid="stButton"] button:hover {
+            background-color: #F4F1E1 !important;
+            color: #0B1D30 !important;
+        }
+        
+        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
+        div[data-testid="stTextInput"] input {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 1px solid #0B1D30 !important;
+        }
+        
+        /* Make Number Input values (like 3.00) massive and bold and white background */
+        div[data-testid="stNumberInput"] input {
+            background-color: #FFFFFF !important;
+            font-size: 1.5rem !important;
+            font-weight: 800 !important;
+            color: #0B1D30 !important;
+            border: 1px solid #0B1D30 !important;
+        }
+        
+        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
+        div[role="radiogroup"] label {
+            color: #0B1D30 !important;
+        }
+
+        /* UPLOAD BUTTON VISIBILITY ON MOBILE - FORCE WHITE BACKGROUND */
+        div[data-testid="stFileUploader"] {
+            background-color: #FFFFFF !important;
+            border: 2px dashed #0B1D30 !important;
+            border-radius: 8px !important;
+            padding: 15px !important;
+        }
+        div[data-testid="stFileUploader"] section {
+            background-color: transparent !important;
+        }
+        div[data-testid="stFileUploader"] span, 
+        div[data-testid="stFileUploader"] p, 
+        div[data-testid="stFileUploader"] small {
+            color: #0B1D30 !important;
+            font-weight: 600 !important;
+        }
+        /* Force the Browse Files button to be white with navy text */
+        div[data-testid="stFileUploader"] button {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 2px solid #0B1D30 !important;
+            border-radius: 6px !important;
+            font-weight: 800 !important;
+        }
+        div[data-testid="stFileUploader"] button:hover {
+            background-color: #F4F1E1 !important;
+        }
+        
+        /* Pulse Animation for Loader */
+        @keyframes pulse-logo {
+            0% { transform: scale(1); opacity: 0.6; }
+            50% { transform: scale(1.3); opacity: 1; text-shadow: 0 0 20px #FFD700; }
+            100% { transform: scale(1); opacity: 0.6; }
+        }
+
+    </style>
+""", unsafe_allow_html=True)
+
 
 # ==========================================
 # MARKET TOGGLE (Placed AFTER CSS so styles load!)
@@ -660,9 +800,18 @@ if data:
 
     if not main_df.empty:
         df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
-        df = df.merge(sec_rank_df, on="sector", how="left")
-        df = df.merge(ind_rank_df, on="broad_industry", how="left")
-        df['Exchange'] = np.where(df['db_exchange'].notna() & (df['db_exchange'] != ""), df['db_exchange'], df['Temp_Exchange'])
+        
+        # Safely merge only if the columns actually exist
+        if 'sector' in df.columns: df = df.merge(sec_rank_df, on="sector", how="left")
+        if 'broad_industry' in df.columns: df = df.merge(ind_rank_df, on="broad_industry", how="left")
+        
+        # Safely extract Exchange
+        db_exch = df.get('db_exchange', pd.Series([""] * len(df), index=df.index))
+        df['Exchange'] = np.where(db_exch.notna() & (db_exch != ""), db_exch, df['Temp_Exchange'])
+        
+        # Guarantee string columns exist for the UI table
+        for col in ['band', 'sector', 'broad_industry', 'sec_rank', 'ind_rank', 'relative_score']:
+            if col not in df.columns: df[col] = ""
     else:
         df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['band'] = "", "", np.nan, np.nan, np.nan, ""
         df['Exchange'] = df['Temp_Exchange']
@@ -882,11 +1031,11 @@ with tab_screeners:
             e_df = etf_df.copy()
             if 'Catergory' in e_df.columns: e_df = e_df.rename(columns={'Catergory': 'Category'})
                 
-            e_df['Turnover (Cr)'] = pd.to_numeric(e_df['Turnover (Cr)'], errors='coerce')
-            e_df['Relative Score'] = pd.to_numeric(e_df['Relative Score'], errors='coerce')
-            e_df['Chg %'] = pd.to_numeric(e_df['Chg %'], errors='coerce')
+            e_df['Turnover (Cr)'] = pd.to_numeric(e_df.get('Turnover (Cr)', 0), errors='coerce')
+            e_df['Relative Score'] = pd.to_numeric(e_df.get('Relative Score', 0), errors='coerce')
+            e_df['Chg %'] = pd.to_numeric(e_df.get('Chg %', 0), errors='coerce')
             
-            f_ema = e_df['EMA 21 Status'].astype(str).str.strip() == "Above 21 Ema"
+            f_ema = e_df.get('EMA 21 Status', '').astype(str).str.strip() == "Above 21 Ema"
             f_turn = e_df['Turnover (Cr)'] >= etf_min_turnover
             valid_etfs = e_df[f_ema & f_turn].sort_values('Relative Score', ascending=True)
             
@@ -992,11 +1141,20 @@ with tab_screeners:
         
         if not main_df.empty:
             mom_df = main_df.copy()
-            mom_df['turnover'] = pd.to_numeric(mom_df['turnover'], errors='coerce')
-            mom_df['down_ath'] = pd.to_numeric(mom_df['down_ath'], errors='coerce')
-            mom_df['relative_score'] = pd.to_numeric(mom_df['relative_score'], errors='coerce')
-            mom_df['market_cap'] = pd.to_numeric(mom_df['market_cap'], errors='coerce')
-            mom_df['1d_return'] = pd.to_numeric(mom_df['1d_return'], errors='coerce')
+            # Ensure we operate on Series even if column missing; strip commas and % before numeric conversion
+            def _col_series(df, col, default=0):
+                src = df.get(col, pd.Series([default] * len(df), index=df.index))
+                # convert to string, remove commas and trailing percent sign, then coerce
+                return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
+
+            mom_df['turnover'] = _col_series(mom_df, 'turnover')
+            mom_df['down_ath'] = _col_series(mom_df, 'down_ath')
+            mom_df['relative_score'] = _col_series(mom_df, 'relative_score')
+            mom_df['market_cap'] = _col_series(mom_df, 'market_cap')
+            mom_df['1d_return'] = _col_series(mom_df, '1d_return')
+            
+            if 'band' not in mom_df.columns: mom_df['band'] = ''
+            if 'db_exchange' not in mom_df.columns: mom_df['db_exchange'] = 'NSE'
             
             f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
             f_turnover = mom_df['turnover'] >= min_turnover
@@ -1111,7 +1269,7 @@ with tab_screeners:
             us_df['Avg Vol 30D'] = pd.to_numeric(us_df.get('Avg Vol 30D', 0), errors='coerce')
             us_df['Expense Ratio'] = pd.to_numeric(us_df.get('Expense Ratio', 0), errors='coerce')
             
-            f_us_ema = us_df['EMA 21 Status'].astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
+            f_us_ema = us_df.get('EMA 21 Status', '').astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
             
             valid_us = us_df[f_us_ema].sort_values('Relative Score', ascending=True)
             
