@@ -28,4 +28,4 @@ jobs:
       - name: Run scraper
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python "US Scraper.py"
+        run: python scrapers/us_scraper.py
