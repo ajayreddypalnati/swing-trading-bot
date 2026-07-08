@@ -606,7 +606,7 @@ def run_usa_screener():
                     """
                     components.html(us_etf_copy_html, height=35)
 
-                st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
 
                 def style_us_etf_row(row):
                     is_top_4 = row.name in top_4_chg_idx
@@ -640,7 +640,7 @@ def run_usa_screener():
 
     # --- 4. PORTFOLIO TRACKER TAB ---
     with tab_port:
-        col_text, col_clear = st.columns([9, 1])
+        col_text, col_clear = st.columns([8, 2])
         with col_text:
             st.markdown("<p style='color:#4B5563; font-size: 0.9rem; margin-top: 5px;'>Track your portfolio via Google Sheets or CSV upload. The app pulls the first 5 columns: Ticker, Entry Date, Entry Price, Stop Loss, Risk.</p>", unsafe_allow_html=True)
         with col_clear:
@@ -648,33 +648,27 @@ def run_usa_screener():
                 st.cache_data.clear()
                 st.rerun()
 
-        st.divider()
+        st.markdown("<hr style='margin: 10px 0px 20px 0px; border-color: #E5E7EB;'>", unsafe_allow_html=True)
 
-        # Portfolio source
-        data_source = st.radio(
-            "Source",
-            ["Google Sheets", "Upload CSV"],
-            index=0,
-            horizontal=True
-        )
+        # Centered Radio
+        col_radio1, col_radio2, col_radio3 = st.columns([3, 4, 3])
+        with col_radio2:
+            data_source = st.radio("Choose Source:", ["Upload CSV", "Google Sheets"], index=1, horizontal=True, label_visibility="collapsed")
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
         # Input and Load Button layout
-        input_col, btn_col = st.columns([8.5, 1.5])
+        input_col, btn_col = st.columns([8, 2])
         with input_col:
             if data_source == "Upload CSV":
                 uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
             else:
-                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1rSMLXOVP_vSxpNqNSSq3sojN2naRoSFm9w6QPDs_hcY/edit?gid=1710176573#gid=1710176573", label_visibility="collapsed")
+                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed")
         
         with btn_col:
             load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
-        auto_load = (
-            data_source == "Google Sheets"
-            and "docs.google.com" in gs_url
-        )
-
-        if auto_load or load_data:
+        if load_data:
             try:
                 port_df = pd.DataFrame()
                 
@@ -841,7 +835,7 @@ def run_usa_screener():
                     """
                     components.html(port_copy_html, height=35)
                 
-                st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
                 
                 def style_portfolio(row):
                     bg_color = [''] * len(row)
