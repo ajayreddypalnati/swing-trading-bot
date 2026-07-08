@@ -97,13 +97,14 @@ def run_usa_screener():
                         else "Pending..."
                     )
                 except Exception as e:
-                    print(e)
+                    st.error(f"Trend Query Error: {e}")
                     trend_regime = "N/A"
 
                 try:
                     sync_df = pd.read_sql(text('SELECT * FROM "US Sync log"'), conn)
                     last_sync = sync_df['last_sync'].iloc[0]
-                except Exception:
+                except Exception as e:
+                    st.error(f"Sync Query Error: {e}")
                     last_sync = "Pending Run..."
 
                 try:
