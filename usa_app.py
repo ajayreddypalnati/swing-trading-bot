@@ -679,7 +679,7 @@ div[role="radiogroup"]{
             if data_source == "Upload CSV":
                 uploaded_file = st.file_uploader("Upload your Portfolio CSV file", type=['csv'], label_visibility="collapsed")
             else:
-                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/...", label_visibility="collapsed")
+                gs_url = st.text_input("Google Sheets URL:", value="https://docs.google.com/spreadsheets/d/1GqgxZk8Z2xJAVAaKONWVGy8pTQ38qcQWlSw3qC9tL98/edit?gid=0#gid=0", label_visibility="collapsed")
         
         with btn_col:
             load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
