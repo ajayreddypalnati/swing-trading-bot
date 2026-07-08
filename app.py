@@ -277,19 +277,6 @@ st.markdown("""
 
 
 # ==========================================
-# MARKET TOGGLE (Placed AFTER CSS so styles load!)
-# ==========================================
-col_blank, col_toggle = st.columns([8.5, 1.5])
-with col_toggle:
-    is_usa = st.toggle("🇺🇸 USA / 🇮🇳 IND", value=False)
-
-if is_usa:
-    import usa_app
-    usa_app.run_usa_screener()
-    st.stop() # Stops the Indian app, but keeps the CSS!
-# ==========================================
-
-# ==========================================
 # 2. APIs & ENDPOINTS
 # ==========================================
 CHARTINK_SCREENER_URL = 'https://chartink.com/screener/copy-9-ema-retest-114'
@@ -726,6 +713,8 @@ st.markdown(f"""
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
+            <!-- Toggle moved above Live Data -->
+            <div id="market-toggle-placeholder"></div>
             <div class="live-status">LIVE DATA <div class="blob green"></div></div>
             <div class="time">{current_time}</div>
             <div class="date">{current_date}</div>
