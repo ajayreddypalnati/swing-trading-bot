@@ -87,9 +87,17 @@ def run_usa_screener():
                     raw_sec, raw_ind = pd.DataFrame(), pd.DataFrame()
 
                 try:
-                    trend_df = pd.read_sql(text('SELECT * FROM Market trend summary LIMIT 1'), conn)
-                    trend_regime = trend_df['trend_regime'].iloc[0] if not trend_df.empty else "Pending..."
-                except Exception:
+                    trend_df = pd.read_sql(
+                        text('SELECT trend_regime FROM "US Market trend summary" LIMIT 1'),
+                        conn
+                    )
+                    trend_regime = (
+                        trend_df["trend_regime"].iloc[0]
+                        if not trend_df.empty
+                        else "Pending..."
+                    )
+                except Exception as e:
+                    print(e)
                     trend_regime = "N/A"
 
                 try:
