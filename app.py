@@ -1815,4 +1815,64 @@ div[role="radiogroup"]{
                     </body>
                     </html>
                     """
-                    components.html(port
+                    components.html(port_copy_html, height=65)
+                
+                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
+                
+                def style_portfolio(row):
+                    bg_color = [''] * len(row)
+                    ret_idx = final_port_df.columns.get_loc('Return %')
+                    ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
+                    rule_idx = final_port_df.columns.get_loc('10 Day Rule')
+                    sl_idx = final_port_df.columns.get_loc('Stop Loss')
+                    sym_idx = final_port_df.columns.get_loc('Symbol')
+                    
+                    if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+                    elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
+                    
+                    has_alert = False
+                    
+                    if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
+                    elif "BELOW" in str(row['EMA 21 Status']): 
+                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                        has_alert = True
+                    
+                    if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+                    elif "EXIT" in str(row['10 Day Rule']): 
+                        bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                        has_alert = True
+                        
+                    try:
+                        curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
+                        sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
+                        if curr_p <= sl_p and curr_p > 0:
+                            bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                            has_alert = True
+                    except: pass
+                    
+                    if has_alert:
+                        bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    
+                    return bg_color
+
+                styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
+                    "Today chg%": "{:.2f}%",
+                    "Return %": "{:.2f}%",
+                    "Risk %": "{:.2%}"
+                })
+                
+                # Inject TradingView links back in based on the pure symbol!
+                html_port_table = styled_port.to_html()
+                for _, r in final_port_df.iterrows():
+                    sym = str(r["Symbol"])
+                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
+                    link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                    html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
+                
+                st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
+
+time.sleep(60)
+st.rerun()
