@@ -262,6 +262,7 @@ st.markdown("""
             color: #0B1D30 !important;
             font-weight: 600 !important;
         }
+        
         /* Force the Browse Files button to be white with navy text AND ADD PREMIUM SHADOW/HOVER */
         div[data-testid="stFileUploader"] button {
             background-color: #FFFFFF !important;
@@ -922,15 +923,31 @@ with tab_main:
         <html>
         <head>
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-            body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+            body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
             button {{
-                font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                transition: all 0.2s;
+                font-family: 'Inter', sans-serif; 
+                background-color: #FFFFFF; 
+                color: #0B1D30; 
+                border: 2px solid #0B1D30; 
+                padding: 8px 16px; 
+                border-radius: 8px; 
+                cursor: pointer; 
+                font-weight: 800; 
+                font-size: 0.85rem; 
+                box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
+                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                transform: translateY(0);
             }}
-            button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+            button:hover {{ 
+                background-color: #F4F1E1; 
+                transform: translateY(-4px); 
+                box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
+            }}
+            button:active {{
+                transform: translateY(1px);
+                box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
+            }}
         </style>
         </head>
         <body>
@@ -954,7 +971,7 @@ with tab_main:
         </html>
         """
         # Inject the micro-component directly above the table
-        components.html(copy_html, height=40)
+        components.html(copy_html, height=65)
         
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
@@ -1108,15 +1125,31 @@ with tab_screeners:
                 <html>
                 <head>
                 <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
                     button {{
-                        font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                        border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                        font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        transition: all 0.2s;
+                        font-family: 'Inter', sans-serif; 
+                        background-color: #FFFFFF; 
+                        color: #0B1D30; 
+                        border: 2px solid #0B1D30; 
+                        padding: 8px 16px; 
+                        border-radius: 8px; 
+                        cursor: pointer; 
+                        font-weight: 800; 
+                        font-size: 0.85rem; 
+                        box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
+                        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                        transform: translateY(0);
                     }}
-                    button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                    button:hover {{ 
+                        background-color: #F4F1E1; 
+                        transform: translateY(-4px); 
+                        box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
+                    }}
+                    button:active {{
+                        transform: translateY(1px);
+                        box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
+                    }}
                 </style>
                 </head>
                 <body>
@@ -1138,7 +1171,7 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-                components.html(etf_copy_html, height=40)
+                components.html(etf_copy_html, height=65)
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_etf_table = styled_etf.to_html()
@@ -1351,15 +1384,31 @@ with tab_screeners:
                 <html>
                 <head>
                 <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
                     button {{
-                        font-family: 'Inter', sans-serif; background-color: #0B1D30; color: #FFFFFF; 
-                        border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; 
-                        font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                        transition: all 0.2s;
+                        font-family: 'Inter', sans-serif; 
+                        background-color: #FFFFFF; 
+                        color: #0B1D30; 
+                        border: 2px solid #0B1D30; 
+                        padding: 8px 16px; 
+                        border-radius: 8px; 
+                        cursor: pointer; 
+                        font-weight: 800; 
+                        font-size: 0.85rem; 
+                        box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
+                        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                        transform: translateY(0);
                     }}
-                    button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                    button:hover {{ 
+                        background-color: #F4F1E1; 
+                        transform: translateY(-4px); 
+                        box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
+                    }}
+                    button:active {{
+                        transform: translateY(1px);
+                        box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
+                    }}
                 </style>
                 </head>
                 <body>
@@ -1381,7 +1430,7 @@ with tab_screeners:
                 </body>
                 </html>
                 """
-                components.html(us_etf_copy_html, height=40)
+                components.html(us_etf_copy_html, height=65)
 
                 # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_us_table = styled_us_etf.to_html()
@@ -1776,22 +1825,31 @@ with tab_port:
                             <html>
                             <head>
                             <style>
-                                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap');
-                                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; }}
+                                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                                body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; }}
                                 button {{
                                     font-family: 'Inter', sans-serif;
-                                    background-color: #0B1D30;
-                                    color: #FFFFFF;
-                                    border: none;
-                                    padding: 6px 12px;
-                                    border-radius: 6px;
+                                    background-color: #FFFFFF;
+                                    color: #0B1D30;
+                                    border: 2px solid #0B1D30;
+                                    padding: 8px 16px;
+                                    border-radius: 8px;
                                     cursor: pointer;
-                                    font-weight: 600;
+                                    font-weight: 800;
                                     font-size: 0.85rem;
-                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                                    transition: all 0.2s;
+                                    box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
+                                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+                                    transform: translateY(0);
                                 }}
-                                button:hover {{ background-color: #162C46; transform: translateY(-1px); }}
+                                button:hover {{ 
+                                    background-color: #F4F1E1; 
+                                    transform: translateY(-4px); 
+                                    box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
+                                }}
+                                button:active {{
+                                    transform: translateY(1px);
+                                    box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
+                                }}
                             </style>
                             </head>
                             <body>
@@ -1812,7 +1870,7 @@ with tab_port:
                             </body>
                             </html>
                             """
-                            components.html(port_copy_html, height=40)
+                            components.html(port_copy_html, height=65)
 
                             # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                             html_port_table = styled_res.to_html()
