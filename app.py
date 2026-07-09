@@ -42,12 +42,30 @@ st.markdown("""
         /* HIDE NATIVE STREAMLIT RUNNING INDICATOR */
         div[data-testid="stStatusWidget"] { visibility: hidden; }
 
-        /* --- PREVENT STREAMLIT GHOSTING/SHADOW OVERLAY ON BUTTON CLICK --- */
+        /* --- PROFESSIONAL BLUR & CUSTOM LOADER ON REFRESH --- */
         [data-stale="true"] {
-            opacity: 1 !important;
-            transition: none !important;
-            filter: none !important;
-            pointer-events: auto !important;
+            opacity: 0.6 !important;
+            filter: blur(5px) grayscale(20%) !important;
+            transition: filter 0.3s ease, opacity 0.3s ease !important;
+            pointer-events: none !important;
+        }
+        
+        /* Floating Loading Indicator */
+        [data-stale="true"]::after {
+            content: "⚡ Updating Data..."; /* Replace with an img tag or your logo if desired */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #0B1D30;
+            background: #FFFFFF;
+            padding: 15px 30px;
+            border-radius: 12px;
+            border: 2px solid #0B1D30;
+            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.3);
+            z-index: 9999;
         }
         
         /* RESTORED CENTERED ALIGNMENT CAP */
@@ -337,7 +355,7 @@ def get_db_cache_key():
     else:
         return f"active_{now.strftime('%Y-%m-%d_%H')}"
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def fetch_database_reference(cache_key):
     try:
         db_url = st.secrets["DATABASE_URL"]
@@ -428,7 +446,7 @@ def fetch_database_reference(cache_key):
         st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_market_breadth_from_gsheets():
     try:
         ts = int(time.time())
@@ -469,7 +487,7 @@ def fetch_tradingview_data():
     except Exception:
         return []
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_combined_data():
     chartink_list = fetch_chartink_data()
     tv_list = fetch_tradingview_data()
@@ -491,7 +509,7 @@ def get_combined_data():
 # ==========================================
 # PORTFOLIO TRACKER HELPER FUNCTIONS
 # ==========================================
-@st.cache_data(ttl=86400) # Increased to 24 hours for superfast updates
+@st.cache_data(ttl=86400, show_spinner=False) # Increased to 24 hours for superfast updates
 def fetch_exchange_mapping():
     """Connects to Supabase to build a VLOOKUP dictionary for Indian and US tickers."""
     exchange_map = {}
@@ -533,7 +551,7 @@ def fetch_exchange_mapping():
         
     return exchange_map
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_portfolio_tv_data(pure_tickers):
     """Fetches live data directly using the 'in_range' filter for massive speed improvements."""
     if not pure_tickers: return {}
@@ -1067,8 +1085,9 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        st.markdown("### Minimum Turnover (in Cr)")
-        etf_min_turnover = st.number_input("ETF Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover", label_visibility="collapsed")
+        col_etf_input, col_etf_space = st.columns([2, 8])
+        with col_etf_input:
+            etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover")
         
         if not etf_df.empty:
             e_df = etf_df.copy()
@@ -1195,8 +1214,9 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        st.markdown("### Minimum Turnover (in Cr)")
-        min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover", label_visibility="collapsed")
+        col_mom_input, col_mom_space = st.columns([2, 8])
+        with col_mom_input:
+            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover")
         
         if not main_df.empty:
             mom_df = main_df.copy()
@@ -1454,8 +1474,9 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        st.markdown("### Minimum Turnover (in Cr)")
-        val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover", label_visibility="collapsed")
+        col_val_input, col_val_space = st.columns([2, 8])
+        with col_val_input:
+            val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover")
         
         if not micro_df.empty:
             v_df = micro_df.copy()
