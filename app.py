@@ -42,30 +42,31 @@ st.markdown("""
         /* HIDE NATIVE STREAMLIT RUNNING INDICATOR */
         div[data-testid="stStatusWidget"] { visibility: hidden; }
 
-        /* --- PROFESSIONAL BLUR & CUSTOM LOADER ON REFRESH --- */
+        /* --- PROFESSIONAL BLUR & PULSING ICON ON REFRESH --- */
+        /* Blur all elements that are updating */
         [data-stale="true"] {
             opacity: 0.6 !important;
-            filter: blur(5px) grayscale(20%) !important;
+            filter: blur(4px) grayscale(10%) !important;
             transition: filter 0.3s ease, opacity 0.3s ease !important;
             pointer-events: none !important;
         }
         
-        /* Floating Loading Indicator */
-        [data-stale="true"]::after {
-            content: "⚡ Updating Data..."; /* Replace with an img tag or your logo if desired */
+        /* Attach the Zooming ⚡ Icon ONLY to the main app container so it appears ONCE */
+        [data-testid="stMainBlockContainer"][data-stale="true"]::after {
+            content: "⚡";
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: #0B1D30;
-            background: #FFFFFF;
-            padding: 15px 30px;
-            border-radius: 12px;
-            border: 2px solid #0B1D30;
-            box-shadow: 0 15px 30px rgba(11, 29, 48, 0.3);
-            z-index: 9999;
+            font-size: 5.5rem;
+            z-index: 99999;
+            animation: pulse-zoom 0.8s infinite alternate ease-in-out;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.9);
+        }
+
+        @keyframes pulse-zoom {
+            0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; text-shadow: 0 0 40px rgba(255, 255, 255, 1); }
         }
         
         /* RESTORED CENTERED ALIGNMENT CAP */
@@ -91,7 +92,7 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            margin-bottom: 30px;
+            margin-bottom: 20px; /* Reduced gap */
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
             transform: translateY(0);
@@ -132,7 +133,7 @@ st.markdown("""
             .header-right { text-align: left; padding-top: 25px; padding-right: 0;}
         }
         
-        /* TABLE STYLING - MODIFIED TO ABSORB NEW COLUMN AND AVOID SCROLLING */
+        /* TABLE STYLING */
         .scrollable-table-container { width: 100%; margin-bottom: 0.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;}
         .scrollable-table-container table { width: 100%; border-collapse: collapse; background: #FFFFFF; border: 2px solid #0B1D30; overflow: hidden;}
         .scrollable-table-container th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center !important; vertical-align: middle !important; font-size: 0.95rem !important; padding: 10px 5px !important; font-weight: 700 !important;}
@@ -152,35 +153,23 @@ st.markdown("""
             padding: 15px !important; 
         }
 
-        /* MOBILE GRAPH RESPONSIVENESS */
-        @media (max-width: 768px) {
-            div.stPlotlyChart svg text {
-                font-size: 10px !important;
-            }
-            /* Shift text labels up on mobile to prevent clipping the curve */
-            div.stPlotlyChart svg g.textpoint {
-                transform: translateY(-15px);
-            }
-        }
-
         /* PROFESSIONAL FULL-WIDTH SAAS TABS */
         div[data-baseweb="tab-list"] { 
             display: flex !important;
             width: 100% !important;
             gap: 15px !important;
             border-bottom: none !important;
-            margin-bottom: 25px !important;
-            padding-top: 10px !important; /* Space for hover pop */
+            margin-bottom: 15px !important;
+            padding-top: 10px !important; 
         }
         
         div[data-baseweb="tab"] { 
             padding: 0 !important;
             background: transparent !important;
-            flex: 1 !important; /* Forces all tabs to be equal width and span entire screen */
+            flex: 1 !important; 
             min-width: 0 !important;
         }
         
-        /* Tab Button Physics & Styling */
         button[role="tab"] {
             width: 100% !important;
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%) !important;
@@ -195,23 +184,20 @@ st.markdown("""
             transform: translateY(0) !important;
         }
         
-        /* IMMERSIVE POPUP - Hover Effect for Tabs */
         button[role="tab"]:hover {
             transform: translateY(-6px) !important;
             box-shadow: 0 20px 40px rgba(11, 29, 48, 0.35), 0 8px 15px rgba(11, 29, 48, 0.2) !important;
             background: linear-gradient(135deg, #0f2640 0%, #1d3a5a 100%) !important;
         }
         
-        /* Selected Tab State (The White Layer with Thick Navy Line) */
         button[role="tab"][aria-selected="true"] {
             background: #FFFFFF !important;
             border: 2px solid #0B1D30 !important;
-            border-top: 6px solid #0B1D30 !important; /* Thick anchoring line */
-            transform: translateY(-6px) !important; /* Keep it popped up when active */
+            border-top: 6px solid #0B1D30 !important; 
+            transform: translateY(-6px) !important; 
             box-shadow: 0 15px 30px rgba(11, 29, 48, 0.15) !important;
         }
         
-        /* Tab Text Sizing - Restored to large 1.4rem size */
         button[role="tab"] p { 
             font-size: 1.4rem !important; 
             font-weight: 800 !important; 
@@ -221,95 +207,22 @@ st.markdown("""
             white-space: nowrap !important;
         }
         
-        /* Selected Tab Text Color */
         button[role="tab"][aria-selected="true"] p {
             color: #0B1D30 !important;
         }
         
-        /* Remove default Streamlit tab active line */
-        div[data-baseweb="tab-highlight"] { 
-            display: none !important; 
-        }
-        
-        /* FORCE ALL BUTTONS TO BE WHITE WITH NAVY TEXT AND ADD PREMIUM SHADOW/HOVER */
-        div[data-testid="stButton"] button {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 2px solid #0B1D30 !important;
-            border-radius: 8px !important;
-            font-weight: 800 !important;
-            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15) !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            transform: translateY(0) !important;
-        }
-        div[data-testid="stButton"] button:hover {
-            background-color: #F4F1E1 !important;
-            color: #0B1D30 !important;
-            transform: translateY(-4px) !important;
-            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25) !important;
-        }
-        div[data-testid="stButton"] button:active {
-            transform: translateY(1px) !important;
-            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
-        }
+        div[data-baseweb="tab-highlight"] { display: none !important; }
         
         /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
-        div[data-testid="stTextInput"] input {
+        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
             background-color: #FFFFFF !important;
             color: #0B1D30 !important;
             border: 1px solid #0B1D30 !important;
         }
         
-        /* Make Number Input values (like 3.00) massive and bold and white background */
-        div[data-testid="stNumberInput"] input {
-            background-color: #FFFFFF !important;
-            font-size: 1.5rem !important;
-            font-weight: 800 !important;
-            color: #0B1D30 !important;
-            border: 1px solid #0B1D30 !important;
-        }
-        
-        /* FORCE RADIO BUTTONS TEXT/BACKGROUND */
-        div[role="radiogroup"] label {
-            color: #0B1D30 !important;
-        }
-
-        /* UPLOAD BUTTON VISIBILITY ON MOBILE - FORCE WHITE BACKGROUND */
-        div[data-testid="stFileUploader"] {
-            background-color: #FFFFFF !important;
-            border: 2px dashed #0B1D30 !important;
-            border-radius: 8px !important;
-            padding: 15px !important;
-        }
-        div[data-testid="stFileUploader"] section {
-            background-color: transparent !important;
-        }
-        div[data-testid="stFileUploader"] span, 
-        div[data-testid="stFileUploader"] p, 
-        div[data-testid="stFileUploader"] small {
-            color: #0B1D30 !important;
-            font-weight: 600 !important;
-        }
-        
-        /* Force the Browse Files button to be white with navy text AND ADD PREMIUM SHADOW/HOVER */
-        div[data-testid="stFileUploader"] button {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 2px solid #0B1D30 !important;
-            border-radius: 8px !important;
-            font-weight: 800 !important;
-            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15) !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-            transform: translateY(0) !important;
-        }
-        div[data-testid="stFileUploader"] button:hover {
-            background-color: #F4F1E1 !important;
-            transform: translateY(-4px) !important;
-            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25) !important;
-        }
-        div[data-testid="stFileUploader"] button:active {
-            transform: translateY(1px) !important;
-            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
+        /* Remove default Streamlit vertical block padding to tighten spacing */
+        div[data-testid="stVerticalBlock"] {
+            gap: 0.5rem !important;
         }
 
     </style>
@@ -683,26 +596,15 @@ def render_market_cycle_graph(roc_vals):
 
     roc_val = float(roc_vals[0])
     
-    # --- NEW METHOD 2: Linear Regression Slope ---
     if len(roc_vals) > 1:
-        # Take up to the last 20 values and reverse them so they are in chronological order (oldest to newest)
         lookback_window = roc_vals[:20][::-1]
         y = np.array(lookback_window, dtype=float)
         x = np.arange(len(y))
-        
-        # polyfit(x, y, 1) calculates a degree 1 polynomial (a straight line)
-        # It returns the slope and the intercept. We only need the slope.
         slope, _ = np.polyfit(x, y, 1)
-        
-        # If the slope is positive or 0, momentum is trending up. Otherwise, down.
-        if slope >= 0:
-            trend_dir = "up"
-        else:
-            trend_dir = "down"
+        if slope >= 0: trend_dir = "up"
+        else: trend_dir = "down"
     else:
-        # Fallback if there is only 1 data point
         trend_dir = "up"
-    # ---------------------------------------------
 
     curve_x = [0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
     curve_y = [2, 5, 15, 33, 66, 100, 90, 66, 33, 15, 5, 2, 1]
@@ -846,15 +748,12 @@ if data:
     if not main_df.empty:
         df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
         
-        # Safely merge only if the columns actually exist
         if 'sector' in df.columns: df = df.merge(sec_rank_df, on="sector", how="left")
         if 'broad_industry' in df.columns: df = df.merge(ind_rank_df, on="broad_industry", how="left")
         
-        # Safely extract Exchange
         db_exch = df.get('db_exchange', pd.Series([""] * len(df), index=df.index))
         df['Exchange'] = np.where(db_exch.notna() & (db_exch != ""), db_exch, df['Temp_Exchange'])
         
-        # Guarantee string columns exist for the UI table
         for col in ['band', 'sector', 'broad_industry', 'sec_rank', 'ind_rank', 'relative_score']:
             if col not in df.columns: df[col] = ""
     else:
@@ -926,7 +825,6 @@ tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
 with tab_main:
     if not display_df.empty:
-        # Applying the SAFE formatter everywhere
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
             "Close": lambda x: safe_fmt(x, "₹{:.2f}"), 
             "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
@@ -940,72 +838,44 @@ with tab_main:
         })
         
         html_table = styled_df.to_html()
-        
         copy_str = ",".join(display_df['Symbol'].tolist())
 
-        # Render a tiny, interactive Copy Button right above the table using a sandboxed iframe
         copy_html = f"""
         <!DOCTYPE html>
         <html>
         <head>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-            body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+            body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
             button {{
                 font-family: 'Inter', sans-serif; 
-                background-color: #FFFFFF; 
-                color: #0B1D30; 
-                border: 2px solid #0B1D30; 
-                padding: 8px 16px; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                font-weight: 800; 
-                font-size: 0.85rem; 
-                box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
-                transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                transform: translateY(0);
+                background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
             }}
-            button:hover {{ 
-                background-color: #F4F1E1; 
-                transform: translateY(-4px); 
-                box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
-            }}
-            button:active {{
-                transform: translateY(1px);
-                box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
-            }}
+            button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+            button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
         </style>
         </head>
         <body>
             <button id="copyBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
             <script>
             function copyToClipboard() {{
-                const ta = document.createElement('textarea');
-                ta.value = "{copy_str}";
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                
-                // Visual feedback that it actually worked
-                const btn = document.getElementById('copyBtn');
-                btn.innerHTML = '✅ Copied!';
-                setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                const ta = document.createElement('textarea'); ta.value = "{copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                const btn = document.getElementById('copyBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
             }}
             </script>
         </body>
         </html>
         """
-        # Inject the micro-component directly above the table
-        components.html(copy_html, height=65)
+        # Inline the copy button for Main Tab
+        col_main_space, col_main_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+        with col_main_copy:
+            components.html(copy_html, height=45)
         
         for _, r in display_df.iterrows():
             sym = str(r['Symbol'])
             exch = str(r['Exchange']).upper()
-            if 'NSE' in exch:
-                url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
-            else:
-                url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
+            if 'NSE' in exch: url = f"https://in.tradingview.com/chart/4efUco2X/?symbol=NSE%3A{sym}"
+            else: url = f"https://in.tradingview.com/chart/?symbol=BSE%3A{sym}"
             link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
             html_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_table)
             
@@ -1126,8 +996,39 @@ with tab_screeners:
                 top_4_avg = etf_display.head(4)['Chg %'].mean() if not etf_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                st.markdown(f"#### Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span>", unsafe_allow_html=True)
-                st.markdown("<br>", unsafe_allow_html=True)
+                etf_copy_str = ",".join(etf_display['Symbol'].astype(str).tolist())
+                etf_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copyEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{etf_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copyEtfBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                # Inline Average text and Copy Button side-by-side
+                col_etf_avg, col_etf_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with col_etf_avg:
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_etf_copy:
+                    components.html(etf_copy_html, height=45)
                 
                 def style_etf_row(row):
                     is_top_4 = row.name in top_4_chg_idx
@@ -1145,62 +1046,7 @@ with tab_screeners:
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
                 })
 
-                # 1. GENERATE COPY BUTTON FOR INDIAN ETFs
-                etf_copy_str = ",".join(etf_display['Symbol'].astype(str).tolist())
-                etf_copy_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                    body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
-                    button {{
-                        font-family: 'Inter', sans-serif; 
-                        background-color: #FFFFFF; 
-                        color: #0B1D30; 
-                        border: 2px solid #0B1D30; 
-                        padding: 8px 16px; 
-                        border-radius: 8px; 
-                        cursor: pointer; 
-                        font-weight: 800; 
-                        font-size: 0.85rem; 
-                        box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
-                        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                        transform: translateY(0);
-                    }}
-                    button:hover {{ 
-                        background-color: #F4F1E1; 
-                        transform: translateY(-4px); 
-                        box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
-                    }}
-                    button:active {{
-                        transform: translateY(1px);
-                        box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
-                    }}
-                </style>
-                </head>
-                <body>
-                    <button id="copyEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                    <script>
-                    function copyToClipboard() {{
-                        const ta = document.createElement('textarea');
-                        ta.value = "{etf_copy_str}";
-                        document.body.appendChild(ta);
-                        ta.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(ta);
-                        
-                        const btn = document.getElementById('copyEtfBtn');
-                        btn.innerHTML = '✅ Copied!';
-                        setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                    }}
-                    </script>
-                </body>
-                </html>
-                """
-                components.html(etf_copy_html, height=65)
-
-                # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
+                # CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_etf_table = styled_etf.to_html()
                 for _, r in etf_display.iterrows():
                     sym = str(r['Symbol'])
@@ -1220,10 +1066,8 @@ with tab_screeners:
         
         if not main_df.empty:
             mom_df = main_df.copy()
-            # Ensure we operate on Series even if column missing; strip commas and % before numeric conversion
             def _col_series(df, col, default=0):
                 src = df.get(col, pd.Series([default] * len(df), index=df.index))
-                # convert to string, remove commas and trailing percent sign, then coerce
                 return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
             mom_df['turnover'] = _col_series(mom_df, 'turnover')
@@ -1248,7 +1092,11 @@ with tab_screeners:
             if not filtered_mom.empty:
                 top_25_avg = filtered_mom.head(25)['1d_return'].mean()
                 avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
-                st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span>", unsafe_allow_html=True)
+                
+                # Align inline text neatly
+                col_mom_avg, col_mom_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with col_mom_avg:
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4>", unsafe_allow_html=True)
                 
                 display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
                 display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
@@ -1374,28 +1222,49 @@ with tab_screeners:
                 top_4_avg = us_display.head(4)['Chg %'].mean() if not us_display.empty else 0.0
                 avg_color = "#10B981" if top_4_avg > 0 else "#EF4444"
                 
-                st.markdown(
-                    f"#### Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span>",
-                    unsafe_allow_html=True
-                )
-                
-                st.markdown("<br>", unsafe_allow_html=True)
+                us_etf_copy_str = ",".join(us_display['Symbol'].astype(str).tolist())
+                us_etf_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{us_etf_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copyUsEtfBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+
+                # Inline Average text and Copy Button side-by-side
+                col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with col_us_avg:
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_us_copy:
+                    components.html(us_etf_copy_html, height=45)
                 
                 def style_us_row(row):
                     is_top_4 = row.name in top_4_chg_idx
                     styles = []
-
                     for col in row.index:
                         style = ""
-
                         if is_top_4:
                             style += "font-weight:700;"
-
-                            if col == "Chg %":
-                                style += "background-color: rgba(187,247,208,0.5);"
-
+                            if col == "Chg %": style += "background-color: rgba(187,247,208,0.5);"
                         styles.append(style)
-
                     return styles
                 
                 styled_us_etf = us_display.style.apply(style_us_row, axis=1).hide(axis="index").format({
@@ -1405,62 +1274,7 @@ with tab_screeners:
                     'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
                 })
 
-                # 1. GENERATE COPY BUTTON FOR US ETFs
-                us_etf_copy_str = ",".join(us_display['Symbol'].astype(str).tolist())
-                us_etf_copy_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                <style>
-                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                    body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
-                    button {{
-                        font-family: 'Inter', sans-serif; 
-                        background-color: #FFFFFF; 
-                        color: #0B1D30; 
-                        border: 2px solid #0B1D30; 
-                        padding: 8px 16px; 
-                        border-radius: 8px; 
-                        cursor: pointer; 
-                        font-weight: 800; 
-                        font-size: 0.85rem; 
-                        box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
-                        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                        transform: translateY(0);
-                    }}
-                    button:hover {{ 
-                        background-color: #F4F1E1; 
-                        transform: translateY(-4px); 
-                        box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
-                    }}
-                    button:active {{
-                        transform: translateY(1px);
-                        box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
-                    }}
-                </style>
-                </head>
-                <body>
-                    <button id="copyUsEtfBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                    <script>
-                    function copyToClipboard() {{
-                        const ta = document.createElement('textarea');
-                        ta.value = "{us_etf_copy_str}";
-                        document.body.appendChild(ta);
-                        ta.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(ta);
-                        
-                        const btn = document.getElementById('copyUsEtfBtn');
-                        btn.innerHTML = '✅ Copied!';
-                        setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                    }}
-                    </script>
-                </body>
-                </html>
-                """
-                components.html(us_etf_copy_html, height=65)
-
-                # 2. CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
+                # CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_us_table = styled_us_etf.to_html()
                 for _, r in us_display.iterrows():
                     sym = str(r['Symbol'])
@@ -1510,7 +1324,11 @@ with tab_screeners:
             if not top_50_value.empty:
                 top_25_val_avg = top_50_value.head(25)[col_chg].mean()
                 v_avg_color = "#10B981" if top_25_val_avg > 0 else "#EF4444"
-                st.markdown(f"#### Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span>", unsafe_allow_html=True)
+                
+                # Align inline text neatly
+                col_val_avg, col_val_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with col_val_avg:
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4>", unsafe_allow_html=True)
                 
                 val_cols = ['Rank', 'Ticker', 'Name', col_chg, col_cmp, col_sector, col_ind, col_band, col_dath, 'Turnover']
                 val_cols = [c for c in val_cols if c in top_50_value.columns]
@@ -1526,7 +1344,6 @@ with tab_screeners:
                     col_dath: 'Down%_ATH'
                 })
                 
-                # SAFE FORMATTER APPLIED HERE 
                 styled_val = val_display.style.hide(axis="index").format({
                     'Price': lambda x: safe_fmt(x, "₹{:.2f}"), 
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%"), 
@@ -1783,10 +1600,10 @@ div[role="radiogroup"]{
                 final_port_df = pd.DataFrame(tracker_data)
                 avg_chg = final_port_df['Today chg%'].mean()
                 
-                port_col1, port_col2 = st.columns([8.5, 1.5])
+                port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with port_col1:
                     avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-                    st.markdown(f"<h4 style='margin-top: 5px; margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
                 
                 with port_col2:
                     port_copy_str = ",".join(final_port_df['Symbol'].tolist())
@@ -1796,30 +1613,12 @@ div[role="radiogroup"]{
                     <head>
                     <style>
                         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                        body {{ margin: 0; padding: 10px 5px; display: flex; justify-content: flex-end; align-items: flex-end; background-color: transparent; overflow: hidden; }}
+                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
                         button {{
-                            font-family: 'Inter', sans-serif; 
-                            background-color: #FFFFFF; 
-                            color: #0B1D30; 
-                            border: 2px solid #0B1D30; 
-                            padding: 8px 16px; 
-                            border-radius: 8px; 
-                            cursor: pointer; 
-                            font-weight: 800; 
-                            font-size: 0.85rem; 
-                            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15);
-                            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-                            transform: translateY(0);
+                            font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
                         }}
-                        button:hover {{ 
-                            background-color: #F4F1E1; 
-                            transform: translateY(-4px); 
-                            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); 
-                        }}
-                        button:active {{
-                            transform: translateY(1px);
-                            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15);
-                        }}
+                        button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                        button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
                     </style>
                     </head>
                     <body>
@@ -1836,9 +1635,7 @@ div[role="radiogroup"]{
                     </body>
                     </html>
                     """
-                    components.html(port_copy_html, height=65)
-                
-                st.markdown("<div style='margin-top: -15px;'></div>", unsafe_allow_html=True)
+                    components.html(port_copy_html, height=45)
                 
                 def style_portfolio(row):
                     bg_color = [''] * len(row)
