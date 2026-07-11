@@ -825,7 +825,7 @@ tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
     "⚡ 9-EMA Screener", 
     "🎢 Market Cycle", 
     "🏆 Market Leaders",
-    "🔎 Screeners", 
+    "� ETF Screener", 
     "📈 Portfolio Tracker"
 ])
 
@@ -953,15 +953,16 @@ with tab_leaders:
 
 # --- 4. SCREENERS HUB TAB ---
 with tab_screeners:
-    sub_etf, sub_mom, sub_us_etf, sub_val = st.tabs([
-        "📊 ETF Screener", 
-        "🚀 Momentum Screener", 
-        "🌍 US ETF Screener",
-        "💎 Value Screener"
-    ])
+    screener_choice = st.selectbox(
+        "Select Screener Type",
+        options=["📊 ETF Screener", "🚀 Momentum Screener", "🌍 US ETF Screener", "💎 Value Screener"],
+        index=0,
+        label_visibility="collapsed"
+    )
+    st.markdown("<br>", unsafe_allow_html=True)
     
     # --- SUB 1: ETF SCREENER ---
-    with sub_etf:
+    if screener_choice == "📊 ETF Screener":
         col_etf_input, col_etf_space = st.columns([2, 8])
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover")
