@@ -1067,7 +1067,7 @@ with tab_screeners:
         else: st.warning("ETF data is currently empty or failed to load.")
 
     # --- SUB 2: MOMENTUM SCREENER ---
-    with sub_mom:
+    elif screener_choice == "🚀 Momentum Screener":
         col_mom_input, col_mom_space = st.columns([2, 8])
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover")
@@ -1194,7 +1194,7 @@ with tab_screeners:
                 except Exception as e: st.error(f"Error processing portfolio: {e}")
 
     # --- SUB 3: US ETF SCREENER ---
-    with sub_us_etf:
+    elif screener_choice == "🌍 US ETF Screener":
         if not us_etf_df.empty:
             us_df = us_etf_df.copy()
             
@@ -1295,7 +1295,7 @@ with tab_screeners:
         else: st.warning("US ETF data is currently empty or failed to load.")
 
     # --- SUB 4: VALUE SCREENER ---
-    with sub_val:
+    elif screener_choice == "💎 Value Screener":
         col_val_input, col_val_space = st.columns([2, 8])
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover")
