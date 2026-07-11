@@ -331,7 +331,7 @@ def fetch_database_reference(cache_key):
                 if 'trend_regime' not in locals(): trend_regime = "N/A"
 
             try:
-                roc_df = pd.read_sql(text('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 25'), conn)
+                roc_df = pd.read_sql(text('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 75'), conn)
                 roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
                 roc_vals = roc_df[roc_col].tolist() if roc_col is not None and not roc_df.empty else []
             except Exception as e:
@@ -597,7 +597,7 @@ def render_market_cycle_graph(roc_vals):
     roc_val = float(roc_vals[0])
     
     if len(roc_vals) > 1:
-        lookback_window = roc_vals[:20][::-1]
+        lookback_window = roc_vals[:60][::-1]
         y = np.array(lookback_window, dtype=float)
         x = np.arange(len(y))
         slope, _ = np.polyfit(x, y, 1)
