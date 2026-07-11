@@ -1295,7 +1295,7 @@ with tab_screeners:
         else: st.warning("US ETF data is currently empty or failed to load.")
 
     # --- SUB 4: VALUE SCREENER ---
-    elif screener_choice == "💎 Value Screener":
+    with sub_val:
         col_val_input, col_val_space = st.columns([2, 8])
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover")
