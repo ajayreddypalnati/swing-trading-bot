@@ -825,7 +825,7 @@ tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
     "⚡ 9-EMA Screener", 
     "🎢 Market Cycle", 
     "🏆 Market Leaders",
-    "� ETF Screener", 
+    "🔎 Screeners", 
     "📈 Portfolio Tracker"
 ])
 
@@ -953,16 +953,15 @@ with tab_leaders:
 
 # --- 4. SCREENERS HUB TAB ---
 with tab_screeners:
-    screener_choice = st.selectbox(
-        "Select Screener Type",
-        options=["📊 ETF Screener", "🚀 Momentum Screener", "🌍 US ETF Screener", "💎 Value Screener"],
-        index=0,
-        label_visibility="collapsed"
-    )
-    st.markdown("<br>", unsafe_allow_html=True)
+    sub_etf, sub_mom, sub_us_etf, sub_val = st.tabs([
+        "📊 ETF Screener", 
+        "🚀 Momentum Screener", 
+        "🌍 US ETF Screener",
+        "💎 Value Screener"
+    ])
     
     # --- SUB 1: ETF SCREENER ---
-    if screener_choice == "📊 ETF Screener":
+    with sub_etf:
         col_etf_input, col_etf_space = st.columns([2, 8])
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover")
@@ -1067,7 +1066,7 @@ with tab_screeners:
         else: st.warning("ETF data is currently empty or failed to load.")
 
     # --- SUB 2: MOMENTUM SCREENER ---
-    elif screener_choice == "🚀 Momentum Screener":
+    with sub_mom:
         col_mom_input, col_mom_space = st.columns([2, 8])
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover")
@@ -1194,7 +1193,7 @@ with tab_screeners:
                 except Exception as e: st.error(f"Error processing portfolio: {e}")
 
     # --- SUB 3: US ETF SCREENER ---
-    elif screener_choice == "🌍 US ETF Screener":
+    with sub_us_etf:
         if not us_etf_df.empty:
             us_df = us_etf_df.copy()
             
