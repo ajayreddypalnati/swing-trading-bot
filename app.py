@@ -331,7 +331,14 @@ def fetch_database_reference(cache_key):
                 if 'trend_regime' not in locals(): trend_regime = "N/A"
 
             try:
-                roc_df = pd.read_sql(text('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 75'), conn)
+                # 1. Pull a large chunk of rows to bypass all the duplicate entries
+                roc_df = pd.read_sql(text('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 400'), conn)
+                
+                if not roc_df.empty:
+                    # 2. Extract just the date (ignore hours/minutes) and drop the duplicates
+                    roc_df['Date_Only'] = pd.to_datetime(roc_df['Date']).dt.date
+                    roc_df = roc_df.drop_duplicates(subset=['Date_Only'], keep='first')
+                    
                 roc_col = next((c for c in roc_df.columns if 'ROC_20M' in str(c).upper()), None)
                 roc_vals = roc_df[roc_col].tolist() if roc_col is not None and not roc_df.empty else []
             except Exception as e:
