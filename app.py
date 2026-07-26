@@ -821,12 +821,12 @@ def format_stars(val):
 # ==========================================
 # SAAS NAVIGATION TABS
 # ==========================================
-tab_main, tab_cycle, tab_leaders, tab_screeners, tab_port = st.tabs([
-    "⚡ 9-EMA Screener", 
-    "🎢 Market Cycle", 
+tab_main, tab_cycle, tab_leaders, tab_port, tab_screeners = st.tabs([
+    "⚡ 9-EMA Screener",
+    "🎢 Market Cycle",
     "🏆 Market Leaders",
-    "🔎 Screeners", 
-    "📈 Portfolio Tracker"
+    "📈 Portfolio Tracker",
+    "🔎 Screeners"
 ])
 
 # --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
@@ -955,8 +955,8 @@ with tab_leaders:
 with tab_screeners:
     sub_etf, sub_mom, sub_us_etf, sub_val = st.tabs([
         "📊 ETF Screener", 
-        "🚀 Momentum Screener", 
         "🌍 US ETF Screener",
+        "🚀 Momentum Screener",   
         "💎 Value Screener"
     ])
     
