@@ -834,7 +834,7 @@ with tab_main:
     if not display_df.empty:
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
             "Close": lambda x: safe_fmt(x, "₹{:.2f}"), 
-            "Chg %": lambda x: safe_fmt(x, "{:.2f}%"), 
+            "% Change": lambda x: safe_fmt(x, "{:.2f}%"), 
             "Mar Cap (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
             "Turnover (Cr)": lambda x: safe_fmt(x, "{:.0f}"), 
             "Volume": lambda x: safe_fmt(x, "{:,.0f}"),
