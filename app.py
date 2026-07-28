@@ -1098,13 +1098,44 @@ with tab_screeners:
             filtered_mom = full_filtered_mom.head(30)
             
             if not filtered_mom.empty:
-                top_25_avg = filtered_mom.head(25)['1d_return'].mean()
+                top_25_mom = filtered_mom.head(25)
+                top_25_avg = top_25_mom['1d_return'].mean()
                 avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                 
-                # Align inline text neatly
-                col_mom_avg, col_mom_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Copy symbols HTML string for top 25 Momentum tickers
+                mom_copy_str = ",".join(top_25_mom['ticker'].astype(str).tolist())
+                mom_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copyMomBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{mom_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copyMomBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                # Align inline text and copy button neatly side-by-side
+                col_mom_avg, col_mom_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_mom_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_mom_copy:
+                    components.html(mom_copy_html, height=45)
                 
                 display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
                 display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
@@ -1202,53 +1233,82 @@ with tab_screeners:
         if not main_df.empty:
             sme_df = main_df.copy()
             
-            # Robust text-to-float converter for your Supabase text columns
             def _col_series(df, col, default=0):
                 if col not in df.columns: 
                     return pd.Series([default] * len(df), index=df.index)
                 return pd.to_numeric(df[col].astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
-            # Base columns (renamed earlier in your script)
+            col_is_sme = next((c for c in sme_df.columns if 'is sme' in str(c).lower().strip()), None)
+            col_roce = next((c for c in sme_df.columns if 'roce' in str(c).lower().strip()), None)
+            
+            if not col_is_sme: st.warning("⚠️ Could not find an 'Is SME' column in the database.")
+            if not col_roce: st.warning("⚠️ Could not find a 'ROCE' column in the database.")
+
             sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
             
-            # Exact match based on your Supabase image
-            sme_df['roce_clean'] = _col_series(sme_df, 'ROCE %')
-            
+            sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
             if 'band' not in sme_df.columns: sme_df['band'] = ''
             
-            # Exact match for 'Is SME' based on your Supabase image
-            if 'Is SME' in sme_df.columns:
-                # Clean the text column, strip spaces, drop decimals if it's '1.0', and check for '1'
-                f_is_sme = sme_df['Is SME'].astype(str).str.strip().str.replace('.0', '', regex=False) == '1'
+            if col_is_sme:
+                sme_val = sme_df[col_is_sme].astype(str).str.strip().str.lower().str.replace('.0', '', regex=False)
+                f_is_sme = sme_val.isin(['1', 'true', 't', 'yes', 'y'])
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
-                st.warning("⚠️ Could not find 'Is SME' column in database.")
             
-            # Apply strict mathematical filters
+            # Apply mathematical filters including Price Band 2 exclusion
             f_sme_roce = sme_df['roce_clean'] > 18.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
+            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  # Excludes Price Band 2
             
-            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap].copy()
+            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
             filtered_sme = full_filtered_sme.head(30)
             
             if not filtered_sme.empty:
-                top_25_sme_avg = filtered_sme.head(25)['1d_return'].mean()
+                top_25_sme = filtered_sme.head(25)
+                top_25_sme_avg = top_25_sme['1d_return'].mean()
                 sme_avg_color = "#10B981" if top_25_sme_avg > 0 else "#EF4444"
                 
-                col_sme_avg, col_sme_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Copy symbols HTML string for top 25 SME tickers
+                sme_copy_str = ",".join(top_25_sme['ticker'].astype(str).tolist())
+                sme_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copySmeBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{sme_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copySmeBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                col_sme_avg, col_sme_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_sme_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_sme_copy:
+                    components.html(sme_copy_html, height=45)
                 
-                # Setup exactly identical columns to Momentum Screener
                 sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
-                
-                # Create empty columns if they don't exist to prevent errors
                 for c in sme_cols:
                     if c not in filtered_sme.columns: filtered_sme[c] = ''
                         
@@ -1269,6 +1329,82 @@ with tab_screeners:
                 st.markdown(f'<div class="scrollable-table-container">{styled_sme.to_html()}</div>', unsafe_allow_html=True)
             else: 
                 st.info("No SME stocks match the criteria at the moment.")
+                
+            # SME Rebalancer Section
+            st.divider()
+            st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
+            st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your SME portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
+            sme_uploaded_file = st.file_uploader("Upload SME Portfolio", type=['csv', 'txt'], label_visibility="collapsed", key="sme_rebal_uploader")
+            
+            if sme_uploaded_file is not None:
+                try:
+                    if sme_uploaded_file.name.endswith('.csv'): 
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None)
+                    else: 
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None, sep='\t')
+                except Exception as e: st.error(f"Error reading file: {e}")
+                    
+            if 'sme_rebal_port_df' in st.session_state:
+                try:
+                    sme_user_df = st.session_state['sme_rebal_port_df']
+                    sme_raw_tickers = sme_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    sme_user_tickers = [t for t in sme_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
+                    sme_user_tickers = list(dict.fromkeys(sme_user_tickers)) 
+                    
+                    sme_n_stocks = len(sme_user_tickers)
+                    if sme_n_stocks > 0:
+                        st.info(f"Loaded **{sme_n_stocks}** unique tickers from your portfolio.")
+                        st.markdown("#### 🚫 Exclude Unavailable Stocks")
+                        sme_unavailable = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=full_filtered_sme['ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.", key="sme_multi")
+                        
+                        sme_unavail_clean = [str(x).strip().upper() for x in sme_unavailable]
+                        sme_user_clean = [str(x).strip().upper() for x in sme_user_tickers]
+                        
+                        full_filtered_sme['ticker_clean'] = full_filtered_sme['ticker'].astype(str).str.strip().str.upper()
+                        sme_df['ticker_clean'] = sme_df['ticker'].astype(str).str.strip().str.upper()
+                        
+                        sme_target_size = sme_n_stocks * 2
+                        sme_top_pool = full_filtered_sme.head(sme_target_size)
+                        sme_top_pool_tickers = sme_top_pool['ticker_clean'].tolist()
+                        
+                        sme_valid_reps = full_filtered_sme[~full_filtered_sme['ticker_clean'].isin(sme_user_clean) & ~full_filtered_sme['ticker_clean'].isin(sme_unavail_clean)]
+                        sme_reps_avail = sme_valid_reps.to_dict('records')
+                        
+                        sme_rebal_data = []
+                        for t in sme_user_tickers:
+                            t_clean = str(t).strip().upper()
+                            rank_match = full_filtered_sme[full_filtered_sme['ticker_clean'] == t_clean]
+                            
+                            if not rank_match.empty: sme_curr_rank = int(rank_match['Rank'].iloc[0])
+                            else:
+                                fallback_match = sme_df[sme_df['ticker_clean'] == t_clean]
+                                if not fallback_match.empty:
+                                    score = fallback_match['relative_score'].iloc[0]
+                                    sme_curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
+                                else: sme_curr_rank = "Not in DB"
+                            
+                            if t_clean in sme_top_pool_tickers:
+                                sme_rebal_data.append({"Portfolio Ticker": t, "Current Rank": sme_curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
+                            else:
+                                if sme_reps_avail:
+                                    rep = sme_reps_avail.pop(0) 
+                                    sme_rep_ticker = rep['ticker']
+                                    sme_rep_rank = rep['Rank']
+                                else:
+                                    sme_rep_ticker = "No valid replacements left"
+                                    sme_rep_rank = "-"
+                                sme_rebal_data.append({"Portfolio Ticker": t, "Current Rank": sme_curr_rank, "Status": "Out of Range (Rebalance)", "Suggested Replacement": sme_rep_ticker, "Replacement Rank": sme_rep_rank})
+                        
+                        sme_rebal_df = pd.DataFrame(sme_rebal_data)
+                        def sme_color_status(row):
+                            if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
+                            elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
+                            return [''] * len(row)
+                        
+                        styled_sme_rebal = sme_rebal_df.style.apply(sme_color_status, axis=1).hide(axis="index")
+                        st.markdown(f'<div class="scrollable-table-container">{styled_sme_rebal.to_html()}</div>', unsafe_allow_html=True)
+                    else: st.warning("Could not find any valid tickers in the uploaded file.")
+                except Exception as e: st.error(f"Error processing portfolio: {e}")
         else: 
             st.warning("SME Screener data is currently empty.")
     # --- SUB 3: US ETF SCREENER ---
