@@ -1204,37 +1204,32 @@ with tab_screeners:
             
             # Robust text-to-float converter
             def _col_series(df, col, default=0):
-                if col not in df.columns:
+                if col not in df.columns: 
                     return pd.Series([default] * len(df), index=df.index)
                 return pd.to_numeric(df[col].astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
-            # 1. Fuzzy match column names to absolutely guarantee we find them (bypasses invisible spaces/casing)
+            # 1. Fuzzy match column names to absolutely guarantee we find them
             col_is_sme = next((c for c in sme_df.columns if 'is sme' in str(c).lower().strip()), None)
             col_roce = next((c for c in sme_df.columns if 'roce' in str(c).lower().strip()), None)
             
-            # Show a loud warning if the columns are genuinely missing from the dataframe
             if not col_is_sme: st.warning("⚠️ Could not find an 'Is SME' column in the database.")
             if not col_roce: st.warning("⚠️ Could not find a 'ROCE' column in the database.")
 
-            # Ensure numeric conversions for standard columns
             sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
             
-            # Safely extract ROCE using the fuzzy matched column name
             sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
-            
             if 'band' not in sme_df.columns: sme_df['band'] = ''
             
-            # Safely extract IS SME (Accounts for '1', '1.0', 'true', 'yes')
+            # Safely extract IS SME
             if col_is_sme:
                 sme_val = sme_df[col_is_sme].astype(str).str.strip().str.lower().str.replace('.0', '', regex=False)
                 f_is_sme = sme_val.isin(['1', 'true', 't', 'yes', 'y'])
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
-            # Apply strict mathematical filters
             f_sme_roce = sme_df['roce_clean'] > 18.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
@@ -1274,6 +1269,84 @@ with tab_screeners:
                 st.markdown(f'<div class="scrollable-table-container">{styled_sme.to_html()}</div>', unsafe_allow_html=True)
             else: 
                 st.info("No SME stocks match the criteria at the moment.")
+                
+            # ==========================================
+            # SME REBALANCER
+            # ==========================================
+            st.divider()
+            st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
+            st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your SME portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
+            sme_uploaded_file = st.file_uploader("Upload SME Portfolio", type=['csv', 'txt'], label_visibility="collapsed", key="sme_rebal_uploader")
+            
+            if sme_uploaded_file is not None:
+                try:
+                    if sme_uploaded_file.name.endswith('.csv'): 
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None)
+                    else: 
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None, sep='\t')
+                except Exception as e: st.error(f"Error reading file: {e}")
+                    
+            if 'sme_rebal_port_df' in st.session_state:
+                try:
+                    sme_user_df = st.session_state['sme_rebal_port_df']
+                    sme_raw_tickers = sme_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    sme_user_tickers = [t for t in sme_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
+                    sme_user_tickers = list(dict.fromkeys(sme_user_tickers)) 
+                    
+                    sme_n_stocks = len(sme_user_tickers)
+                    if sme_n_stocks > 0:
+                        st.info(f"Loaded **{sme_n_stocks}** unique tickers from your portfolio.")
+                        st.markdown("#### 🚫 Exclude Unavailable Stocks")
+                        sme_unavailable = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=full_filtered_sme['ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.", key="sme_multi")
+                        
+                        sme_unavail_clean = [str(x).strip().upper() for x in sme_unavailable]
+                        sme_user_clean = [str(x).strip().upper() for x in sme_user_tickers]
+                        
+                        full_filtered_sme['ticker_clean'] = full_filtered_sme['ticker'].astype(str).str.strip().str.upper()
+                        sme_df['ticker_clean'] = sme_df['ticker'].astype(str).str.strip().str.upper()
+                        
+                        sme_target_size = sme_n_stocks * 2
+                        sme_top_pool = full_filtered_sme.head(sme_target_size)
+                        sme_top_pool_tickers = sme_top_pool['ticker_clean'].tolist()
+                        
+                        sme_valid_reps = full_filtered_sme[~full_filtered_sme['ticker_clean'].isin(sme_user_clean) & ~full_filtered_sme['ticker_clean'].isin(sme_unavail_clean)]
+                        sme_reps_avail = sme_valid_reps.to_dict('records')
+                        
+                        sme_rebal_data = []
+                        for t in sme_user_tickers:
+                            t_clean = str(t).strip().upper()
+                            rank_match = full_filtered_sme[full_filtered_sme['ticker_clean'] == t_clean]
+                            
+                            if not rank_match.empty: sme_curr_rank = int(rank_match['Rank'].iloc[0])
+                            else:
+                                fallback_match = sme_df[sme_df['ticker_clean'] == t_clean]
+                                if not fallback_match.empty:
+                                    score = fallback_match['relative_score'].iloc[0]
+                                    sme_curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
+                                else: sme_curr_rank = "Not in DB"
+                            
+                            if t_clean in sme_top_pool_tickers:
+                                sme_rebal_data.append({"Portfolio Ticker": t, "Current Rank": sme_curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
+                            else:
+                                if sme_reps_avail:
+                                    rep = sme_reps_avail.pop(0) 
+                                    sme_rep_ticker = rep['ticker']
+                                    sme_rep_rank = rep['Rank']
+                                else:
+                                    sme_rep_ticker = "No valid replacements left"
+                                    sme_rep_rank = "-"
+                                sme_rebal_data.append({"Portfolio Ticker": t, "Current Rank": sme_curr_rank, "Status": "Out of Range (Rebalance)", "Suggested Replacement": sme_rep_ticker, "Replacement Rank": sme_rep_rank})
+                        
+                        sme_rebal_df = pd.DataFrame(sme_rebal_data)
+                        def sme_color_status(row):
+                            if 'Hold' in str(row['Status']): return ['background-color: rgba(187, 247, 208, 0.3)'] * len(row) 
+                            elif 'Rebalance' in str(row['Status']): return ['background-color: rgba(254, 202, 202, 0.3)'] * len(row) 
+                            return [''] * len(row)
+                        
+                        styled_sme_rebal = sme_rebal_df.style.apply(sme_color_status, axis=1).hide(axis="index")
+                        st.markdown(f'<div class="scrollable-table-container">{styled_sme_rebal.to_html()}</div>', unsafe_allow_html=True)
+                    else: st.warning("Could not find any valid tickers in the uploaded file.")
+                except Exception as e: st.error(f"Error processing portfolio: {e}")
         else: 
             st.warning("SME Screener data is currently empty.")
     # --- SUB 3: US ETF SCREENER ---
