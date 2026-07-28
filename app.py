@@ -1544,13 +1544,44 @@ with tab_screeners:
             top_50_value = v_filtered.head(50)
             
             if not top_50_value.empty:
-                top_25_val_avg = top_50_value.head(25)[col_chg].mean()
+                top_25_val = top_50_value.head(25)
+                top_25_val_avg = top_25_val[col_chg].mean()
                 v_avg_color = "#10B981" if top_25_val_avg > 0 else "#EF4444"
                 
-                # Align inline text neatly
-                col_val_avg, col_val_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Copy symbols HTML string for top 25 Value tickers
+                val_copy_str = ",".join(top_25_val['Ticker'].astype(str).tolist())
+                val_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copyValBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{val_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copyValBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                # Align inline text and copy button neatly side-by-side
+                col_val_avg, col_val_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_val_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_val_copy:
+                    components.html(val_copy_html, height=45)
                 
                 val_cols = ['Rank', 'Ticker', 'Name', col_chg, col_cmp, col_sector, col_ind, col_band, col_dath, 'Turnover']
                 val_cols = [c for c in val_cols if c in top_50_value.columns]
@@ -1576,8 +1607,12 @@ with tab_screeners:
                 st.markdown(f'<div class="scrollable-table-container">{styled_val.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No stocks match the Value Screener criteria at the moment.")
             
+            # ==========================================
+            # VALUE REBALANCER
+            # ==========================================
             st.divider()
             st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
+            st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
             val_uploaded_file = st.file_uploader("Upload Value Portfolio", type=['csv', 'txt'], label_visibility="collapsed", key="val_rebal_uploader")
             
             if val_uploaded_file is not None:
@@ -1598,11 +1633,15 @@ with tab_screeners:
                     v_n_stocks = len(v_user_tickers)
                     if v_n_stocks > 0:
                         st.info(f"Loaded **{v_n_stocks}** unique tickers from your portfolio.")
-                        v_unavailable = st.multiselect("Select replacement tickers to skip:", options=v_filtered['Ticker'].tolist(), key="val_multi")
+                        st.markdown("#### 🚫 Exclude Unavailable Stocks")
+                        v_unavailable = st.multiselect("Select replacement tickers hitting upper circuits or with low liquidity to skip them:", options=v_filtered['Ticker'].tolist(), help="Excluded stocks will be instantly bypassed, pulling the next best ranked stock.", key="val_multi")
                         
                         v_unavail_clean = [str(x).strip().upper() for x in v_unavailable]
                         v_user_clean = [str(x).strip().upper() for x in v_user_tickers]
+                        
+                        # Apply clean ticker strings to both the filtered pool and the base dataframe
                         v_filtered['ticker_clean'] = v_filtered['Ticker'].astype(str).str.strip().str.upper()
+                        v_df['ticker_clean'] = v_df['Ticker'].astype(str).str.strip().str.upper()
                         
                         v_target_size = v_n_stocks * 2
                         v_top_pool = v_filtered.head(v_target_size)
@@ -1616,8 +1655,16 @@ with tab_screeners:
                             t_clean = str(t).strip().upper()
                             rank_match = v_filtered[v_filtered['ticker_clean'] == t_clean]
                             
-                            if not rank_match.empty: v_curr_rank = int(rank_match['Rank'].iloc[0])
-                            else: v_curr_rank = "Not in DB"
+                            if not rank_match.empty: 
+                                v_curr_rank = int(rank_match['Rank'].iloc[0])
+                            else: 
+                                # Fallback: If it's not in the filtered list (e.g. dropped out of turnover), check the main base DB for its actual score
+                                fallback_match = v_df[v_df['ticker_clean'] == t_clean]
+                                if not fallback_match.empty:
+                                    score = fallback_match[col_vscore].iloc[0]
+                                    v_curr_rank = int(float(score)) if pd.notna(score) and str(score).strip() != "" else "No Data"
+                                else: 
+                                    v_curr_rank = "Not in DB"
                             
                             if t_clean in v_top_pool_tickers:
                                 v_rebal_data.append({"Portfolio Ticker": t, "Current Rank": v_curr_rank, "Status": "In Range (Hold)", "Suggested Replacement": "-", "Replacement Rank": "-"})
