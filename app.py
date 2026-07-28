@@ -16,6 +16,7 @@ import io
 import gzip
 from st_copy_to_clipboard import st_copy_to_clipboard
 import streamlit.components.v1 as components
+from tvDatafeed import TvDatafeed, Interval
 
 # Silence terminal spam
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -1738,6 +1739,20 @@ div[role="radiogroup"]{
     if load_data:
         with st.spinner("🔄 Fetching and syncing portfolio data..."):
             try:
+                # --- NEW: Fetch Index Data for 10-Day Rule ---
+                index_data = pd.DataFrame()
+                try:
+                    tv = TvDatafeed()
+                    for _ in range(3):
+                        idx_temp = tv.get_hist(symbol='NIFTY_MICROCAP250', exchange='NSE', interval=Interval.in_daily, n_bars=1000)
+                        if idx_temp is not None and not idx_temp.empty:
+                            index_data = idx_temp.sort_index()
+                            break
+                        time.sleep(1)
+                except Exception:
+                    pass
+                # ----------------------------------------------
+                
                 port_df = pd.DataFrame()
                 
                 # 1. Parse File/URL
@@ -1841,9 +1856,24 @@ div[role="radiogroup"]{
                     if trading_days < 10:
                         rule_status = f"PENDING ({int(trading_days)}/10)"
                     else:
-                        required_return = (trading_days // 10) * 5.0
-                        if return_pct < required_return:
-                            rule_status = f"EXIT ({return_pct:.2f}%)"
+                        if not index_data.empty and pd.notna(entry_dt):
+                            curr_idx_price = float(index_data['close'].iloc[-1])
+                            historical_idx = index_data[index_data.index <= entry_dt]
+                            if not historical_idx.empty:
+                                past_idx_price = float(historical_idx['close'].iloc[-1])
+                                index_ret = ((curr_idx_price - past_idx_price) / past_idx_price) * 100
+                                
+                                if index_ret >= 0:
+                                    target_return = index_ret * 2
+                                else:
+                                    target_return = index_ret / 2
+                                    
+                                if return_pct < target_return:
+                                    rule_status = f"EXIT ({return_pct:.2f}%)"
+                                else:
+                                    rule_status = f"PASS ({return_pct:.2f}%)"
+                            else:
+                                rule_status = f"PASS ({return_pct:.2f}%)"
                         else:
                             rule_status = f"PASS ({return_pct:.2f}%)"
                             
@@ -1863,7 +1893,7 @@ div[role="radiogroup"]{
                         "Trading Days": trading_days,
                         "EMA21": f"{curr_pfx}{ema21_val:.2f}",
                         "EMA 21 Status": ema_status,
-                        "10 Day Rule": rule_status
+                        "Index 10day rule": rule_status
                     })
                 
                 final_port_df = pd.DataFrame(tracker_data)
@@ -1910,7 +1940,7 @@ div[role="radiogroup"]{
                     bg_color = [''] * len(row)
                     ret_idx = final_port_df.columns.get_loc('Return %')
                     ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
-                    rule_idx = final_port_df.columns.get_loc('10 Day Rule')
+                    rule_idx = final_port_df.columns.get_loc('Index 10day rule')
                     sl_idx = final_port_df.columns.get_loc('Stop Loss')
                     sym_idx = final_port_df.columns.get_loc('Symbol')
                     
@@ -1924,8 +1954,8 @@ div[role="radiogroup"]{
                         bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
                         has_alert = True
                     
-                    if "PASS" in str(row['10 Day Rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif "EXIT" in str(row['10 Day Rule']): 
+                    if "PASS" in str(row['Index 10day rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+                    elif "EXIT" in str(row['Index 10day rule']): 
                         bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
                         has_alert = True
                         
