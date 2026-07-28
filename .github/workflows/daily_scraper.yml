@@ -9,6 +9,7 @@ on:
 jobs:
   scrape-and-update:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # <-- Added this line to prevent the 6-minute cancellation
 
     steps:
       - name: Checkout repository
