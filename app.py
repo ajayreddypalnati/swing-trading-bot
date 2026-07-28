@@ -1095,7 +1095,7 @@ with tab_screeners:
             full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
             full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
             full_filtered_mom['Rank'] = full_filtered_mom.index + 1
-            filtered_mom = full_filtered_mom.head(30)
+            filtered_mom = full_filtered_mom.head(50)
             
             if not filtered_mom.empty:
                 top_25_mom = filtered_mom.head(25)
@@ -1267,7 +1267,7 @@ with tab_screeners:
             full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
-            filtered_sme = full_filtered_sme.head(30)
+            filtered_sme = full_filtered_sme.head(50)
             
             if not filtered_sme.empty:
                 top_25_sme = filtered_sme.head(25)
