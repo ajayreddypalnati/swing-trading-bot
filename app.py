@@ -953,9 +953,10 @@ with tab_leaders:
 
 # --- 4. SCREENERS HUB TAB ---
 with tab_screeners:
-    sub_etf, sub_mom, sub_us_etf, sub_val = st.tabs([
+    sub_etf, sub_mom, sub_sme, sub_us_etf, sub_val = st.tabs([
         "📊 ETF Screener", 
         "🚀 Momentum Screener", 
+        "🏢 SME Screener",
         "🌍 US ETF Screener",
         "💎 Value Screener"
     ])
@@ -1192,6 +1193,79 @@ with tab_screeners:
                     else: st.warning("Could not find any valid tickers in the uploaded file.")
                 except Exception as e: st.error(f"Error processing portfolio: {e}")
 
+    # --- SUB 2.5: SME SCREENER ---
+    with sub_sme:
+        col_sme_input, col_sme_space = st.columns([2, 8])
+        with col_sme_input:
+            sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
+        
+        if not main_df.empty:
+            sme_df = main_df.copy()
+            
+            def _col_series(df, col, default=0):
+                src = df.get(col, pd.Series([default] * len(df), index=df.index))
+                return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
+
+            # Ensure columns are numeric for filtering
+            sme_df['turnover'] = _col_series(sme_df, 'turnover')
+            sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
+            sme_df['1d_return'] = _col_series(sme_df, '1d_return')
+            sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
+            sme_df['ROCE %'] = _col_series(sme_df, 'ROCE %')
+            
+            if 'band' not in sme_df.columns: sme_df['band'] = ''
+            if 'db_exchange' not in sme_df.columns: sme_df['db_exchange'] = 'NSE'
+            
+            # Safely handle the IS SME column (cleaning out strings or floats)
+            if 'IS SME' in sme_df.columns:
+                f_is_sme = sme_df['IS SME'].astype(str).str.strip().str.replace('.0', '', regex=False) == '1'
+            else:
+                f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
+            
+            # Apply strict filters
+            f_sme_roce = sme_df['ROCE %'] > 18
+            f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
+            f_sme_mcap = sme_df['market_cap'] > 100
+            
+            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap].copy()
+            full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
+            full_filtered_sme['Rank'] = full_filtered_sme.index + 1
+            filtered_sme = full_filtered_sme.head(30)
+            
+            if not filtered_sme.empty:
+                top_25_sme_avg = filtered_sme.head(25)['1d_return'].mean()
+                sme_avg_color = "#10B981" if top_25_sme_avg > 0 else "#EF4444"
+                
+                col_sme_avg, col_sme_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with col_sme_avg:
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                
+                # Setup exactly identical columns to Momentum Screener
+                sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
+                
+                # Create empty columns if they don't exist to prevent errors
+                for c in sme_cols:
+                    if c not in filtered_sme.columns: filtered_sme[c] = ''
+                        
+                display_sme = filtered_sme[sme_cols]
+                display_sme = display_sme.rename(columns={
+                    'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 
+                    'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', 
+                    '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'
+                })
+                display_sme['Band'] = display_sme['Band'].fillna("-")
+                
+                styled_sme = display_sme.style.hide(axis="index").format({
+                    'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
+                    'Turnover (Cr)': lambda x: safe_fmt(x, "{:.2f}"), 
+                    '1 Day Return %': lambda x: safe_fmt(x, "{:.2f}%"), 
+                    'Rank': lambda x: safe_fmt(x, "{:.0f}")
+                })
+                st.markdown(f'<div class="scrollable-table-container">{styled_sme.to_html()}</div>', unsafe_allow_html=True)
+            else: 
+                st.info("No SME stocks match the criteria at the moment.")
+        else: 
+            st.warning("SME Screener data is currently empty.")
     # --- SUB 3: US ETF SCREENER ---
     with sub_us_etf:
         if not us_etf_df.empty:
