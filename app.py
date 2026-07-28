@@ -1202,30 +1202,35 @@ with tab_screeners:
         if not main_df.empty:
             sme_df = main_df.copy()
             
+            # Robust text-to-float converter for your Supabase text columns
             def _col_series(df, col, default=0):
-                src = df.get(col, pd.Series([default] * len(df), index=df.index))
-                return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
+                if col not in df.columns: 
+                    return pd.Series([default] * len(df), index=df.index)
+                return pd.to_numeric(df[col].astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
-            # Ensure columns are numeric for filtering
-            sme_df['turnover'] = _col_series(sme_df, 'turnover')
+            # Base columns (renamed earlier in your script)
+            sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
-            sme_df['ROCE %'] = _col_series(sme_df, 'ROCE %')
+            
+            # Exact match based on your Supabase image
+            sme_df['roce_clean'] = _col_series(sme_df, 'ROCE %')
             
             if 'band' not in sme_df.columns: sme_df['band'] = ''
-            if 'db_exchange' not in sme_df.columns: sme_df['db_exchange'] = 'NSE'
             
-            # Safely handle the IS SME column (cleaning out strings or floats)
-            if 'IS SME' in sme_df.columns:
-                f_is_sme = sme_df['IS SME'].astype(str).str.strip().str.replace('.0', '', regex=False) == '1'
+            # Exact match for 'Is SME' based on your Supabase image
+            if 'Is SME' in sme_df.columns:
+                # Clean the text column, strip spaces, drop decimals if it's '1.0', and check for '1'
+                f_is_sme = sme_df['Is SME'].astype(str).str.strip().str.replace('.0', '', regex=False) == '1'
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
+                st.warning("⚠️ Could not find 'Is SME' column in database.")
             
-            # Apply strict filters
-            f_sme_roce = sme_df['ROCE %'] > 18
+            # Apply strict mathematical filters
+            f_sme_roce = sme_df['roce_clean'] > 18.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
-            f_sme_mcap = sme_df['market_cap'] > 100
+            f_sme_mcap = sme_df['market_cap'] > 100.0
             
             full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
