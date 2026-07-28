@@ -1202,30 +1202,37 @@ with tab_screeners:
         if not main_df.empty:
             sme_df = main_df.copy()
             
-            # Robust text-to-float converter for your Supabase text columns
+            # Robust text-to-float converter
             def _col_series(df, col, default=0):
-                if col not in df.columns: 
+                if col not in df.columns:
                     return pd.Series([default] * len(df), index=df.index)
                 return pd.to_numeric(df[col].astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
-            # Base columns (renamed earlier in your script)
+            # 1. Fuzzy match column names to absolutely guarantee we find them (bypasses invisible spaces/casing)
+            col_is_sme = next((c for c in sme_df.columns if 'is sme' in str(c).lower().strip()), None)
+            col_roce = next((c for c in sme_df.columns if 'roce' in str(c).lower().strip()), None)
+            
+            # Show a loud warning if the columns are genuinely missing from the dataframe
+            if not col_is_sme: st.warning("⚠️ Could not find an 'Is SME' column in the database.")
+            if not col_roce: st.warning("⚠️ Could not find a 'ROCE' column in the database.")
+
+            # Ensure numeric conversions for standard columns
             sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
             
-            # Exact match based on your Supabase image
-            sme_df['roce_clean'] = _col_series(sme_df, 'ROCE %')
+            # Safely extract ROCE using the fuzzy matched column name
+            sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
             
             if 'band' not in sme_df.columns: sme_df['band'] = ''
             
-            # Exact match for 'Is SME' based on your Supabase image
-            if 'Is SME' in sme_df.columns:
-                # Clean the text column, strip spaces, drop decimals if it's '1.0', and check for '1'
-                f_is_sme = sme_df['Is SME'].astype(str).str.strip().str.replace('.0', '', regex=False) == '1'
+            # Safely extract IS SME (Accounts for '1', '1.0', 'true', 'yes')
+            if col_is_sme:
+                sme_val = sme_df[col_is_sme].astype(str).str.strip().str.lower().str.replace('.0', '', regex=False)
+                f_is_sme = sme_val.isin(['1', 'true', 't', 'yes', 'y'])
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
-                st.warning("⚠️ Could not find 'Is SME' column in database.")
             
             # Apply strict mathematical filters
             f_sme_roce = sme_df['roce_clean'] > 18.0
@@ -1245,10 +1252,8 @@ with tab_screeners:
                 with col_sme_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4>", unsafe_allow_html=True)
                 
-                # Setup exactly identical columns to Momentum Screener
                 sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
                 
-                # Create empty columns if they don't exist to prevent errors
                 for c in sme_cols:
                     if c not in filtered_sme.columns: filtered_sme[c] = ''
                         
