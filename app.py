@@ -1098,13 +1098,44 @@ with tab_screeners:
             filtered_mom = full_filtered_mom.head(30)
             
             if not filtered_mom.empty:
-                top_25_avg = filtered_mom.head(25)['1d_return'].mean()
+                top_25_mom = filtered_mom.head(25)
+                top_25_avg = top_25_mom['1d_return'].mean()
                 avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                 
-                # Align inline text neatly
-                col_mom_avg, col_mom_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Copy symbols HTML string for top 25 Momentum tickers
+                mom_copy_str = ",".join(top_25_mom['ticker'].astype(str).tolist())
+                mom_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copyMomBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{mom_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copyMomBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                # Align inline text and copy button neatly side-by-side
+                col_mom_avg, col_mom_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_mom_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_mom_copy:
+                    components.html(mom_copy_html, height=45)
                 
                 display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
                 display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
@@ -1219,8 +1250,8 @@ with tab_screeners:
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
-            
-            sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
+
+                    sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
             if 'band' not in sme_df.columns: sme_df['band'] = ''
             
             # Safely extract IS SME
@@ -1230,22 +1261,55 @@ with tab_screeners:
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
+            # Apply mathematical filters including Price Band 2 exclusion
             f_sme_roce = sme_df['roce_clean'] > 18.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
+            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  # Excludes Price Band 2
             
-            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap].copy()
+            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
             filtered_sme = full_filtered_sme.head(30)
             
             if not filtered_sme.empty:
-                top_25_sme_avg = filtered_sme.head(25)['1d_return'].mean()
+                top_25_sme = filtered_sme.head(25)
+                top_25_sme_avg = top_25_sme['1d_return'].mean()
                 sme_avg_color = "#10B981" if top_25_sme_avg > 0 else "#EF4444"
                 
-                col_sme_avg, col_sme_space2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Copy symbols HTML string for top 25 SME tickers
+                sme_copy_str = ",".join(top_25_sme['ticker'].astype(str).tolist())
+                sme_copy_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                    body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                    button {{
+                        font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                    }}
+                    button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                    button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                </style>
+                </head>
+                <body>
+                    <button id="copySmeBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                    <script>
+                    function copyToClipboard() {{
+                        const ta = document.createElement('textarea'); ta.value = "{sme_copy_str}"; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                        const btn = document.getElementById('copySmeBtn'); btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                    }}
+                    </script>
+                </body>
+                </html>
+                """
+                
+                col_sme_avg, col_sme_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_sme_avg:
                     st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                with col_sme_copy:
+                    components.html(sme_copy_html, height=45)
                 
                 sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
                 
