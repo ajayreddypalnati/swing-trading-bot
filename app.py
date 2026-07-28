@@ -956,9 +956,9 @@ with tab_screeners:
     sub_etf, sub_mom, sub_sme, sub_us_etf, sub_val = st.tabs([
         "📊 ETF Screener", 
         "🚀 Momentum Screener", 
-        "🏢 SME Screener",
+        "🏢 SME Mom Screener",
         "🌍 US ETF Screener",
-        "💎 Value Screener"
+        "💎 M 250 Value Screener"
     ])
     
     # --- SUB 1: ETF SCREENER ---
