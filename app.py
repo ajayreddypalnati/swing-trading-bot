@@ -1267,7 +1267,7 @@ with tab_screeners:
             full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
-            filtered_sme = full_filtered_sme.head(50)
+            filtered_sme = full_filtered_sme.head(500)
             
             if not filtered_sme.empty:
                 top_25_sme = filtered_sme.head(25)
