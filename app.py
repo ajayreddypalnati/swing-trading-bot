@@ -1510,10 +1510,8 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        # Create a single horizontal row for Input, Average, and Copy Button
-        col_val_in, col_val_avg, col_val_copy = st.columns([2.5, 6, 1.5], vertical_alignment="bottom")
-        
-        with col_val_in:
+        col_val_input, col_val_space = st.columns([2, 8])
+        with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover")
         
         if not micro_df.empty:
