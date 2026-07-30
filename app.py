@@ -1088,7 +1088,7 @@ with tab_screeners:
             if 'band' not in mom_df.columns: mom_df['band'] = ''
             if 'db_exchange' not in mom_df.columns: mom_df['db_exchange'] = 'NSE'
             
-            f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
+            f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper().isin(['NSE', 'BSE'])
             f_turnover = mom_df['turnover'] >= min_turnover
             f_band = ~mom_df['band'].astype(str).str.strip().isin(['2', '2.0'])
             f_ath      = mom_df['down_ath'] <= 20.0
