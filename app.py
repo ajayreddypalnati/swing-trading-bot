@@ -1071,38 +1071,74 @@ with tab_screeners:
     with sub_mom:
         col_mom_input, col_mom_space = st.columns([2, 8])
         with col_mom_input:
-            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover")
-        
+            min_turnover = st.number_input(
+                "Minimum Turnover (in Cr)",
+                min_value=0.0,
+                value=3.0,
+                step=1.0,
+                key="mom_turnover"
+            )
+
         if not main_df.empty:
             mom_df = main_df.copy()
+
             def _col_series(df, col, default=0):
                 src = df.get(col, pd.Series([default] * len(df), index=df.index))
-                return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
+                return pd.to_numeric(
+                    src.astype(str)
+                       .str.replace(',', '', regex=False)
+                       .str.rstrip('%')
+                       .replace({'nan': ''}),
+                    errors='coerce'
+                )
 
             mom_df['turnover'] = _col_series(mom_df, 'turnover')
             mom_df['down_ath'] = _col_series(mom_df, 'down_ath')
             mom_df['relative_score'] = _col_series(mom_df, 'relative_score')
             mom_df['market_cap'] = _col_series(mom_df, 'market_cap')
             mom_df['1d_return'] = _col_series(mom_df, '1d_return')
-            
-            if 'band' not in mom_df.columns: mom_df['band'] = ''
-            if 'db_exchange' not in mom_df.columns: mom_df['db_exchange'] = 'NSE'
-            
-            f_exchange = mom_df['db_exchange'].astype(str).str.strip().str.upper() == 'NSE'
+
+            if 'band' not in mom_df.columns:
+                mom_df['band'] = ''
+
+            if 'db_exchange' not in mom_df.columns:
+                mom_df['db_exchange'] = 'NSE'
+
+            # Include BOTH NSE and BSE
+            f_exchange = (
+                mom_df['db_exchange']
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .isin(['NSE', 'BSE'])
+            )
+
             f_turnover = mom_df['turnover'] >= min_turnover
             f_band = ~mom_df['band'].astype(str).str.strip().isin(['2', '2.0'])
-            f_ath      = mom_df['down_ath'] <= 20.0
-            
-            full_filtered_mom = mom_df[f_exchange & f_turnover & f_band & f_ath].copy()
-            full_filtered_mom = full_filtered_mom.sort_values(by='relative_score', ascending=True).reset_index(drop=True)
+            f_ath = mom_df['down_ath'] <= 20.0
+
+            full_filtered_mom = mom_df[
+                f_exchange &
+                f_turnover &
+                f_band &
+                f_ath
+            ].copy()
+
+            full_filtered_mom = (
+                full_filtered_mom
+                .sort_values(by='relative_score', ascending=True)
+                .reset_index(drop=True)
+            )
+
             full_filtered_mom['Rank'] = full_filtered_mom.index + 1
+
             filtered_mom = full_filtered_mom.head(50)
-            
+
             if not filtered_mom.empty:
                 top_25_mom = filtered_mom.head(25)
                 top_25_avg = top_25_mom['1d_return'].mean()
                 avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
-                
+
                 # Copy symbols HTML string for top 25 Momentum tickers
                 mom_copy_str = ",".join(top_25_mom['ticker'].astype(str).tolist())
                 mom_copy_html = f"""
