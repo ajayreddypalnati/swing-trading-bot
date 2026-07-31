@@ -1249,6 +1249,7 @@ with tab_screeners:
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
+            sme_df['down_ath'] = _col_series(sme_df, 'down_ath')
             
             sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
             if 'band' not in sme_df.columns: sme_df['band'] = ''
@@ -1259,13 +1260,14 @@ with tab_screeners:
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
-            # Apply mathematical filters including Price Band 2 exclusion
+            # Apply mathematical filters including Price Band 2 exclusion and Down %_ATH cap
             f_sme_roce = sme_df['roce_clean'] > 18.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
             f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  # Excludes Price Band 2
+            f_sme_ath = sme_df['down_ath'] <= 25.0  # Down %_ATH must be <= 25
             
-            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band].copy()
+            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band & f_sme_ath].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
             filtered_sme = full_filtered_sme.head(500)
