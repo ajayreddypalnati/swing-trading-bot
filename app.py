@@ -966,7 +966,7 @@ with tab_screeners:
     with sub_etf:
         col_etf_input, col_etf_space = st.columns([2, 8])
         with col_etf_input:
-            etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="etf_turnover")
+            etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
         
         if not etf_df.empty:
             e_df = etf_df.copy()
@@ -1071,7 +1071,7 @@ with tab_screeners:
     with sub_mom:
         col_mom_input, col_mom_space = st.columns([2, 8])
         with col_mom_input:
-            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="mom_turnover")
+            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
         
         if not main_df.empty:
             mom_df = main_df.copy()
@@ -1513,7 +1513,7 @@ with tab_screeners:
     with sub_val:
         col_val_input, col_val_space = st.columns([2, 8])
         with col_val_input:
-            val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=3.0, step=1.0, key="val_turnover")
+            val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
         
         if not micro_df.empty:
             v_df = micro_df.copy()
