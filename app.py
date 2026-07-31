@@ -1261,7 +1261,7 @@ with tab_screeners:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
             # Apply mathematical filters including Price Band 2 exclusion and Down %_ATH cap
-            f_sme_roce = sme_df['roce_clean'] > 18.0
+            f_sme_roce = sme_df['roce_clean'] > 20.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
             f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  # Excludes Price Band 2
