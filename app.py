@@ -226,18 +226,29 @@ st.markdown("""
         }
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
-        
-        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
-        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
+
+        /* DEFAULT BLACK BORDERS FOR ALL INPUTS */
+        div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+            border: 2px solid #000000 !important;
+            border-radius: 8px !important;
             background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 1px solid #0B1D30 !important;
+            overflow: hidden !important;
         }
         
-        /* ALWAYS ENFORCE BLACK BORDER ON NUMBER INPUTS */
-        div[data-testid="stNumberInput"] div[data-baseweb="base-input"] {
-            border: 2px solid #000000 !important;
-            border-radius: 6px !important;
+        /* REMOVE INNER BORDERS AND FORCE WHITE BG ON INPUT FIELD */
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stTextInput"] input {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        
+        /* FIX THE PLUS/MINUS BUTTONS BACKGROUND FOR NUMBER INPUTS */
+        div[data-testid="stNumberInput"] button {
+            background-color: #F4F1E1 !important;
+            color: #0B1D30 !important;
         }
 
         /* DEFAULT BLACK BORDER FOR ALL STANDARD BUTTONS */
@@ -247,6 +258,10 @@ st.markdown("""
             color: #0B1D30 !important;
             font-weight: 700 !important;
             background-color: #FFFFFF !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stButton"] button:hover {
+            background-color: #E5E1CD !important;
         }
         
         /* Remove default Streamlit vertical block padding to tighten spacing */
@@ -1762,8 +1777,6 @@ div[role="radiogroup"]{
     
     with btn_col:
         load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
-        if st.session_state['port_refresh_time'] != "Never":
-            st.markdown(f"<div style='text-align: center; font-size: 0.8rem; color: #6B7280; margin-top: 5px;'>Last refresh: {st.session_state['port_refresh_time']}</div>", unsafe_allow_html=True)
 
     if load_data:
         with st.spinner("🔄 Fetching and syncing portfolio data..."):
@@ -1932,7 +1945,6 @@ div[role="radiogroup"]{
                 st.session_state['port_df_state'] = final_port_df
                 st.session_state['port_avg_chg'] = avg_chg
                 st.session_state['port_refresh_time'] = datetime.now(ist).strftime('%d %b %Y, %I:%M %p')
-                st.rerun() # Refresh immediately to display
                 
             except Exception as e:
                 st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
@@ -1945,7 +1957,8 @@ div[role="radiogroup"]{
         port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
         with port_col1:
             avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-            st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4></div>", unsafe_allow_html=True)
+            refresh_txt = f"<span style='font-size: 0.85rem; color: #6B7280; margin-left: 15px; font-weight: 500;'>Last refresh: {st.session_state['port_refresh_time']}</span>" if st.session_state['port_refresh_time'] != "Never" else ""
+            st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px; display: inline-block;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>{refresh_txt}</div>", unsafe_allow_html=True)
         
         with port_col2:
             port_copy_str = ",".join(final_port_df['Symbol'].tolist())
