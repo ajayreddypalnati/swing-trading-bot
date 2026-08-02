@@ -93,7 +93,7 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            margin-bottom: 20px; /* Reduced gap */
+            margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
             transform: translateY(0);
@@ -214,17 +214,28 @@ st.markdown("""
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
         
-        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
-        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
+        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK */
+        div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+            border: 2px solid #000000 !important;
+            border-radius: 8px !important;
             background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: 1px solid #0B1D30 !important;
+            overflow: hidden !important;
         }
         
-        /* FORCE NUMBER INPUT BORDER TO BLACK */
-        div[data-testid="stNumberInput"] [data-baseweb="input"] {
-            border: 2px solid #000000 !important;
-            border-radius: 6px !important;
+        /* REMOVE INNER BORDERS AND FORCE WHITE BG ON INPUT FIELD */
+        div[data-testid="stNumberInput"] input,
+        div[data-testid="stTextInput"] input {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        
+        /* FIX THE PLUS/MINUS BUTTONS BACKGROUND FOR NUMBER INPUTS */
+        div[data-testid="stNumberInput"] button {
+            background-color: #F4F1E1 !important;
+            color: #0B1D30 !important;
         }
         
         /* Remove default Streamlit vertical block padding to tighten spacing */
@@ -1233,7 +1244,8 @@ with tab_screeners:
 
     # --- SUB 2.5: SME SCREENER ---
     with sub_sme:
-        col_sme_input, col_sme_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_sme_input, col_sme_avg, col_sme_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_sme_input:
             sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
         
@@ -1311,9 +1323,9 @@ with tab_screeners:
                 </html>
                 """
                 
-                col_sme_avg, col_sme_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_sme_avg:
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_sme_copy:
                     components.html(sme_copy_html, height=45)
                 
