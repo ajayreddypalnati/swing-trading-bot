@@ -221,6 +221,12 @@ st.markdown("""
             border: 1px solid #0B1D30 !important;
         }
         
+        /* FORCE NUMBER INPUT BORDER TO BLACK */
+        div[data-testid="stNumberInput"] [data-baseweb="input"] {
+            border: 2px solid #000000 !important;
+            border-radius: 6px !important;
+        }
+        
         /* Remove default Streamlit vertical block padding to tighten spacing */
         div[data-testid="stVerticalBlock"] {
             gap: 0.5rem !important;
@@ -964,7 +970,8 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        col_etf_input, col_etf_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_etf_input, col_etf_avg, col_etf_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
         
@@ -1032,10 +1039,9 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Inline Average text and Copy Button side-by-side
-                col_etf_avg, col_etf_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_etf_avg:
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_etf_copy:
                     components.html(etf_copy_html, height=45)
                 
@@ -1069,7 +1075,8 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        col_mom_input, col_mom_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_mom_input, col_mom_avg, col_mom_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
         
@@ -1131,10 +1138,9 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Align inline text and copy button neatly side-by-side
-                col_mom_avg, col_mom_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_mom_avg:
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_mom_copy:
                     components.html(mom_copy_html, height=45)
                 
@@ -1513,7 +1519,8 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        col_val_input, col_val_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_val_input, col_val_avg, col_val_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
         
@@ -1579,10 +1586,9 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Align inline text and copy button neatly side-by-side
-                col_val_avg, col_val_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_val_avg:
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_val_copy:
                     components.html(val_copy_html, height=45)
                 
