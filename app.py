@@ -210,30 +210,33 @@ st.markdown("""
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
         
-        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK (Req 1) */
-        div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
-        div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK (Req 1/2) */
+        /* Target the outermost input container to prevent inner elements from covering the top/bottom borders */
+        div[data-testid="stNumberInput"] [data-baseweb="input"],
+        div[data-testid="stTextInput"] [data-baseweb="input"] {
             border: 2px solid #000000 !important;
             border-radius: 8px !important;
             background-color: #FFFFFF !important;
             overflow: hidden !important;
         }
         
-        /* Stop the red/blue outline on focus (Req 1) */
-        div[data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus-within,
-        div[data-testid="stTextInput"] div[data-baseweb="base-input"]:focus-within,
-        div[data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus,
-        div[data-testid="stTextInput"] div[data-baseweb="base-input"]:focus {
+        /* Stop the red/blue outline on focus */
+        div[data-testid="stNumberInput"] [data-baseweb="input"]:focus-within,
+        div[data-testid="stTextInput"] [data-baseweb="input"]:focus-within {
             border-color: #000000 !important;
             box-shadow: none !important;
         }
         
+        /* Strip background and borders from nested Streamlit inputs so they don't clip the parent border */
+        div[data-testid="stNumberInput"] [data-baseweb="base-input"],
+        div[data-testid="stTextInput"] [data-baseweb="base-input"],
         div[data-testid="stNumberInput"] input,
         div[data-testid="stTextInput"] input {
-            background-color: #FFFFFF !important;
+            background-color: transparent !important;
             color: #0B1D30 !important;
             border: none !important;
             box-shadow: none !important;
+            outline: none !important;
         }
         
         div[data-testid="stNumberInput"] button {
@@ -241,7 +244,7 @@ st.markdown("""
             color: #0B1D30 !important;
         }
         
-        /* Global Buttons (like Load/Refresh) (Req 3) */
+        /* Global Buttons (like Load/Refresh) */
         div[data-testid="stButton"] button {
             border: 2px solid #000000 !important;
             font-weight: 700 !important;
@@ -688,7 +691,6 @@ now_ist = datetime.now(ist)
 current_time = now_ist.strftime('%I:%M:%S %p')
 current_date = now_ist.strftime('%d %b %Y')
 
-# Req 2 Logic: Check if market is open (Mon-Fri, 9am - 4pm)
 is_market_open = now_ist.weekday() < 5 and (9 <= now_ist.hour < 16)
 
 if is_market_open:
@@ -793,7 +795,7 @@ tab_main, tab_cycle, tab_leaders, tab_port, tab_screeners = st.tabs([
     "🔎 Screeners"
 ])
 
-# --- 1. DEFAULT TAB: 9-EMA SCREENER (Req 4: Wrapped in fragment to refresh selectively) ---
+# --- 1. DEFAULT TAB: 9-EMA SCREENER ---
 def render_9ema_screener():
     data = get_combined_data()
     display_df = pd.DataFrame()
@@ -899,7 +901,6 @@ def render_9ema_screener():
         st.info("No stocks matching criteria right now. Waiting for momentum...")
 
 with tab_main:
-    # Safely wrap fragment functionality isolating the 60s rerun to just Tab 1 during market hours
     if is_market_open:
         st.fragment(run_every=60)(render_9ema_screener)()
     else:
@@ -1478,7 +1479,6 @@ with tab_screeners:
                 </html>
                 """
 
-                # Req 1b: Middle alignment for US ETF Screener
                 col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_us_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
@@ -1733,7 +1733,6 @@ div[role="radiogroup"]{
         load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
     if load_data:
-        # Req 3: Update timestamp when Load/Refresh is clicked
         st.session_state['port_refresh_time'] = datetime.now(ist).strftime("%d/%m/%y %H:%M")
         
         with st.spinner("🔄 Fetching and syncing portfolio data..."):
@@ -1884,7 +1883,6 @@ div[role="radiogroup"]{
                         "Index 10day rule": rule_status
                     })
                 
-                # Assign to session state to prevent disappearance on tab switch
                 st.session_state['final_port_df'] = pd.DataFrame(tracker_data)
 
             except Exception as e:
@@ -1896,17 +1894,19 @@ div[role="radiogroup"]{
         avg_chg = final_port_df['Today chg%'].mean()
         last_ref = st.session_state.get('port_refresh_time', 'Never')
         
-        # Req 3: Layout to align Avg Chg center and highlight Last Refresh with red border
-        port_col1, port_col2, port_col3 = st.columns([4.25, 4.25, 1.5], vertical_alignment="bottom")
+        port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
         
         with port_col1:
             avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-            st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4></div>", unsafe_allow_html=True)
+            # Render inline display combining Avg chg% and Last refresh exactly as requested
+            st.markdown(f"""
+                <div style='display: flex; align-items: center; gap: 30px;'>
+                    <h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>
+                    <h4 style='margin-bottom: 0px; color: #0B1D30;'><b>Last refresh:</b> <span style='font-weight: 400;'>{last_ref}</span></h4>
+                </div>
+            """, unsafe_allow_html=True)
             
         with port_col2:
-            st.markdown(f"<div style='text-align: center;'><span style='color: #EF4444; font-weight: 800; font-size: 1.15rem; border-bottom: 3px solid #EF4444; padding-bottom: 2px;'>Last refresh: {last_ref}</span></div>", unsafe_allow_html=True)
-            
-        with port_col3:
             port_copy_str = ",".join(final_port_df['Symbol'].tolist())
             port_copy_html = f"""
             <!DOCTYPE html>
@@ -1988,6 +1988,3 @@ div[role="radiogroup"]{
             html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
         
         st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
-
-# Note: The st.rerun() loop and time.sleep() have been completely removed.
-# The 9-EMA Screener now handles its own 60-second refreshes natively through the st.fragment logic.
