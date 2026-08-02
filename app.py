@@ -23,21 +23,9 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# Initialize session states for Portfolio Tracker persistence
+# Initialize portfolio refresh time in session state
 if 'port_refresh_time' not in st.session_state:
     st.session_state['port_refresh_time'] = "Never"
-if 'port_df_state' not in st.session_state:
-    st.session_state['port_df_state'] = None
-if 'port_avg_chg' not in st.session_state:
-    st.session_state['port_avg_chg'] = 0.0
-
-# Define current time and market state
-ist = timezone(timedelta(hours=5, minutes=30))
-now = datetime.now(ist)
-current_time = now.strftime('%I:%M:%S %p')
-current_date = now.strftime('%d %b %Y')
-# Market Open: Monday to Friday (0 to 4), 9 AM to 4 PM (16:00) IST
-is_market_open = (0 <= now.weekday() <= 4) and (9 <= now.hour < 16)
 
 # ==========================================
 # 1. CSS INJECTION (Premium Navy & Cream Theme + Immersive Tabs)
@@ -90,7 +78,6 @@ st.markdown("""
         }
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
-        .blob.red { background: rgba(239, 68, 68, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; display: inline-block; }
         
         /* GLOBAL THEME BACKGROUND (Cream) */
         .stApp { background-color: #F4F1E1 !important; }
@@ -106,7 +93,7 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            margin-bottom: 20px; /* Reduced gap */
+            margin-bottom: 20px;
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
             transform: translateY(0);
@@ -226,8 +213,8 @@ st.markdown("""
         }
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
-
-        /* DEFAULT BLACK BORDERS FOR ALL INPUTS */
+        
+        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK */
         div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
         div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
             border: 2px solid #000000 !important;
@@ -249,19 +236,6 @@ st.markdown("""
         div[data-testid="stNumberInput"] button {
             background-color: #F4F1E1 !important;
             color: #0B1D30 !important;
-        }
-
-        /* DEFAULT BLACK BORDER FOR ALL STANDARD BUTTONS */
-        div[data-testid="stButton"] button {
-            border: 2px solid #000000 !important;
-            border-radius: 8px !important;
-            color: #0B1D30 !important;
-            font-weight: 700 !important;
-            background-color: #FFFFFF !important;
-            transition: all 0.2s ease !important;
-        }
-        div[data-testid="stButton"] button:hover {
-            background-color: #E5E1CD !important;
         }
         
         /* Remove default Streamlit vertical block padding to tighten spacing */
@@ -723,10 +697,9 @@ def render_market_cycle_graph(roc_vals):
 # ==========================================
 # 5. DASHBOARD MAIN LAYOUT & HEADER
 # ==========================================
-if is_market_open:
-    live_status_indicator = 'LIVE DATA <div class="blob green"></div>'
-else:
-    live_status_indicator = 'MARKET CLOSED <div class="blob red"></div>'
+ist = timezone(timedelta(hours=5, minutes=30))
+current_time = datetime.now(ist).strftime('%I:%M:%S %p')
+current_date = datetime.now(ist).strftime('%d %b %Y')
 
 st.markdown(f"""
     <div class="premium-header">
@@ -735,7 +708,7 @@ st.markdown(f"""
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
-            <div class="live-status">{live_status_indicator}</div>
+            <div class="live-status">LIVE DATA <div class="blob green"></div></div>
             <div class="time">{current_time}</div>
             <div class="date">{current_date}</div>
         </div>
@@ -1008,7 +981,8 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        col_etf_input, col_etf_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_etf_input, col_etf_avg, col_etf_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
         
@@ -1076,7 +1050,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                col_etf_avg, col_etf_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_etf_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_etf_copy:
@@ -1112,7 +1086,8 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        col_mom_input, col_mom_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_mom_input, col_mom_avg, col_mom_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
         
@@ -1174,7 +1149,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                col_mom_avg, col_mom_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_mom_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_mom_copy:
@@ -1269,7 +1244,8 @@ with tab_screeners:
 
     # --- SUB 2.5: SME SCREENER ---
     with sub_sme:
-        col_sme_input, col_sme_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_sme_input, col_sme_avg, col_sme_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_sme_input:
             sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
         
@@ -1347,7 +1323,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                col_sme_avg, col_sme_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_sme_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_sme_copy:
@@ -1516,9 +1492,10 @@ with tab_screeners:
                 </html>
                 """
 
+                # Inline Average text and Copy Button side-by-side
                 col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_us_avg:
-                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
                 with col_us_copy:
                     components.html(us_etf_copy_html, height=45)
                 
@@ -1554,7 +1531,8 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        col_val_input, col_val_space = st.columns([2, 8])
+        # Create a 3-column layout to keep everything on the same line
+        col_val_input, col_val_avg, col_val_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
         
@@ -1620,7 +1598,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                col_val_avg, col_val_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                # Render into the pre-defined columns (centered text)
                 with col_val_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_val_copy:
@@ -1941,110 +1919,97 @@ div[role="radiogroup"]{
                 final_port_df = pd.DataFrame(tracker_data)
                 avg_chg = final_port_df['Today chg%'].mean()
                 
-                # Save to session state to persist between auto-reloads
-                st.session_state['port_df_state'] = final_port_df
-                st.session_state['port_avg_chg'] = avg_chg
-                st.session_state['port_refresh_time'] = datetime.now(ist).strftime('%d %b %Y, %I:%M %p')
+                port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
+                with port_col1:
+                    avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
+                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
+                
+                with port_col2:
+                    port_copy_str = ",".join(final_port_df['Symbol'].tolist())
+                    port_copy_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                    <style>
+                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                        button {{
+                            font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                        }}
+                        button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                        button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+                    </style>
+                    </head>
+                    <body>
+                        <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                        <script>
+                        function copyToClipboard() {{
+                            const ta = document.createElement('textarea');
+                            ta.value = "{port_copy_str}";
+                            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                            const btn = document.getElementById('copyPortBtn');
+                            btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                        }}
+                        </script>
+                    </body>
+                    </html>
+                    """
+                    components.html(port_copy_html, height=45)
+                
+                def style_portfolio(row):
+                    bg_color = [''] * len(row)
+                    ret_idx = final_port_df.columns.get_loc('Return %')
+                    ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
+                    rule_idx = final_port_df.columns.get_loc('Index 10day rule')
+                    sl_idx = final_port_df.columns.get_loc('Stop Loss')
+                    sym_idx = final_port_df.columns.get_loc('Symbol')
+                    
+                    if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+                    elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
+                    
+                    has_alert = False
+                    
+                    if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
+                    elif "BELOW" in str(row['EMA 21 Status']): 
+                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                        has_alert = True
+                    
+                    if "PASS" in str(row['Index 10day rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+                    elif "EXIT" in str(row['Index 10day rule']): 
+                        bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                        has_alert = True
+                        
+                    try:
+                        curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
+                        sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
+                        if curr_p <= sl_p and curr_p > 0:
+                            bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                            has_alert = True
+                    except: pass
+                    
+                    if has_alert:
+                        bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    
+                    return bg_color
+
+                styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
+                    "Today chg%": "{:.2f}%",
+                    "Return %": "{:.2f}%",
+                    "Risk %": "{:.2%}"
+                })
+                
+                # Inject TradingView links back in based on the pure symbol!
+                html_port_table = styled_port.to_html()
+                for _, r in final_port_df.iterrows():
+                    sym = str(r["Symbol"])
+                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
+                    link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+                    html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
+                
+                st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
                 
             except Exception as e:
                 st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
 
-    # Load from session state if available (persists on auto-rerun)
-    if st.session_state.get('port_df_state') is not None:
-        final_port_df = st.session_state['port_df_state']
-        avg_chg = st.session_state['port_avg_chg']
-        
-        port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
-        with port_col1:
-            avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-            refresh_txt = f"<span style='font-size: 0.85rem; color: #6B7280; margin-left: 15px; font-weight: 500;'>Last refresh: {st.session_state['port_refresh_time']}</span>" if st.session_state['port_refresh_time'] != "Never" else ""
-            st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px; display: inline-block;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>{refresh_txt}</div>", unsafe_allow_html=True)
-        
-        with port_col2:
-            port_copy_str = ",".join(final_port_df['Symbol'].tolist())
-            port_copy_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
-                button {{
-                    font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
-                }}
-                button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
-                button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
-            </style>
-            </head>
-            <body>
-                <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                <script>
-                function copyToClipboard() {{
-                    const ta = document.createElement('textarea');
-                    ta.value = "{port_copy_str}";
-                    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                    const btn = document.getElementById('copyPortBtn');
-                    btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                }}
-                </script>
-            </body>
-            </html>
-            """
-            components.html(port_copy_html, height=45)
-        
-        def style_portfolio(row):
-            bg_color = [''] * len(row)
-            ret_idx = final_port_df.columns.get_loc('Return %')
-            ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
-            rule_idx = final_port_df.columns.get_loc('Index 10day rule')
-            sl_idx = final_port_df.columns.get_loc('Stop Loss')
-            sym_idx = final_port_df.columns.get_loc('Symbol')
-            
-            if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-            elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
-            
-            has_alert = False
-            
-            if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
-            elif "BELOW" in str(row['EMA 21 Status']): 
-                bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                has_alert = True
-            
-            if "PASS" in str(row['Index 10day rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-            elif "EXIT" in str(row['Index 10day rule']): 
-                bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                has_alert = True
-                
-            try:
-                curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
-                sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
-                if curr_p <= sl_p and curr_p > 0:
-                    bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                    has_alert = True
-            except: pass
-            
-            if has_alert:
-                bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-            
-            return bg_color
-
-        styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
-            "Today chg%": "{:.2f}%",
-            "Return %": "{:.2f}%",
-            "Risk %": "{:.2%}"
-        })
-        
-        # Inject TradingView links back in based on the pure symbol!
-        html_port_table = styled_port.to_html()
-        for _, r in final_port_df.iterrows():
-            sym = str(r["Symbol"])
-            url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
-            link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-            html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
-        
-        st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
-
-# Auto-refresh logic based on Indian Market Hours (9:00 AM to 4:00 PM, Mon-Fri)
-if is_market_open:
-    time.sleep(60)
-    st.rerun()
+time.sleep(60)
+st.rerun()
