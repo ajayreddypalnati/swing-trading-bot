@@ -714,7 +714,11 @@ st.markdown(f"""
 
 current_cache_key = get_db_cache_key()
 main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df, us_etf_df, micro_df = fetch_database_reference(current_cache_key)  
+
+# Fetch live sheet breadth. If it's the weekend, force it to 'Market Closed'
 live_sheet_breadth = fetch_market_breadth_from_gsheets()
+if now_ist.weekday() >= 5:
+    live_sheet_breadth = "Market Closed"
 
 live_bg = get_breadth_color(live_sheet_breadth)
 nse_bg = get_breadth_color(trend_regime)
@@ -1898,11 +1902,10 @@ div[role="radiogroup"]{
         
         with port_col1:
             avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-            # Render inline display combining Avg chg% and Last refresh exactly as requested
             st.markdown(f"""
-                <div style='display: flex; align-items: center; gap: 30px;'>
+                <div style='display: flex; align-items: baseline; gap: 30px; margin-bottom: 8px;'>
                     <h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>
-                    <h4 style='margin-bottom: 0px; color: #0B1D30;'><b>Last refresh:</b> <span style='font-weight: 400;'>{last_ref}</span></h4>
+                    <h4 style='margin-bottom: 0px; color: #0B1D30;'><b>Last refresh:</b> <span style='font-weight: 400; font-size: 0.75em;'>{last_ref}</span></h4>
                 </div>
             """, unsafe_allow_html=True)
             
