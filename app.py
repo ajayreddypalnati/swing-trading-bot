@@ -106,7 +106,7 @@ st.markdown("""
             align-items: center;
             position: relative;
             overflow: hidden;
-            margin-bottom: 20px;
+            margin-bottom: 20px; /* Reduced gap */
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 12px 30px rgba(11, 29, 48, 0.25), 0 4px 10px rgba(11, 29, 48, 0.15);
             transform: translateY(0);
@@ -227,28 +227,17 @@ st.markdown("""
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
         
-        /* DEFAULT BLACK BORDERS FOR ALL INPUTS */
-        div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
-        div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
+        /* FORCE TEXT INPUTS TO BE WHITE/LIGHT */
+        div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input {
+            background-color: #FFFFFF !important;
+            color: #0B1D30 !important;
+            border: 1px solid #0B1D30 !important;
+        }
+        
+        /* ALWAYS ENFORCE BLACK BORDER ON NUMBER INPUTS */
+        div[data-testid="stNumberInput"] div[data-baseweb="base-input"] {
             border: 2px solid #000000 !important;
-            border-radius: 8px !important;
-            background-color: #FFFFFF !important;
-            overflow: hidden !important;
-        }
-        
-        /* REMOVE INNER BORDERS AND FORCE WHITE BG ON INPUT FIELD */
-        div[data-testid="stNumberInput"] input,
-        div[data-testid="stTextInput"] input {
-            background-color: #FFFFFF !important;
-            color: #0B1D30 !important;
-            border: none !important;
-            box-shadow: none !important;
-        }
-        
-        /* FIX THE PLUS/MINUS BUTTONS BACKGROUND FOR NUMBER INPUTS */
-        div[data-testid="stNumberInput"] button {
-            background-color: #F4F1E1 !important;
-            color: #0B1D30 !important;
+            border-radius: 6px !important;
         }
 
         /* DEFAULT BLACK BORDER FOR ALL STANDARD BUTTONS */
@@ -258,10 +247,6 @@ st.markdown("""
             color: #0B1D30 !important;
             font-weight: 700 !important;
             background-color: #FFFFFF !important;
-            transition: all 0.2s ease !important;
-        }
-        div[data-testid="stButton"] button:hover {
-            background-color: #E5E1CD !important;
         }
         
         /* Remove default Streamlit vertical block padding to tighten spacing */
@@ -1008,8 +993,7 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        # Create a 3-column layout to keep everything on the same line
-        col_etf_input, col_etf_avg, col_etf_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
+        col_etf_input, col_etf_space = st.columns([2, 8])
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
         
@@ -1077,7 +1061,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
+                col_etf_avg, col_etf_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_etf_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_etf_copy:
@@ -1113,8 +1097,7 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        # Create a 3-column layout to keep everything on the same line
-        col_mom_input, col_mom_avg, col_mom_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
+        col_mom_input, col_mom_space = st.columns([2, 8])
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
         
@@ -1176,7 +1159,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
+                col_mom_avg, col_mom_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_mom_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_mom_copy:
@@ -1271,8 +1254,7 @@ with tab_screeners:
 
     # --- SUB 2.5: SME SCREENER ---
     with sub_sme:
-        # Create a 3-column layout to keep everything on the same line
-        col_sme_input, col_sme_avg, col_sme_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
+        col_sme_input, col_sme_space = st.columns([2, 8])
         with col_sme_input:
             sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
         
@@ -1350,7 +1332,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
+                col_sme_avg, col_sme_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_sme_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_sme_copy:
@@ -1519,7 +1501,6 @@ with tab_screeners:
                 </html>
                 """
 
-                # Inline Average text and Copy Button side-by-side
                 col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_us_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
@@ -1558,8 +1539,7 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        # Create a 3-column layout to keep everything on the same line
-        col_val_input, col_val_avg, col_val_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
+        col_val_input, col_val_space = st.columns([2, 8])
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
         
@@ -1625,7 +1605,7 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
+                col_val_avg, col_val_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_val_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_val_copy:
