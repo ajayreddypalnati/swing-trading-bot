@@ -23,9 +23,11 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 st.set_page_config(page_title="9-EMA Screener", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
-# Initialize portfolio refresh time in session state
+# Initialize portfolio refresh time and data in session state
 if 'port_refresh_time' not in st.session_state:
     st.session_state['port_refresh_time'] = "Never"
+if 'final_port_df' not in st.session_state:
+    st.session_state['final_port_df'] = pd.DataFrame()
 
 # ==========================================
 # 1. CSS INJECTION (Premium Navy & Cream Theme + Immersive Tabs)
@@ -44,7 +46,6 @@ st.markdown("""
         div[data-testid="stStatusWidget"] { visibility: hidden; }
 
         /* --- PROFESSIONAL BLUR & PULSING ICON ON REFRESH --- */
-        /* Blur all elements that are updating */
         [data-stale="true"] {
             opacity: 0.6 !important;
             filter: blur(4px) grayscale(10%) !important;
@@ -52,7 +53,6 @@ st.markdown("""
             pointer-events: none !important;
         }
         
-        /* Attach the Zooming ⚡ Icon ONLY to the main app container so it appears ONCE */
         [data-testid="stMainBlockContainer"][data-stale="true"]::after {
             content: "⚡";
             position: fixed;
@@ -70,7 +70,6 @@ st.markdown("""
             100% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; text-shadow: 0 0 40px rgba(255, 255, 255, 1); }
         }
         
-        /* RESTORED CENTERED ALIGNMENT CAP */
         .block-container { 
             padding-top: 1.5rem; 
             padding-bottom: 0rem; 
@@ -79,11 +78,9 @@ st.markdown("""
         
         .blob.green { background: rgba(39, 174, 96, 1); border-radius: 50%; margin: 0 0 0 5px; height: 10px; width: 10px; animation: pulse-green 2s infinite; display: inline-block; }
         
-        /* GLOBAL THEME BACKGROUND (Cream) */
         .stApp { background-color: #F4F1E1 !important; }
         h1, h2, h3, h4, h5, h6, p, span { color: #0B1D30; }
         
-        /* PREMIUM CUSTOM HEADER - IMMERSIVE 3D POPUP */
         .premium-header {
             background: linear-gradient(135deg, #0B1D30 0%, #162C46 100%); 
             border-radius: 16px;
@@ -145,7 +142,6 @@ st.markdown("""
         .sleek-table th { background-color: #0B1D30 !important; color: #F4F1E1 !important; text-align: center; vertical-align: middle; padding: 10px 8px; font-weight: 700 !important; font-size: 1.05rem !important; }
         .sleek-table td { color: #111827 !important; text-align: center; vertical-align: middle; padding: 8px; border-bottom: 1px solid rgba(11, 29, 48, 0.1); font-size: 1.0rem !important; }
         
-        /* PLOTLY GRAPH STYLING TO POP UP */
         div.stPlotlyChart { 
             background-color: #FFFFFF !important; 
             border: 2px solid #0B1D30 !important; 
@@ -214,7 +210,7 @@ st.markdown("""
         
         div[data-baseweb="tab-highlight"] { display: none !important; }
         
-        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK */
+        /* FORCE TEXT & NUMBER INPUT FULL WRAPPER BORDER TO BLACK (Req 1) */
         div[data-testid="stNumberInput"] div[data-baseweb="base-input"],
         div[data-testid="stTextInput"] div[data-baseweb="base-input"] {
             border: 2px solid #000000 !important;
@@ -223,7 +219,15 @@ st.markdown("""
             overflow: hidden !important;
         }
         
-        /* REMOVE INNER BORDERS AND FORCE WHITE BG ON INPUT FIELD */
+        /* Stop the red/blue outline on focus (Req 1) */
+        div[data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus-within,
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"]:focus-within,
+        div[data-testid="stNumberInput"] div[data-baseweb="base-input"]:focus,
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"]:focus {
+            border-color: #000000 !important;
+            box-shadow: none !important;
+        }
+        
         div[data-testid="stNumberInput"] input,
         div[data-testid="stTextInput"] input {
             background-color: #FFFFFF !important;
@@ -232,13 +236,24 @@ st.markdown("""
             box-shadow: none !important;
         }
         
-        /* FIX THE PLUS/MINUS BUTTONS BACKGROUND FOR NUMBER INPUTS */
         div[data-testid="stNumberInput"] button {
             background-color: #F4F1E1 !important;
             color: #0B1D30 !important;
         }
         
-        /* Remove default Streamlit vertical block padding to tighten spacing */
+        /* Global Buttons (like Load/Refresh) (Req 3) */
+        div[data-testid="stButton"] button {
+            border: 2px solid #000000 !important;
+            font-weight: 700 !important;
+            color: #0B1D30 !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        div[data-testid="stButton"] button:hover {
+            background-color: #E5E1CD !important;
+            transform: translateY(-2px);
+        }
+
         div[data-testid="stVerticalBlock"] {
             gap: 0.5rem !important;
         }
@@ -257,7 +272,7 @@ with col_toggle:
 if is_usa:
     import usa_app
     usa_app.run_usa_screener()
-    st.stop() # Stops the Indian app, but keeps the CSS!
+    st.stop()
 # ==========================================
 
 # ==========================================
@@ -349,11 +364,8 @@ def fetch_database_reference(cache_key):
                 if 'trend_regime' not in locals(): trend_regime = "N/A"
 
             try:
-                # 1. Pull a large chunk of rows to bypass all the duplicate entries
                 roc_df = pd.read_sql(text('SELECT * FROM "CNXSMALLCAP_ROC" ORDER BY "Date" DESC LIMIT 400'), conn)
-                
                 if not roc_df.empty:
-                    # 2. Extract just the date (ignore hours/minutes) and drop the duplicates
                     roc_df['Date_Only'] = pd.to_datetime(roc_df['Date']).dt.date
                     roc_df = roc_df.drop_duplicates(subset=['Date_Only'], keep='first')
                     
@@ -366,7 +378,6 @@ def fetch_database_reference(cache_key):
             try:
                 etf_df = pd.read_sql(text('SELECT * FROM "ETF Screener"'), conn)
             except Exception as e:
-                st.warning(f"⚠️ SQL Error fetching ETF Screener: {e}")
                 etf_df = pd.DataFrame()
                 
             try:
@@ -381,7 +392,6 @@ def fetch_database_reference(cache_key):
 
         return main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df, us_etf_df, micro_df
     except Exception as e:
-        st.error(f"DATABASE ERROR: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "Error", "Error", [], pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -447,9 +457,8 @@ def get_combined_data():
 # ==========================================
 # PORTFOLIO TRACKER HELPER FUNCTIONS
 # ==========================================
-@st.cache_data(ttl=86400, show_spinner=False) # Increased to 24 hours for superfast updates
+@st.cache_data(ttl=86400, show_spinner=False) 
 def fetch_exchange_mapping():
-    """Connects to Supabase to build a VLOOKUP dictionary for Indian and US tickers."""
     exchange_map = {}
     try:
         db_url = st.secrets["DATABASE_URL"]
@@ -458,22 +467,17 @@ def fetch_exchange_mapping():
         
         engine = create_engine(db_url)
         with engine.connect() as conn:
-            # 1. Indian Stocks (stock_master)
             try:
                 ind_df = pd.read_sql(text('SELECT "Ticker", "Exchange" FROM "stock_master"'), conn)
                 for _, row in ind_df.iterrows():
                     ticker = str(row['Ticker']).strip().upper()
                     exch = str(row['Exchange']).strip().upper()
-                    # Clean up SME tags to match generic TradingView exchanges
                     if 'NSE' in exch: exch = 'NSE'
                     elif 'BSE' in exch: exch = 'BSE'
-                    
                     if ticker and ticker != "NAN":
                         exchange_map[ticker] = f"{exch}:{ticker}"
-            except Exception as e:
-                print(f"Lookup Error (India): {e}")
+            except Exception: pass
             
-            # 2. US Stocks (US Stock screener)
             try:
                 us_df = pd.read_sql(text('SELECT "Symbol", "Exchange" FROM "US Stock screener"'), conn)
                 for _, row in us_df.iterrows():
@@ -481,17 +485,12 @@ def fetch_exchange_mapping():
                     exch = str(row['Exchange']).strip().upper()
                     if ticker and ticker != "NAN":
                         exchange_map[ticker] = f"{exch}:{ticker}"
-            except Exception as e:
-                print(f"Lookup Error (US): {e}")
-                
-    except Exception as e:
-        print(f"Database Connect Error (Mapping): {e}")
-        
+            except Exception: pass
+    except Exception: pass
     return exchange_map
 
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_portfolio_tv_data(pure_tickers):
-    """Fetches live data directly using the 'in_range' filter for massive speed improvements."""
     if not pure_tickers: return {}
     try:
         payload = {
@@ -505,14 +504,12 @@ def fetch_portfolio_tv_data(pure_tickers):
             "price_conversion": {"to_currency": "usd"},
             "range": [0, 5000],
             "sort": {"sortBy": "market_cap_basic", "sortOrder": "desc"},
-            "markets": ["america","argentina","australia","austria","bahrain","bangladesh","belgium","brazil","canada","chile","china","colombia","croatia","cyprus","czech","denmark","egypt","estonia","finland","france","germany","greece","hongkong","hungary","iceland","india","indonesia","ireland","israel","italy","japan","kenya","kuwait","latvia","lithuania","luxembourg","malaysia","mexico","morocco","netherlands","newzealand","nigeria","norway","pakistan","peru","philippines","poland","portugal","qatar","romania","russia","ksa","serbia","singapore","slovakia","slovenia","rsa","korea","spain","srilanka","sweden","switzerland","taiwan","thailand","tunisia","turkey","uae","uk","venezuela","vietnam"],
+            "markets": ["america","india"],
             "filter2": {
                 "operator": "and",
                 "operands": [
                     {"operation": {"operator": "or", "operands": [
                         {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["common"]}}]}},
-                        {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "stock"}}, {"expression": {"left": "typespecs", "operation": "has", "right": ["preferred"]}}]}},
-                        {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "dr"}}]}},
                         {"operation": {"operator": "and", "operands": [{"expression": {"left": "type", "operation": "equal", "right": "fund"}}, {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["etf", "mutual"]}}]}}
                     ]}},
                     {"expression": {"left": "typespecs", "operation": "has_none_of", "right": ["pre-ipo"]}}
@@ -540,22 +537,17 @@ def fetch_portfolio_tv_data(pure_tickers):
             }
         return results
     except Exception as e:
-        print("TradingView Fetch Error:", e)
         return {}
 
 
 # ==========================================
 # 4. UI COMPONENTS, GRAPHS & SAFE FORMATTERS
 # ==========================================
-
-# THIS SAFE FORMATTER PREVENTS VALUEERRORS FROM BLANK DATABASE CELLS
 def safe_fmt(val, fmt_str):
     try:
-        if pd.isna(val) or str(val).strip() == "":
-            return "-"
+        if pd.isna(val) or str(val).strip() == "": return "-"
         return fmt_str.format(float(val))
-    except:
-        return "-"
+    except: return "-"
 
 def get_breadth_color(breadth_str):
     try:
@@ -568,8 +560,7 @@ def get_breadth_color(breadth_str):
             elif val <= 60.0: return "rgba(187, 247, 208, 0.4)"  
             else: return "rgba(134, 239, 172, 0.4)"  
         return "#FFFFFF"
-    except:
-        return "#FFFFFF"
+    except: return "#FFFFFF"
 
 def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
     try:
@@ -580,15 +571,11 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             val = float(match.group(1))
             live_val = float(live_match.group(1)) if live_match else 0.0
 
-            if "📉" in str(nse_breadth_str):
-                action_suffix = " - Stop Trading"
-            elif "📈" in str(nse_breadth_str):
-                action_suffix = " - Trade"
+            if "📉" in str(nse_breadth_str): action_suffix = " - Stop Trading"
+            elif "📈" in str(nse_breadth_str): action_suffix = " - Trade"
             else:
-                if live_val > 50.0:
-                    action_suffix = " - Trade"
-                else:
-                    action_suffix = " - Stop Trading"
+                if live_val > 50.0: action_suffix = " - Trade"
+                else: action_suffix = " - Stop Trading"
 
             if val <= 20.0: alloc_str, color = f"0% Equity{action_suffix}", "rgba(252, 165, 165, 0.4)"     
             elif val <= 25.0: alloc_str, color = f"10% Equity{action_suffix}", "rgba(254, 202, 202, 0.4)"     
@@ -602,8 +589,7 @@ def get_portfolio_allocation(nse_breadth_str, live_breadth_str):
             if action_suffix != " - Trade": color = "rgba(252, 165, 165, 0.4)" 
             return alloc_str, color
         return "N/A", "#FFFFFF"
-    except:
-        return "N/A", "#FFFFFF"
+    except: return "N/A", "#FFFFFF"
 
 def create_metric_card(title, value, bg_color):
     val_size = "1.35rem" if len(str(value)) > 20 else "1.65rem"
@@ -698,8 +684,17 @@ def render_market_cycle_graph(roc_vals):
 # 5. DASHBOARD MAIN LAYOUT & HEADER
 # ==========================================
 ist = timezone(timedelta(hours=5, minutes=30))
-current_time = datetime.now(ist).strftime('%I:%M:%S %p')
-current_date = datetime.now(ist).strftime('%d %b %Y')
+now_ist = datetime.now(ist)
+current_time = now_ist.strftime('%I:%M:%S %p')
+current_date = now_ist.strftime('%d %b %Y')
+
+# Req 2 Logic: Check if market is open (Mon-Fri, 9am - 4pm)
+is_market_open = now_ist.weekday() < 5 and (9 <= now_ist.hour < 16)
+
+if is_market_open:
+    live_status_html = '<div class="live-status">LIVE DATA <div class="blob green"></div></div>'
+else:
+    live_status_html = '<div class="live-status" style="color: #EF4444;">MARKET CLOSED</div>'
 
 st.markdown(f"""
     <div class="premium-header">
@@ -708,14 +703,13 @@ st.markdown(f"""
             <div class="header-subtitle">Refreshed every 1 minute paired with Sector, Industry & Momentum rank.</div>
         </div>
         <div class="header-right">
-            <div class="live-status">LIVE DATA <div class="blob green"></div></div>
+            {live_status_html}
             <div class="time">{current_time}</div>
             <div class="date">{current_date}</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-data = get_combined_data()
 current_cache_key = get_db_cache_key()
 main_df, sec_rank_df, ind_rank_df, raw_sec, raw_ind, last_sync, trend_regime, roc_vals, etf_df, us_etf_df, micro_df = fetch_database_reference(current_cache_key)  
 live_sheet_breadth = fetch_market_breadth_from_gsheets()
@@ -762,54 +756,6 @@ with metric_col3: st.markdown(create_metric_card("💼 Portfolio Allocation", al
 with metric_col4: st.markdown(create_metric_card("🔄 Last DB Update", last_sync, last_sync_bg), unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ==========================================
-# DATA PROCESSING FOR TABS
-# ==========================================
-display_df = pd.DataFrame()
-if data:
-    df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
-    df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
-
-    if not main_df.empty:
-        df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
-        
-        if 'sector' in df.columns: df = df.merge(sec_rank_df, on="sector", how="left")
-        if 'broad_industry' in df.columns: df = df.merge(ind_rank_df, on="broad_industry", how="left")
-        
-        db_exch = df.get('db_exchange', pd.Series([""] * len(df), index=df.index))
-        df['Exchange'] = np.where(db_exch.notna() & (db_exch != ""), db_exch, df['Temp_Exchange'])
-        
-        for col in ['band', 'sector', 'broad_industry', 'sec_rank', 'ind_rank', 'relative_score']:
-            if col not in df.columns: df[col] = ""
-    else:
-        df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['band'] = "", "", np.nan, np.nan, np.nan, ""
-        df['Exchange'] = df['Temp_Exchange']
-
-    df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-    df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
-    df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
-
-    for col in ['market_cap', 'sec_rank', 'ind_rank', 'relative_score']:
-        if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    df['Priority'] = np.nan
-    if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
-        p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
-        p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
-        p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
-        p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
-        p5 = (df['ind_rank'] <= 15) & (df['sec_rank'] >= 6) & ~p1 & ~p2 & ~p3 & ~p4
-        df.loc[p1, 'Priority'] = 1
-        df.loc[p2, 'Priority'] = 2
-        df.loc[p3, 'Priority'] = 3
-        df.loc[p4, 'Priority'] = 4
-        df.loc[p5, 'Priority'] = 5
-
-    display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "market_cap", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
-    display_df = df[[c for c in display_cols if c in df.columns]].copy()
-    display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
-    display_df = display_df.rename(columns={"band": "Band", "market_cap": "Mar Cap (Cr)", "sector": "Sector", "sec_rank": "Sector Rank", "broad_industry": "Industry", "ind_rank": "Ind. Rank", "relative_score": "Momentum Rank"})
-    if 'Band' in display_df.columns: display_df['Band'] = display_df['Band'].replace("", "-").fillna("-")
 
 def highlight_main_table(row):
     styles = []
@@ -847,9 +793,54 @@ tab_main, tab_cycle, tab_leaders, tab_port, tab_screeners = st.tabs([
     "🔎 Screeners"
 ])
 
-# --- 1. DEFAULT TAB: 9-EMA SCREENER (LIVE FEED) ---
-with tab_main:
-    if not display_df.empty:
+# --- 1. DEFAULT TAB: 9-EMA SCREENER (Req 4: Wrapped in fragment to refresh selectively) ---
+def render_9ema_screener():
+    data = get_combined_data()
+    display_df = pd.DataFrame()
+    if data:
+        df = pd.DataFrame(data, columns=["Symbol", "Close", "% Change", "Volume", "Temp_Exchange"])
+        df['Symbol'] = df['Symbol'].astype(str).str.strip().str.upper()
+
+        if not main_df.empty:
+            df = df.merge(main_df, left_on="Symbol", right_on="ticker", how="left")
+            if 'sector' in df.columns: df = df.merge(sec_rank_df, on="sector", how="left")
+            if 'broad_industry' in df.columns: df = df.merge(ind_rank_df, on="broad_industry", how="left")
+            
+            db_exch = df.get('db_exchange', pd.Series([""] * len(df), index=df.index))
+            df['Exchange'] = np.where(db_exch.notna() & (db_exch != ""), db_exch, df['Temp_Exchange'])
+            
+            for col in ['band', 'sector', 'broad_industry', 'sec_rank', 'ind_rank', 'relative_score']:
+                if col not in df.columns: df[col] = ""
+        else:
+            df['sector'], df['broad_industry'], df['relative_score'], df['sec_rank'], df['ind_rank'], df['band'] = "", "", np.nan, np.nan, np.nan, ""
+            df['Exchange'] = df['Temp_Exchange']
+
+        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+        df['Volume'] = pd.to_numeric(df['Volume'], errors='coerce')
+        df['Turnover (Cr)'] = (df['Close'] * df['Volume']) / 10000000
+
+        for col in ['market_cap', 'sec_rank', 'ind_rank', 'relative_score']:
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        df['Priority'] = np.nan
+        if 'sec_rank' in df.columns and 'ind_rank' in df.columns:
+            p1 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 10)
+            p2 = (df['sec_rank'] <= 5) & (df['ind_rank'] <= 15) & ~p1
+            p3 = (df['ind_rank'] <= 10) & ~p1 & ~p2
+            p4 = (df['sec_rank'] <= 5) & ~p1 & ~p2 & ~p3
+            p5 = (df['ind_rank'] <= 15) & (df['sec_rank'] >= 6) & ~p1 & ~p2 & ~p3 & ~p4
+            df.loc[p1, 'Priority'] = 1
+            df.loc[p2, 'Priority'] = 2
+            df.loc[p3, 'Priority'] = 3
+            df.loc[p4, 'Priority'] = 4
+            df.loc[p5, 'Priority'] = 5
+
+        display_cols = ["Priority", "Symbol", "Exchange", "band", "Close", "% Change", "market_cap", "Turnover (Cr)", "Volume", "sector", "sec_rank", "broad_industry", "ind_rank", "relative_score"]
+        display_df = df[[c for c in display_cols if c in df.columns]].copy()
+        display_df = display_df.sort_values(by=["Priority", "relative_score"], ascending=[True, True], na_position="last").fillna("")
+        display_df = display_df.rename(columns={"band": "Band", "market_cap": "Mar Cap (Cr)", "sector": "Sector", "sec_rank": "Sector Rank", "broad_industry": "Industry", "ind_rank": "Ind. Rank", "relative_score": "Momentum Rank"})
+        if 'Band' in display_df.columns: display_df['Band'] = display_df['Band'].replace("", "-").fillna("-")
+
         styled_df = display_df.style.hide(axis="index").apply(highlight_main_table, axis=1).format({
             "Close": lambda x: safe_fmt(x, "₹{:.2f}"), 
             "% Change": lambda x: safe_fmt(x, "{:.2f}%"), 
@@ -891,7 +882,6 @@ with tab_main:
         </body>
         </html>
         """
-        # Inline the copy button for Main Tab
         col_main_space, col_main_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
         with col_main_copy:
             components.html(copy_html, height=45)
@@ -907,6 +897,13 @@ with tab_main:
         st.markdown(f'<div class="scrollable-table-container">{html_table}</div>', unsafe_allow_html=True)
     else: 
         st.info("No stocks matching criteria right now. Waiting for momentum...")
+
+with tab_main:
+    # Safely wrap fragment functionality isolating the 60s rerun to just Tab 1 during market hours
+    if is_market_open:
+        st.fragment(run_every=60)(render_9ema_screener)()
+    else:
+        st.fragment()(render_9ema_screener)()
 
 # --- 2. MARKET CYCLE TAB ---
 with tab_cycle:
@@ -981,7 +978,6 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        # Create a 3-column layout to keep everything on the same line
         col_etf_input, col_etf_avg, col_etf_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
@@ -1050,7 +1046,6 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
                 with col_etf_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_etf_copy:
@@ -1072,7 +1067,6 @@ with tab_screeners:
                     'Chg %': lambda x: safe_fmt(x, "{:.2f}%")
                 })
 
-                # CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_etf_table = styled_etf.to_html()
                 for _, r in etf_display.iterrows():
                     sym = str(r['Symbol'])
@@ -1086,7 +1080,6 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        # Create a 3-column layout to keep everything on the same line
         col_mom_input, col_mom_avg, col_mom_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_mom_input:
             min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
@@ -1121,7 +1114,6 @@ with tab_screeners:
                 top_25_avg = top_25_mom['1d_return'].mean()
                 avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                 
-                # Copy symbols HTML string for top 25 Momentum tickers
                 mom_copy_str = ",".join(top_25_mom['ticker'].astype(str).tolist())
                 mom_copy_html = f"""
                 <!DOCTYPE html>
@@ -1149,7 +1141,6 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
                 with col_mom_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_mom_copy:
@@ -1244,7 +1235,6 @@ with tab_screeners:
 
     # --- SUB 2.5: SME SCREENER ---
     with sub_sme:
-        # Create a 3-column layout to keep everything on the same line
         col_sme_input, col_sme_avg, col_sme_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_sme_input:
             sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
@@ -1278,12 +1268,11 @@ with tab_screeners:
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
-            # Apply mathematical filters including Price Band 2 exclusion and Down %_ATH cap
             f_sme_roce = sme_df['roce_clean'] > 20.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
-            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  # Excludes Price Band 2
-            f_sme_ath = sme_df['down_ath'] <= 25.0  # Down %_ATH must be <= 25
+            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  
+            f_sme_ath = sme_df['down_ath'] <= 25.0  
             
             full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band & f_sme_ath].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
@@ -1295,7 +1284,6 @@ with tab_screeners:
                 top_25_sme_avg = top_25_sme['1d_return'].mean()
                 sme_avg_color = "#10B981" if top_25_sme_avg > 0 else "#EF4444"
                 
-                # Copy symbols HTML string for top 25 SME tickers
                 sme_copy_str = ",".join(top_25_sme['ticker'].astype(str).tolist())
                 sme_copy_html = f"""
                 <!DOCTYPE html>
@@ -1323,7 +1311,6 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
                 with col_sme_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_sme_copy:
@@ -1351,7 +1338,6 @@ with tab_screeners:
             else: 
                 st.info("No SME stocks match the criteria at the moment.")
                 
-            # SME Rebalancer Section
             st.divider()
             st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
             st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your SME portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
@@ -1428,6 +1414,7 @@ with tab_screeners:
                 except Exception as e: st.error(f"Error processing portfolio: {e}")
         else: 
             st.warning("SME Screener data is currently empty.")
+            
     # --- SUB 3: US ETF SCREENER ---
     with sub_us_etf:
         if not us_etf_df.empty:
@@ -1440,7 +1427,6 @@ with tab_screeners:
             us_df['Expense Ratio'] = pd.to_numeric(us_df.get('Expense Ratio', 0), errors='coerce')
             
             f_us_ema = us_df.get('EMA 21 Status', '').astype(str).str.strip().str.upper() == 'ABOVE 21 EMA'
-            
             valid_us = us_df[f_us_ema].sort_values('Relative Score', ascending=True)
             
             final_us_etfs = []
@@ -1492,10 +1478,10 @@ with tab_screeners:
                 </html>
                 """
 
-                # Inline Average text and Copy Button side-by-side
+                # Req 1b: Middle alignment for US ETF Screener
                 col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_us_avg:
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_us_copy:
                     components.html(us_etf_copy_html, height=45)
                 
@@ -1517,7 +1503,6 @@ with tab_screeners:
                     'Expense Ratio': lambda x: safe_fmt(x, "{:.2f}")
                 })
 
-                # CONVERT TO HTML AND INJECT TRADINGVIEW REDIRECT LINKS
                 html_us_table = styled_us_etf.to_html()
                 for _, r in us_display.iterrows():
                     sym = str(r['Symbol'])
@@ -1531,7 +1516,6 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        # Create a 3-column layout to keep everything on the same line
         col_val_input, col_val_avg, col_val_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
@@ -1570,7 +1554,6 @@ with tab_screeners:
                 top_25_val_avg = top_25_val[col_chg].mean()
                 v_avg_color = "#10B981" if top_25_val_avg > 0 else "#EF4444"
                 
-                # Copy symbols HTML string for top 25 Value tickers
                 val_copy_str = ",".join(top_25_val['Ticker'].astype(str).tolist())
                 val_copy_html = f"""
                 <!DOCTYPE html>
@@ -1598,7 +1581,6 @@ with tab_screeners:
                 </html>
                 """
                 
-                # Render into the pre-defined columns (centered text)
                 with col_val_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_val_copy:
@@ -1628,9 +1610,6 @@ with tab_screeners:
                 st.markdown(f'<div class="scrollable-table-container">{styled_val.to_html()}</div>', unsafe_allow_html=True)
             else: st.info("No stocks match the Value Screener criteria at the moment.")
             
-            # ==========================================
-            # VALUE REBALANCER
-            # ==========================================
             st.divider()
             st.markdown("### 🔄 Upload Portfolio Stocks to Rebalance")
             st.markdown("<span style='color: #6B7280; font-size: 0.95rem;'>Upload a simple CSV or text file containing your portfolio tickers. The system will look at twice the size of your portfolio universe to determine the safe range and suggest rebalances.</span>", unsafe_allow_html=True)
@@ -1660,7 +1639,6 @@ with tab_screeners:
                         v_unavail_clean = [str(x).strip().upper() for x in v_unavailable]
                         v_user_clean = [str(x).strip().upper() for x in v_user_tickers]
                         
-                        # Apply clean ticker strings to both the filtered pool and the base dataframe
                         v_filtered['ticker_clean'] = v_filtered['Ticker'].astype(str).str.strip().str.upper()
                         v_df['ticker_clean'] = v_df['Ticker'].astype(str).str.strip().str.upper()
                         
@@ -1679,7 +1657,6 @@ with tab_screeners:
                             if not rank_match.empty: 
                                 v_curr_rank = int(rank_match['Rank'].iloc[0])
                             else: 
-                                # Fallback: If it's not in the filtered list (e.g. dropped out of turnover), check the main base DB for its actual score
                                 fallback_match = v_df[v_df['ticker_clean'] == t_clean]
                                 if not fallback_match.empty:
                                     score = fallback_match[col_vscore].iloc[0]
@@ -1745,7 +1722,6 @@ div[role="radiogroup"]{
         label_visibility="collapsed"
     )
 
-    # Input and Load Button layout
     input_col, btn_col = st.columns([9, 2])
     with input_col:
         if data_source == "Upload CSV":
@@ -1757,9 +1733,11 @@ div[role="radiogroup"]{
         load_data = st.button("🔄 Load / Refresh Sheet", use_container_width=True)
 
     if load_data:
+        # Req 3: Update timestamp when Load/Refresh is clicked
+        st.session_state['port_refresh_time'] = datetime.now(ist).strftime("%d/%m/%y %H:%M")
+        
         with st.spinner("🔄 Fetching and syncing portfolio data..."):
             try:
-                # --- NEW: Fetch Index Data for 10-Day Rule ---
                 index_data = pd.DataFrame()
                 try:
                     tv = TvDatafeed()
@@ -1771,11 +1749,9 @@ div[role="radiogroup"]{
                         time.sleep(1)
                 except Exception:
                     pass
-                # ----------------------------------------------
                 
                 port_df = pd.DataFrame()
                 
-                # 1. Parse File/URL
                 if data_source == "Google Sheets" and "docs.google.com" in gs_url:
                     match = re.search(r'[#&?]gid=([0-9]+)', gs_url)
                     gid = match.group(1) if match else "0"
@@ -1787,7 +1763,6 @@ div[role="radiogroup"]{
                     st.warning("Please provide a valid data source.")
                     st.stop()
                 
-                # 2. Fuzzy Matching & Regex Cleanup
                 port_df.columns = port_df.columns.str.strip()
                 for col in port_df.columns:
                     col_name = str(col).lower()
@@ -1805,7 +1780,6 @@ div[role="radiogroup"]{
                 if "Stop Loss" in port_df.columns:
                     port_df["Stop Loss"] = pd.to_numeric(port_df["Stop Loss"].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce')
                 
-                # 3. Supabase Prefix Mapping (VLOOKUP)
                 exchange_map = fetch_exchange_mapping()
                 search_symbols = []
                 
@@ -1814,20 +1788,16 @@ div[role="radiogroup"]{
                     if not sym or sym == "NAN": continue
                     
                     if ":" not in sym:
-                        mapped_sym = exchange_map.get(sym, sym) # Fetch from dictionary, fallback to raw
+                        mapped_sym = exchange_map.get(sym, sym) 
                         search_symbols.append(mapped_sym)
                         port_df.at[idx, 'Mapped_Symbol'] = mapped_sym
                     else:
                         search_symbols.append(sym)
                         port_df.at[idx, 'Mapped_Symbol'] = sym
 
-                # Extract pure tickers for the API filter
                 pure_tickers = list(set([s.split(":")[-1] if ":" in s else s for s in search_symbols]))
-                
-                # 4. Fetch Live Data
                 live_tv_data = fetch_portfolio_tv_data(pure_tickers)
 
-                # 5. Build Final Dataset with Multi-Market Holidays
                 tracker_data = []
                 today = pd.to_datetime('today').normalize()
                 years_to_check = [today.year, today.year - 1]
@@ -1840,7 +1810,7 @@ div[role="radiogroup"]{
                     if not mapped_sym or mapped_sym == "NAN": continue
                     
                     tv = live_tv_data.get(mapped_sym)
-                    if not tv: # Fallback matcher just in case
+                    if not tv:
                         for k, v in live_tv_data.items():
                             if k.endswith(f":{pure_sym}"):
                                 tv = v
@@ -1872,7 +1842,6 @@ div[role="radiogroup"]{
                     ema21_val = tv["ema21"]
                     ema_status = "ABOVE EMA21" if current_price > ema21_val else "BELOW EMA21"
                     
-                    # Cumulative 10-Day Math
                     if trading_days < 10:
                         rule_status = f"PENDING ({int(trading_days)}/10)"
                     else:
@@ -1897,7 +1866,6 @@ div[role="radiogroup"]{
                         else:
                             rule_status = f"PASS ({return_pct:.2f}%)"
                             
-                    # Currency Prefix for Formatting
                     curr_pfx = "₹" if ('NSE:' in mapped_sym or 'BSE:' in mapped_sym) else "$"
 
                     tracker_data.append({
@@ -1916,100 +1884,110 @@ div[role="radiogroup"]{
                         "Index 10day rule": rule_status
                     })
                 
-                final_port_df = pd.DataFrame(tracker_data)
-                avg_chg = final_port_df['Today chg%'].mean()
-                
-                port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
-                with port_col1:
-                    avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
-                    st.markdown(f"<h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4>", unsafe_allow_html=True)
-                
-                with port_col2:
-                    port_copy_str = ",".join(final_port_df['Symbol'].tolist())
-                    port_copy_html = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                    <style>
-                        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
-                        body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
-                        button {{
-                            font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
-                        }}
-                        button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
-                        button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
-                    </style>
-                    </head>
-                    <body>
-                        <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
-                        <script>
-                        function copyToClipboard() {{
-                            const ta = document.createElement('textarea');
-                            ta.value = "{port_copy_str}";
-                            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-                            const btn = document.getElementById('copyPortBtn');
-                            btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
-                        }}
-                        </script>
-                    </body>
-                    </html>
-                    """
-                    components.html(port_copy_html, height=45)
-                
-                def style_portfolio(row):
-                    bg_color = [''] * len(row)
-                    ret_idx = final_port_df.columns.get_loc('Return %')
-                    ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
-                    rule_idx = final_port_df.columns.get_loc('Index 10day rule')
-                    sl_idx = final_port_df.columns.get_loc('Stop Loss')
-                    sym_idx = final_port_df.columns.get_loc('Symbol')
-                    
-                    if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
-                    
-                    has_alert = False
-                    
-                    if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
-                    elif "BELOW" in str(row['EMA 21 Status']): 
-                        bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                        has_alert = True
-                    
-                    if "PASS" in str(row['Index 10day rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
-                    elif "EXIT" in str(row['Index 10day rule']): 
-                        bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                        has_alert = True
-                        
-                    try:
-                        curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
-                        sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
-                        if curr_p <= sl_p and curr_p > 0:
-                            bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                            has_alert = True
-                    except: pass
-                    
-                    if has_alert:
-                        bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
-                    
-                    return bg_color
+                # Assign to session state to prevent disappearance on tab switch
+                st.session_state['final_port_df'] = pd.DataFrame(tracker_data)
 
-                styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
-                    "Today chg%": "{:.2f}%",
-                    "Return %": "{:.2f}%",
-                    "Risk %": "{:.2%}"
-                })
-                
-                # Inject TradingView links back in based on the pure symbol!
-                html_port_table = styled_port.to_html()
-                for _, r in final_port_df.iterrows():
-                    sym = str(r["Symbol"])
-                    url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
-                    link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
-                    html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
-                
-                st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
-                
             except Exception as e:
                 st.error(f"Error loading data: {str(e)}. Ensure columns match: 'Stock Ticker', 'Entry date', 'Entry Price', 'Stop Loss', 'Risk'")
 
-time.sleep(60)
-st.rerun()
+    # Load from session state if available
+    if not st.session_state['final_port_df'].empty:
+        final_port_df = st.session_state['final_port_df']
+        avg_chg = final_port_df['Today chg%'].mean()
+        last_ref = st.session_state.get('port_refresh_time', 'Never')
+        
+        # Req 3: Layout to align Avg Chg center and highlight Last Refresh with red border
+        port_col1, port_col2, port_col3 = st.columns([4.25, 4.25, 1.5], vertical_alignment="bottom")
+        
+        with port_col1:
+            avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
+            st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Avg chg%: <span style='color: {avg_color};'>{avg_chg:.2f}%</span></h4></div>", unsafe_allow_html=True)
+            
+        with port_col2:
+            st.markdown(f"<div style='text-align: center;'><span style='color: #EF4444; font-weight: 800; font-size: 1.15rem; border-bottom: 3px solid #EF4444; padding-bottom: 2px;'>Last refresh: {last_ref}</span></div>", unsafe_allow_html=True)
+            
+        with port_col3:
+            port_copy_str = ",".join(final_port_df['Symbol'].tolist())
+            port_copy_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap');
+                body {{ margin: 0; padding: 0; display: flex; justify-content: flex-end; align-items: center; background-color: transparent; overflow: hidden; height: 100vh; }}
+                button {{
+                    font-family: 'Inter', sans-serif; background-color: #FFFFFF; color: #0B1D30; border: 2px solid #0B1D30; padding: 6px 16px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 0.85rem; box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); transform: translateY(0);
+                }}
+                button:hover {{ background-color: #F4F1E1; transform: translateY(-4px); box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25); }}
+                button:active {{ transform: translateY(1px); box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15); }}
+            </style>
+            </head>
+            <body>
+                <button id="copyPortBtn" onclick="copyToClipboard()">📋 Copy Symbols</button>
+                <script>
+                function copyToClipboard() {{
+                    const ta = document.createElement('textarea');
+                    ta.value = "{port_copy_str}";
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                    const btn = document.getElementById('copyPortBtn');
+                    btn.innerHTML = '✅ Copied!'; setTimeout(() => btn.innerHTML = '📋 Copy Symbols', 2000);
+                }}
+                </script>
+            </body>
+            </html>
+            """
+            components.html(port_copy_html, height=45)
+        
+        def style_portfolio(row):
+            bg_color = [''] * len(row)
+            ret_idx = final_port_df.columns.get_loc('Return %')
+            ema_stat_idx = final_port_df.columns.get_loc('EMA 21 Status')
+            rule_idx = final_port_df.columns.get_loc('Index 10day rule')
+            sl_idx = final_port_df.columns.get_loc('Stop Loss')
+            sym_idx = final_port_df.columns.get_loc('Symbol')
+            
+            if row['Return %'] > 0: bg_color[ret_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+            elif row['Return %'] < 0: bg_color[ret_idx] = 'background-color: rgba(254, 202, 202, 0.4); color: red; font-weight: bold;'
+            
+            has_alert = False
+            
+            if "ABOVE" in str(row['EMA 21 Status']): bg_color[ema_stat_idx] = 'color: green; font-weight: bold;'
+            elif "BELOW" in str(row['EMA 21 Status']): 
+                bg_color[ema_stat_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                has_alert = True
+            
+            if "PASS" in str(row['Index 10day rule']): bg_color[rule_idx] = 'background-color: rgba(187, 247, 208, 0.4); color: green; font-weight: bold;'
+            elif "EXIT" in str(row['Index 10day rule']): 
+                bg_color[rule_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                has_alert = True
+                
+            try:
+                curr_p = float(str(row['Current Price']).replace('$','').replace('₹','').strip())
+                sl_p = float(str(row['Stop Loss']).replace('$','').replace('₹','').strip())
+                if curr_p <= sl_p and curr_p > 0:
+                    bg_color[sl_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+                    has_alert = True
+            except: pass
+            
+            if has_alert:
+                bg_color[sym_idx] = 'background-color: rgba(254, 202, 202, 0.7); color: red; font-weight: bold;'
+            
+            return bg_color
+
+        styled_port = final_port_df.style.apply(style_portfolio, axis=1).hide(axis="index").format({
+            "Today chg%": "{:.2f}%",
+            "Return %": "{:.2f}%",
+            "Risk %": "{:.2%}"
+        })
+        
+        html_port_table = styled_port.to_html()
+        for _, r in final_port_df.iterrows():
+            sym = str(r["Symbol"])
+            url = f"https://in.tradingview.com/chart/4efUco2X/?symbol={sym}"
+            link = f'<a href="{url}" target="_blank" style="color: inherit; text-decoration: none; border-bottom: 1px dashed #0B1D30; font-weight: 600;">{sym}</a>'
+            html_port_table = re.sub(rf'(<td[^>]*>)({re.escape(sym)})(</td>)', rf'\1{link}\3', html_port_table)
+        
+        st.markdown(f'<div class="scrollable-table-container">{html_port_table}</div>', unsafe_allow_html=True)
+
+# Note: The st.rerun() loop and time.sleep() have been completely removed.
+# The 9-EMA Screener now handles its own 60-second refreshes natively through the st.fragment logic.
