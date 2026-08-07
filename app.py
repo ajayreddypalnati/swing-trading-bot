@@ -1276,10 +1276,16 @@ with tab_screeners:
             f_sme_roce = sme_df['roce_clean'] > 20.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
             f_sme_mcap = sme_df['market_cap'] > 100.0
-            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  
-            f_sme_ath = sme_df['down_ath'] <= 25.0  
-            
-            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band & f_sme_ath].copy()
+            f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])
+            f_sme_ath = sme_df['down_ath'] <= 25.0
+
+            full_filtered_sme = sme_df[
+                f_is_sme &
+                f_sme_turnover &
+                f_sme_mcap &
+                f_sme_band &
+                f_sme_ath
+            ].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
             filtered_sme = full_filtered_sme.head(500)
