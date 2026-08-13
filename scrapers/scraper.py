@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import Stealth
 from tvDatafeed import TvDatafeed, Interval
 
 # Force unbuffered output so execution logs write instantly to Windows command prompt
@@ -116,14 +116,13 @@ def get_fresh_screener_cookies(email, password):
     
     for attempt in range(1, 4):
         try:
-            with sync_playwright() as p:
+            with Stealth().use_sync(sync_playwright()) as p:
                 browser = p.chromium.launch(
                     headless=True,
                     args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
                 )
                 context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1920, "height": 1080})
                 page = context.new_page()
-                stealth_sync(page)
 
                 page.goto("https://www.screener.in/login/")
                 page.fill("input[name='username']", email)
@@ -154,6 +153,7 @@ def get_fresh_screener_cookies(email, password):
 # NIFTY TOTAL MARKET BREADTH MODULE
 # ==========================================
 def scrape_nifty_total_market_breadth(engine):
+    current_module = "Nifty Total Market Breadth Engine"
     print("\n📊 STEP 9: Extracting Nifty Total Market Breadth (momoindiascreener.in)...")
 
     series_names = {
@@ -170,7 +170,7 @@ def scrape_nifty_total_market_breadth(engine):
     }
 
     try:
-        with sync_playwright() as p:
+        with Stealth().use_sync(sync_playwright()) as p:
             browser = p.chromium.launch(
                 headless=True,
                 args=[
@@ -184,7 +184,6 @@ def scrape_nifty_total_market_breadth(engine):
                 viewport={"width": 1920, "height": 1080}
             )
             page = context.new_page()
-            stealth_sync(page)
 
             captured_responses = []
 
@@ -295,6 +294,7 @@ def scrape_nifty_total_market_breadth(engine):
 # NIFTY MICROCAP 250 SCRAPER
 # ==========================================
 def scrape_nifty_microcap_250(engine, stock_master_df):
+    current_module = "Nifty Microcap 250 Engine"
     print("\n🔬 STEP: Scraping Nifty Microcap 250 Index (Alternate Account)...")
     try:
         fresh_cookies = get_fresh_screener_cookies(MICROCAP_EMAIL, MICROCAP_PASSWORD)
@@ -393,6 +393,7 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
 # ETF ENGINES
 # ==========================================
 def download_and_rank_etfs():
+    current_module = "NSE ETF Screener Engine"
     print("\n📈 STEP: Fetching and Ranking NSE ETFs...")
     url = "https://scanner.tradingview.com/india/scan"
     headers = {
@@ -457,6 +458,7 @@ def download_and_rank_etfs():
 
 
 def download_usa_etfs(engine):
+    current_module = "USA ETF Screener Engine"
     print("\n🇺🇸 STEP: Fetching and Ranking USA ETFs...")
     url = "https://scanner.tradingview.com/america/scan"
     payload = {
@@ -1150,7 +1152,6 @@ def run_daily_scraper():
         # ==========================================
         # EXECUTE NIFTY MICROCAP 250 ENGINE
         # ==========================================
-        current_module = "Nifty Microcap 250 Engine"
         scrape_nifty_microcap_250(engine, merged_df)
 
         # ==========================================
@@ -1259,14 +1260,12 @@ def run_daily_scraper():
         # ==========================================
         # STEP 8: DOWNLOAD & RANK ETFS
         # ==========================================
-        current_module = "NSE & USA ETF Screener Engines"
         download_and_rank_etfs()      
         download_usa_etfs(engine)     
         
         # ==========================================
         # STEP 9: NIFTY TOTAL MARKET BREADTH ENGINE
         # ==========================================
-        current_module = "Nifty Total Market Breadth Engine"
         scrape_nifty_total_market_breadth(engine)
 
         # ==========================================
