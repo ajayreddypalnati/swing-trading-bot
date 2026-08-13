@@ -3,7 +3,7 @@ import re
 import time
 import pandas as pd
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import Stealth
 
 MOMO_HEALTH_URL = "https://momoindiascreener.in/market-health"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -25,7 +25,8 @@ def scrape_nifty_total_market_breadth():
     }
 
     try:
-        with sync_playwright() as p:
+        # NEW V2 SYNTAX: Wrap sync_playwright with Stealth().use_sync()
+        with Stealth().use_sync(sync_playwright()) as p:
             print("🤖 Launching Chromium browser with headless stealth settings...")
             browser = p.chromium.launch(
                 headless=True,
@@ -39,8 +40,9 @@ def scrape_nifty_total_market_breadth():
                 user_agent=USER_AGENT,
                 viewport={"width": 1920, "height": 1080}
             )
+            
+            # Stealth is now automatically applied to this page context
             page = context.new_page()
-            stealth_sync(page)
 
             captured_responses = []
 
