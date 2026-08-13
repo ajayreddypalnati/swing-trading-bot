@@ -27,4 +27,4 @@ jobs:
           sudo npx playwright install-deps chromium
 
       - name: Execute Momo Test Script
-        run: python scrapers/test_momo.pyy
+        run: python scrapers/test_momo.py
