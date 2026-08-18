@@ -1253,10 +1253,9 @@ with tab_screeners:
                 return pd.to_numeric(df[col].astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
             col_is_sme = next((c for c in sme_df.columns if 'is sme' in str(c).lower().strip()), None)
-            col_roce = next((c for c in sme_df.columns if 'roce' in str(c).lower().strip()), None)
             
-            if not col_is_sme: st.warning("⚠️ Could not find an 'Is SME' column in the database.")
-            if not col_roce: st.warning("⚠️ Could not find a 'ROCE' column in the database.")
+            if not col_is_sme: 
+                st.warning("⚠️ Could not find an 'Is SME' column in the database.")
 
             sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
@@ -1264,8 +1263,8 @@ with tab_screeners:
             sme_df['relative_score'] = _col_series(sme_df, 'relative_score')
             sme_df['down_ath'] = _col_series(sme_df, 'down_ath')
             
-            sme_df['roce_clean'] = _col_series(sme_df, col_roce) if col_roce else 0.0
-            if 'band' not in sme_df.columns: sme_df['band'] = ''
+            if 'band' not in sme_df.columns: 
+                sme_df['band'] = ''
             
             if col_is_sme:
                 sme_val = sme_df[col_is_sme].astype(str).str.strip().str.lower().str.replace('.0', '', regex=False)
@@ -1273,13 +1272,11 @@ with tab_screeners:
             else:
                 f_is_sme = pd.Series([False] * len(sme_df), index=sme_df.index)
             
-            f_sme_roce = sme_df['roce_clean'] > 20.0
             f_sme_turnover = sme_df['turnover'] >= sme_min_turnover
-            f_sme_mcap = sme_df['market_cap'] > 100.0
             f_sme_band = ~sme_df['band'].astype(str).str.strip().isin(['2', '2.0'])  
             f_sme_ath = sme_df['down_ath'] <= 25.0  
             
-            full_filtered_sme = sme_df[f_is_sme & f_sme_roce & f_sme_turnover & f_sme_mcap & f_sme_band & f_sme_ath].copy()
+            full_filtered_sme = sme_df[f_is_sme & f_sme_turnover & f_sme_band & f_sme_ath].copy()
             full_filtered_sme = full_filtered_sme.sort_values(by='relative_score', ascending=True, na_position='last').reset_index(drop=True)
             full_filtered_sme['Rank'] = full_filtered_sme.index + 1
             filtered_sme = full_filtered_sme.head(500)
