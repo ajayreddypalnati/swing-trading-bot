@@ -326,11 +326,12 @@ def fetch_database_reference(cache_key):
             col_band = next((c for c in main_df_raw.columns if 'band' in str(c).lower()), 'Band')
             col_down_ath = next((c for c in main_df_raw.columns if 'down' in str(c).lower() and 'ath' in str(c).lower()), 'Down %_ATH')
             col_1d_ret = next((c for c in main_df_raw.columns if '1day' in str(c).lower() and 'return' in str(c).lower()), '1day return %')
+            col_price = next((c for c in main_df_raw.columns if 'cmp' in str(c).lower() and 'rs' in str(c).lower()), 'CMP Rs.')
 
             main_df = main_df_raw.rename(columns={
                 col_ticker: 'ticker', col_name: 'stock_name', col_sector: 'sector', col_ind: 'broad_industry',
                 col_score: 'relative_score', col_exch: 'db_exchange', col_mcap: 'market_cap', col_turnover: 'turnover',
-                col_band: 'band', col_down_ath: 'down_ath', col_1d_ret: '1d_return'
+                col_band: 'band', col_down_ath: 'down_ath', col_1d_ret: '1d_return', col_price: 'price'
             })
 
             raw_sec = pd.read_sql(text('SELECT * FROM "ATH_Sector_Analysis"'), conn)
@@ -1095,6 +1096,8 @@ with tab_screeners:
                 src = df.get(col, pd.Series([default] * len(df), index=df.index))
                 return pd.to_numeric(src.astype(str).str.replace(',', '', regex=False).str.rstrip('%').replace({'nan': ''}), errors='coerce')
 
+            price_lookup = main_df[['ticker', 'price']].drop_duplicates('ticker', keep='first').set_index('ticker')['price']
+            mom_df['price'] = mom_df['ticker'].map(price_lookup)
             mom_df['turnover'] = _col_series(mom_df, 'turnover')
             mom_df['down_ath'] = _col_series(mom_df, 'down_ath')
             mom_df['relative_score'] = _col_series(mom_df, 'relative_score')
@@ -1151,11 +1154,12 @@ with tab_screeners:
                 with col_mom_copy:
                     components.html(mom_copy_html, height=45)
                 
-                display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
-                display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
+                display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'price', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
+                display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'price': 'Price', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
                 display_mom['Band'] = display_mom['Band'].fillna("-")
                 
                 styled_mom = display_mom.style.hide(axis="index").format({
+                    'Price': lambda x: safe_fmt(x, "₹{:.2f}"), 
                     'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
                     'Turnover (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
                     '1 Day Return %': lambda x: safe_fmt(x, "{:.2f}%"), 
@@ -1257,6 +1261,8 @@ with tab_screeners:
             if not col_is_sme: 
                 st.warning("⚠️ Could not find an 'Is SME' column in the database.")
 
+            price_lookup = main_df[['ticker', 'price']].drop_duplicates('ticker', keep='first').set_index('ticker')['price']
+            sme_df['price'] = sme_df['ticker'].map(price_lookup)
             sme_df['turnover'] = _col_series(sme_df, 'turnover') 
             sme_df['market_cap'] = _col_series(sme_df, 'market_cap')
             sme_df['1d_return'] = _col_series(sme_df, '1d_return')
@@ -1318,19 +1324,20 @@ with tab_screeners:
                 with col_sme_copy:
                     components.html(sme_copy_html, height=45)
                 
-                sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
+                sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'price', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
                 for c in sme_cols:
                     if c not in filtered_sme.columns: filtered_sme[c] = ''
                         
                 display_sme = filtered_sme[sme_cols]
                 display_sme = display_sme.rename(columns={
-                    'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 
+                    'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'price': 'Price', 
                     'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', 
                     '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'
                 })
                 display_sme['Band'] = display_sme['Band'].fillna("-")
                 
                 styled_sme = display_sme.style.hide(axis="index").format({
+                    'Price': lambda x: safe_fmt(x, "₹{:.2f}"), 
                     'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
                     'Turnover (Cr)': lambda x: safe_fmt(x, "{:.2f}"), 
                     '1 Day Return %': lambda x: safe_fmt(x, "{:.2f}%"), 
