@@ -81,10 +81,28 @@ def fetch_with_retry(session, url, referer_url=None, retries=3):
         random_sleep(1500, 3500)
     return None
 
-def save_db_with_retry(df, table_name, engine, if_exists="replace", index=False, chunksize=None, method=None):
+def save_db_with_retry(df, table_name, engine, if_exists="replace", index=False, chunksize=1000, method='multi'):
+    """
+    OPTIMIZED: Forced chunksize=1000 and method='multi' globally to prevent single-row inserts 
+    from maxing out Supabase Disk IO. Includes Auto-Index regeneration after table drops.
+    """
     for attempt in range(1, 4):
         try:
             df.to_sql(table_name, engine, if_exists=if_exists, index=index, chunksize=chunksize, method=method)
+            
+            # SUPABASE OPTIMIZATION: Re-create essential indexes after pandas drops the table
+            if if_exists == "replace":
+                try:
+                    with engine.begin() as conn:
+                        if table_name == "stock_master":
+                            conn.execute(text('CREATE INDEX IF NOT EXISTS idx_sm_ticker ON stock_master("Ticker");'))
+                            conn.execute(text('CREATE INDEX IF NOT EXISTS idx_sm_turnover ON stock_master("Turnover");'))
+                            conn.execute(text('CREATE INDEX IF NOT EXISTS idx_sm_band ON stock_master("Band");'))
+                        elif table_name == "Nifty_Microcap_250_Index":
+                            conn.execute(text('CREATE INDEX IF NOT EXISTS idx_nm_ticker ON "Nifty_Microcap_250_Index"("Ticker");'))
+                except Exception as idx_e:
+                    print(f"   ⚠️ Minor warning: Could not auto-create indexes for {table_name}: {idx_e}")
+                    
             return True
         except Exception as e:
             print(f"   ⚠️ Database write failed for {table_name} (Attempt {attempt}/3): {e}")
@@ -453,7 +471,7 @@ def download_and_rank_etfs():
     except Exception as e:
         df['Category'] = np.nan
 
-    save_db_with_retry(df, "ETF Screener", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+    save_db_with_retry(df, "ETF Screener", engine, if_exists="replace", index=False)
     print("   ✅ 'ETF Screener' table overwritten successfully.")
 
 
@@ -1160,19 +1178,19 @@ def run_daily_scraper():
         current_module = "Database Data Upload Engine"
         print("\n📦 STEP 6: Delivering all final data to Supabase (Chunked Upload)...")
         
-        save_db_with_retry(merged_df, "stock_master", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+        save_db_with_retry(merged_df, "stock_master", engine, if_exists="replace", index=False)
         print(f"   ✅ 'stock_master' overwritten successfully ({len(merged_df)} rows).")
         
         if not ath_df.empty:
-            save_db_with_retry(ath_df, "ATH_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            save_db_with_retry(ath_df, "ATH_Analysis", engine, if_exists="replace", index=False)
             print(f"   ✅ 'ATH_Analysis' overwritten successfully with new columns.")
             
         if not sector_summary_df.empty:
-            save_db_with_retry(sector_summary_df, "ATH_Sector_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            save_db_with_retry(sector_summary_df, "ATH_Sector_Analysis", engine, if_exists="replace", index=False)
             print(f"   ✅ 'ATH_Sector_Analysis' overwritten successfully.")
             
         if not industry_summary_df.empty:
-            save_db_with_retry(industry_summary_df, "ATH_Industry_Analysis", engine, if_exists="replace", index=False, chunksize=500, method='multi')
+            save_db_with_retry(industry_summary_df, "ATH_Industry_Analysis", engine, if_exists="replace", index=False)
             print(f"   ✅ 'ATH_Industry_Analysis' overwritten successfully.")
 
         # ----------------------------------------
