@@ -1171,27 +1171,17 @@ with tab_screeners:
             
             if uploaded_file is not None:
                 try:
-                    uploaded_file.seek(0)
                     if uploaded_file.name.endswith('.csv'): 
-                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file)
+                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None)
                     else: 
-                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, sep='\t')
+                        st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
-            else:
-                st.session_state.pop('rebal_port_df', None)
                     
             if 'rebal_port_df' in st.session_state:
                 try:
                     user_port_df = st.session_state['rebal_port_df']
-                    
-                    ticker_col = next((c for c in user_port_df.columns if str(c).lower().strip() in ['ticker', 'symbol', 'name', 'stock', 'stock ticker']), None)
-                    if ticker_col is not None:
-                        raw_tickers = user_port_df[ticker_col].astype(str).str.strip().str.upper().tolist()
-                    else:
-                        col0 = user_port_df.columns[0]
-                        raw_tickers = [str(col0).strip().upper()] + user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-                        
-                    user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME', 'NAN', '']]
+                    raw_tickers = user_port_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    user_tickers = [t for t in raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
                     user_tickers = list(dict.fromkeys(user_tickers)) 
                     
                     n_stocks = len(user_tickers)
@@ -1357,27 +1347,17 @@ with tab_screeners:
             
             if sme_uploaded_file is not None:
                 try:
-                    sme_uploaded_file.seek(0)
                     if sme_uploaded_file.name.endswith('.csv'): 
-                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file)
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None)
                     else: 
-                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, sep='\t')
+                        st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
-            else:
-                st.session_state.pop('sme_rebal_port_df', None)
                     
             if 'sme_rebal_port_df' in st.session_state:
                 try:
                     sme_user_df = st.session_state['sme_rebal_port_df']
-                    
-                    ticker_col = next((c for c in sme_user_df.columns if str(c).lower().strip() in ['ticker', 'symbol', 'name', 'stock', 'stock ticker']), None)
-                    if ticker_col is not None:
-                        sme_raw_tickers = sme_user_df[ticker_col].astype(str).str.strip().str.upper().tolist()
-                    else:
-                        col0 = sme_user_df.columns[0]
-                        sme_raw_tickers = [str(col0).strip().upper()] + sme_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-
-                    sme_user_tickers = [t for t in sme_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME', 'NAN', '']]
+                    sme_raw_tickers = sme_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    sme_user_tickers = [t for t in sme_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
                     sme_user_tickers = list(dict.fromkeys(sme_user_tickers)) 
                     
                     sme_n_stocks = len(sme_user_tickers)
@@ -1638,27 +1618,17 @@ with tab_screeners:
             
             if val_uploaded_file is not None:
                 try:
-                    val_uploaded_file.seek(0)
                     if val_uploaded_file.name.endswith('.csv'): 
-                        st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file)
+                        st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file, header=None)
                     else: 
-                        st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file, sep='\t')
+                        st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
-            else:
-                st.session_state.pop('val_rebal_port_df', None)
                     
             if 'val_rebal_port_df' in st.session_state:
                 try:
                     v_user_df = st.session_state['val_rebal_port_df']
-                    
-                    ticker_col = next((c for c in v_user_df.columns if str(c).lower().strip() in ['ticker', 'symbol', 'name', 'stock', 'stock ticker']), None)
-                    if ticker_col is not None:
-                        v_raw_tickers = v_user_df[ticker_col].astype(str).str.strip().str.upper().tolist()
-                    else:
-                        col0 = v_user_df.columns[0]
-                        v_raw_tickers = [str(col0).strip().upper()] + v_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-                        
-                    v_user_tickers = [t for t in v_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME', 'NAN', '']]
+                    v_raw_tickers = v_user_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
+                    v_user_tickers = [t for t in v_raw_tickers if t and t not in ['TICKER', 'SYMBOL', 'NAME']]
                     v_user_tickers = list(dict.fromkeys(v_user_tickers)) 
                     
                     v_n_stocks = len(v_user_tickers)
