@@ -1171,11 +1171,14 @@ with tab_screeners:
             
             if uploaded_file is not None:
                 try:
+                    uploaded_file.seek(0)
                     if uploaded_file.name.endswith('.csv'): 
                         st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None)
                     else: 
                         st.session_state['rebal_port_df'] = pd.read_csv(uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
+            else:
+                st.session_state.pop('rebal_port_df', None)
                     
             if 'rebal_port_df' in st.session_state:
                 try:
@@ -1347,11 +1350,14 @@ with tab_screeners:
             
             if sme_uploaded_file is not None:
                 try:
+                    sme_uploaded_file.seek(0)
                     if sme_uploaded_file.name.endswith('.csv'): 
                         st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None)
                     else: 
                         st.session_state['sme_rebal_port_df'] = pd.read_csv(sme_uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
+            else:
+                st.session_state.pop('sme_rebal_port_df', None)
                     
             if 'sme_rebal_port_df' in st.session_state:
                 try:
@@ -1618,11 +1624,14 @@ with tab_screeners:
             
             if val_uploaded_file is not None:
                 try:
+                    val_uploaded_file.seek(0)
                     if val_uploaded_file.name.endswith('.csv'): 
                         st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file, header=None)
                     else: 
                         st.session_state['val_rebal_port_df'] = pd.read_csv(val_uploaded_file, header=None, sep='\t')
                 except Exception as e: st.error(f"Error reading file: {e}")
+            else:
+                st.session_state.pop('val_rebal_port_df', None)
                     
             if 'val_rebal_port_df' in st.session_state:
                 try:
