@@ -29,11 +29,6 @@ if 'port_refresh_time' not in st.session_state:
 if 'final_port_df' not in st.session_state:
     st.session_state['final_port_df'] = pd.DataFrame()
 
-# Helper for CSV download
-@st.cache_data
-def convert_df(df):
-    return df.to_csv(index=False).encode('utf-8')
-
 # ==========================================
 # 1. CSS INJECTION (Premium Navy & Cream Theme + Immersive Tabs)
 # ==========================================
@@ -260,28 +255,6 @@ st.markdown("""
         div[data-testid="stButton"] button:hover {
             background-color: #E5E1CD !important;
             transform: translateY(-2px);
-        }
-
-        /* CUSTOM STREAMLIT DOWNLOAD BUTTON CSS TO MATCH COPY BUTTONS */
-        div[data-testid="stDownloadButton"] button {
-            border: 2px solid #0B1D30 !important;
-            border-radius: 8px !important;
-            font-weight: 800 !important;
-            font-size: 0.85rem !important;
-            color: #0B1D30 !important;
-            background-color: #FFFFFF !important;
-            padding: 4px 12px !important;
-            box-shadow: 0 6px 12px rgba(11, 29, 48, 0.15) !important;
-            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-        }
-        div[data-testid="stDownloadButton"] button:hover {
-            background-color: #F4F1E1 !important;
-            transform: translateY(-4px) !important;
-            box-shadow: 0 12px 24px rgba(11, 29, 48, 0.25) !important;
-        }
-        div[data-testid="stDownloadButton"] button:active {
-            transform: translateY(1px) !important;
-            box-shadow: 0 2px 5px rgba(11, 29, 48, 0.15) !important;
         }
 
         div[data-testid="stVerticalBlock"] {
@@ -915,10 +888,7 @@ def render_9ema_screener():
         </body>
         </html>
         """
-        col_main_space, col_main_dl, col_main_copy = st.columns([7.5, 1.0, 1.5], vertical_alignment="bottom")
-        
-        with col_main_dl:
-            st.download_button(label="📥 CSV", data=convert_df(display_df), file_name="9ema_screener.csv", mime="text/csv", use_container_width=True)
+        col_main_space, col_main_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
         with col_main_copy:
             components.html(copy_html, height=45)
         
@@ -1013,7 +983,7 @@ with tab_screeners:
     
     # --- SUB 1: ETF SCREENER ---
     with sub_etf:
-        col_etf_input, col_etf_avg, col_etf_dl, col_etf_copy = st.columns([2.5, 4.5, 1.0, 2.0], vertical_alignment="bottom")
+        col_etf_input, col_etf_avg, col_etf_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_etf_input:
             etf_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=5.0, step=1.0, key="etf_turnover")
         
@@ -1083,8 +1053,6 @@ with tab_screeners:
                 
                 with col_etf_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color: {avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
-                with col_etf_dl:
-                    st.download_button("📥 CSV", convert_df(etf_display), "etf_screener.csv", "text/csv", use_container_width=True)
                 with col_etf_copy:
                     components.html(etf_copy_html, height=45)
                 
@@ -1117,9 +1085,9 @@ with tab_screeners:
 
     # --- SUB 2: MOMENTUM SCREENER ---
     with sub_mom:
-        col_mom_input, col_mom_avg, col_mom_dl, col_mom_copy = st.columns([2.5, 4.5, 1.0, 2.0], vertical_alignment="bottom")
+        col_mom_input, col_mom_avg, col_mom_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_mom_input:
-            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.0, step=1.0, key="mom_turnover")
+            min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="mom_turnover")
         
         if not main_df.empty:
             mom_df = main_df.copy()
@@ -1147,11 +1115,11 @@ with tab_screeners:
             filtered_mom = full_filtered_mom.head(50)
             
             if not filtered_mom.empty:
-                top_50_mom = filtered_mom.head(50)
-                top_50_avg = top_50_mom['1d_return'].mean()
-                avg_color = "#10B981" if top_50_avg > 0 else "#EF4444"
+                top_25_mom = filtered_mom.head(25)
+                top_25_avg = top_25_mom['1d_return'].mean()
+                avg_color = "#10B981" if top_25_avg > 0 else "#EF4444"
                 
-                mom_copy_str = ",".join(top_50_mom['ticker'].astype(str).tolist())
+                mom_copy_str = ",".join(top_25_mom['ticker'].astype(str).tolist())
                 mom_copy_html = f"""
                 <!DOCTYPE html>
                 <html>
@@ -1179,14 +1147,13 @@ with tab_screeners:
                 """
                 
                 with col_mom_avg:
-                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 50): <span style='color: {avg_color};'>{top_50_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
-                with col_mom_dl:
-                    display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
-                    display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
-                    display_mom['Band'] = display_mom['Band'].fillna("-")
-                    st.download_button("📥 CSV", convert_df(display_mom), "momentum_screener.csv", "text/csv", use_container_width=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {avg_color};'>{top_25_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_mom_copy:
                     components.html(mom_copy_html, height=45)
+                
+                display_mom = filtered_mom[['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']]
+                display_mom = display_mom.rename(columns={'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'})
+                display_mom['Band'] = display_mom['Band'].fillna("-")
                 
                 styled_mom = display_mom.style.hide(axis="index").format({
                     'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
@@ -1273,9 +1240,9 @@ with tab_screeners:
 
     # --- SUB 2.5: SME SCREENER ---
     with sub_sme:
-        col_sme_input, col_sme_avg, col_sme_dl, col_sme_copy = st.columns([2.5, 4.5, 1.0, 2.0], vertical_alignment="bottom")
+        col_sme_input, col_sme_avg, col_sme_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_sme_input:
-            sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.0, step=0.1, key="sme_turnover_input")
+            sme_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=0.5, step=0.1, key="sme_turnover_input")
         
         if not main_df.empty:
             sme_df = main_df.copy()
@@ -1315,11 +1282,11 @@ with tab_screeners:
             filtered_sme = full_filtered_sme.head(500)
             
             if not filtered_sme.empty:
-                top_50_sme = filtered_sme.head(50)
-                top_50_sme_avg = top_50_sme['1d_return'].mean()
-                sme_avg_color = "#10B981" if top_50_sme_avg > 0 else "#EF4444"
+                top_25_sme = filtered_sme.head(25)
+                top_25_sme_avg = top_25_sme['1d_return'].mean()
+                sme_avg_color = "#10B981" if top_25_sme_avg > 0 else "#EF4444"
                 
-                sme_copy_str = ",".join(top_50_sme['ticker'].astype(str).tolist())
+                sme_copy_str = ",".join(top_25_sme['ticker'].astype(str).tolist())
                 sme_copy_html = f"""
                 <!DOCTYPE html>
                 <html>
@@ -1347,22 +1314,21 @@ with tab_screeners:
                 """
                 
                 with col_sme_avg:
-                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 50): <span style='color: {sme_avg_color};'>{top_50_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
-                with col_sme_dl:
-                    sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
-                    for c in sme_cols:
-                        if c not in filtered_sme.columns: filtered_sme[c] = ''
-                            
-                    display_sme = filtered_sme[sme_cols]
-                    display_sme = display_sme.rename(columns={
-                        'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 
-                        'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', 
-                        '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'
-                    })
-                    display_sme['Band'] = display_sme['Band'].fillna("-")
-                    st.download_button("📥 CSV", convert_df(display_sme), "sme_screener.csv", "text/csv", use_container_width=True)
+                    st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {sme_avg_color};'>{top_25_sme_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
                 with col_sme_copy:
                     components.html(sme_copy_html, height=45)
+                
+                sme_cols = ['Rank', 'ticker', 'stock_name', 'db_exchange', 'market_cap', 'turnover', '1d_return', 'band', 'sector', 'broad_industry']
+                for c in sme_cols:
+                    if c not in filtered_sme.columns: filtered_sme[c] = ''
+                        
+                display_sme = filtered_sme[sme_cols]
+                display_sme = display_sme.rename(columns={
+                    'ticker': 'Ticker', 'stock_name': 'Stock Name', 'db_exchange': 'Exchange', 
+                    'market_cap': 'Market Cap (Cr)', 'turnover': 'Turnover (Cr)', 
+                    '1d_return': '1 Day Return %', 'band': 'Band', 'sector': 'Sector', 'broad_industry': 'Industry'
+                })
+                display_sme['Band'] = display_sme['Band'].fillna("-")
                 
                 styled_sme = display_sme.style.hide(axis="index").format({
                     'Market Cap (Cr)': lambda x: safe_fmt(x, "{:.0f}"), 
@@ -1514,11 +1480,9 @@ with tab_screeners:
                 </html>
                 """
 
-                col_us_avg, col_us_dl, col_us_copy = st.columns([7.0, 1.0, 2.0], vertical_alignment="bottom")
+                col_us_avg, col_us_copy = st.columns([8.5, 1.5], vertical_alignment="bottom")
                 with col_us_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 4): <span style='color:{avg_color};'>{top_4_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
-                with col_us_dl:
-                    st.download_button("📥 CSV", convert_df(us_display), "us_etf_screener.csv", "text/csv", use_container_width=True)
                 with col_us_copy:
                     components.html(us_etf_copy_html, height=45)
                 
@@ -1553,7 +1517,7 @@ with tab_screeners:
 
     # --- SUB 4: VALUE SCREENER ---
     with sub_val:
-        col_val_input, col_val_avg, col_val_dl, col_val_copy = st.columns([2.5, 4.5, 1.0, 2.0], vertical_alignment="bottom")
+        col_val_input, col_val_avg, col_val_copy = st.columns([2.5, 5, 2.5], vertical_alignment="bottom")
         with col_val_input:
             val_min_turnover = st.number_input("Minimum Turnover (in Cr)", min_value=0.0, value=1.0, step=1.0, key="val_turnover")
         
@@ -1620,23 +1584,22 @@ with tab_screeners:
                 
                 with col_val_avg:
                     st.markdown(f"<div style='text-align: center;'><h4 style='margin-bottom: 0px;'>Average 1D Return (Top 25): <span style='color: {v_avg_color};'>{top_25_val_avg:.2f}%</span></h4></div>", unsafe_allow_html=True)
-                with col_val_dl:
-                    val_cols = ['Rank', 'Ticker', 'Name', col_chg, col_cmp, col_sector, col_ind, col_band, col_dath, 'Turnover']
-                    val_cols = [c for c in val_cols if c in top_50_value.columns]
-                    val_display = top_50_value[val_cols].copy()
-                    
-                    val_display = val_display.rename(columns={
-                        'Ticker': 'Symbol',
-                        col_chg: 'Chg %',
-                        col_cmp: 'Price',
-                        col_sector: 'Sector',
-                        col_ind: 'Industry',
-                        col_band: 'Band',
-                        col_dath: 'Down%_ATH'
-                    })
-                    st.download_button("📥 CSV", convert_df(val_display), "value_screener.csv", "text/csv", use_container_width=True)
                 with col_val_copy:
                     components.html(val_copy_html, height=45)
+                
+                val_cols = ['Rank', 'Ticker', 'Name', col_chg, col_cmp, col_sector, col_ind, col_band, col_dath, 'Turnover']
+                val_cols = [c for c in val_cols if c in top_50_value.columns]
+                val_display = top_50_value[val_cols].copy()
+                
+                val_display = val_display.rename(columns={
+                    'Ticker': 'Symbol',
+                    col_chg: 'Chg %',
+                    col_cmp: 'Price',
+                    col_sector: 'Sector',
+                    col_ind: 'Industry',
+                    col_band: 'Band',
+                    col_dath: 'Down%_ATH'
+                })
                 
                 styled_val = val_display.style.hide(axis="index").format({
                     'Price': lambda x: safe_fmt(x, "₹{:.2f}"), 
@@ -1932,7 +1895,7 @@ div[role="radiogroup"]{
         avg_chg = final_port_df['Today chg%'].mean()
         last_ref = st.session_state.get('port_refresh_time', 'Never')
         
-        port_col1, port_col_dl, port_col2 = st.columns([7.0, 1.0, 2.0], vertical_alignment="bottom")
+        port_col1, port_col2 = st.columns([8.5, 1.5], vertical_alignment="bottom")
         
         with port_col1:
             avg_color = "#10B981" if avg_chg > 0 else "#EF4444"
@@ -1943,9 +1906,6 @@ div[role="radiogroup"]{
                 </div>
             """, unsafe_allow_html=True)
             
-        with port_col_dl:
-            st.download_button("📥 CSV", convert_df(final_port_df), "portfolio.csv", "text/csv", use_container_width=True)
-
         with port_col2:
             port_copy_str = ",".join(final_port_df['Symbol'].tolist())
             port_copy_html = f"""
