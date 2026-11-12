@@ -81,6 +81,39 @@ def fetch_with_retry(session, url, referer_url=None, retries=3):
         random_sleep(1500, 3500)
     return None
 
+def clean_screener_df(df):
+    """
+    Normalizes Screener table headers (strips sort arrows like ⇡, maps 'Company' -> 'Name')
+    and filters out mid-table repeated header rows and Median summary rows.
+    """
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [' '.join([str(lvl) for lvl in col if 'Unnamed' not in str(lvl)]).strip() for col in df.columns]
+    
+    # Strip non-ASCII characters (like sort arrows ⇡, ↑, ↓) and extra whitespace from column names
+    df.columns = [re.sub(r'[^\x00-\x7F]+', '', str(c)).strip() for c in df.columns]
+
+    # Map 'Company' (or similar header) back to 'Name' for full downstream compatibility
+    if 'Name' not in df.columns:
+        if 'Company' in df.columns:
+            df.rename(columns={'Company': 'Name'}, inplace=True)
+        else:
+            name_col = next((c for c in df.columns if 'company' in c.lower() or 'name' in c.lower()), None)
+            if name_col:
+                df.rename(columns={name_col: 'Name'}, inplace=True)
+            elif len(df.columns) > 1 and ('s.no' in df.columns[0].lower() or 'sno' in df.columns[0].lower()):
+                df.rename(columns={df.columns[1]: 'Name'}, inplace=True)
+
+    if 'Name' not in df.columns:
+        raise KeyError(f"'Name' or 'Company' column not found. Available columns: {list(df.columns)}")
+
+    df = df[df['Name'].notna()].copy()
+    df['Name'] = df['Name'].astype(str).str.strip()
+    
+    # Remove repeated header rows and footer summary rows
+    df = df[~df['Name'].isin(['Name', 'Company', 'nan', 'None', ''])].copy()
+    df = df[~df['Name'].str.startswith(('Median:', 'Average:'))].copy()
+    return df
+
 def save_db_with_retry(df, table_name, engine, if_exists="replace", index=False, chunksize=1000, method='multi'):
     """
     OPTIMIZED: Forced chunksize=1000 and method='multi' globally to prevent single-row inserts 
@@ -337,9 +370,7 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
                 try:
                     tables = pd.read_html(io.StringIO(html_content), thousands=',')
                     if tables:
-                        df = tables[0]
-                        df = df[df['Name'] != 'Name'].copy()
-                        df['Name'] = df['Name'].astype(str).str.strip()
+                        df = clean_screener_df(tables[0])
                         all_dfs.append(df)
                 except Exception as e:
                     print(f"     ⚠️ ERROR parsing microcap page {page}: {e}")
@@ -362,16 +393,16 @@ def scrape_nifty_microcap_250(engine, stock_master_df):
             cols = ['Ticker', 'Name'] + [c for c in microcap_df.columns if c not in ['Ticker', 'Name']]
             microcap_df = microcap_df[cols]
 
-            col_div = next((c for c in microcap_df.columns if 'div' in str(c).lower() and 'yld' in str(c).lower()), None)
+            col_div = next((c for c in microcap_df.columns if 'div' in str(c).lower() and ('yld' in str(c).lower() or 'yield' in str(c).lower())), None)
             col_roce = next((c for c in microcap_df.columns if 'roce' in str(c).lower()), None)
-            col_ey = next((c for c in microcap_df.columns if 'earnings yield' in str(c).lower()), None)
+            col_ey = next((c for c in microcap_df.columns if ('earnings yield' in str(c).lower()) or ('ear' in str(c).lower() and 'yld' in str(c).lower())), None)
             col_cmpbv = next((c for c in microcap_df.columns if 'cmp' in str(c).lower() and 'bv' in str(c).lower()), None)
 
             required_cols = {"Dividend Yield": col_div, "ROCE": col_roce, "Earnings Yield": col_ey, "CMP/BV": col_cmpbv}
             missing = [name for name, col in required_cols.items() if col is None]
 
             if missing:
-                raise Exception(f"Missing required columns from Screener: {', '.join(missing)}")
+                raise Exception(f"Missing required columns from Screener: {', '.join(missing)}. Found columns: {list(microcap_df.columns)}")
 
             for col in [col_div, col_roce, col_ey, col_cmpbv]:
                 microcap_df[col] = pd.to_numeric(microcap_df[col], errors="coerce")
@@ -613,9 +644,7 @@ def run_daily_scraper():
             try:
                 tables = pd.read_html(io.StringIO(html_content), thousands=',')
                 if tables:
-                    df = tables[0]
-                    df = df[df['Name'] != 'Name'].copy()
-                    df['Name'] = df['Name'].astype(str).str.strip()
+                    df = clean_screener_df(tables[0])
                     
                     soup = BeautifulSoup(html_content, 'html.parser')
                     table = soup.find('table')
@@ -633,7 +662,7 @@ def run_daily_scraper():
                         df['Screener URL'] = "https://www.screener.in/company/" + df['live_ticker_slug'] + "/"
                         all_dataframes.append(df)
                     else:
-                        print(f"     ⚠️ WARNING: Data mismatch on page {page}. Dropping page.")
+                        print(f"     ⚠️ WARNING: Data mismatch on page {page} ({len(df)} rows vs {len(codes)} links). Dropping page.")
                         
             except Exception as e:
                 print(f"     ⚠️ ERROR parsing page {page}: {e}")
@@ -914,9 +943,7 @@ def run_daily_scraper():
                     try:
                         tables = pd.read_html(io.StringIO(p_html), thousands=',')
                         if tables:
-                            df = tables[0]
-                            df = df[df['Name'] != 'Name'].copy() 
-                            df['Name'] = df['Name'].astype(str).str.strip()
+                            df = clean_screener_df(tables[0])
                             ath_dataframes.append(df)
                     except Exception as e:
                         print(f"     ⚠️ ERROR parsing page {p}: {e}")
